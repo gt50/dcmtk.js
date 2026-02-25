@@ -10,6 +10,8 @@ import {
     UID_MAX_LENGTH,
     PORT_MIN,
     PORT_MAX,
+    DICOM_QUERY_KEY_PATTERN,
+    isValidDicomKey,
     PATH_TRAVERSAL_PATTERN,
     isSafePath,
 } from './patterns';
@@ -94,6 +96,49 @@ describe('patterns', () => {
         it('has correct port bounds', () => {
             expect(PORT_MIN).toBe(1);
             expect(PORT_MAX).toBe(65535);
+        });
+    });
+
+    describe('DICOM_QUERY_KEY_PATTERN', () => {
+        it('matches bare DICOM tag keys', () => {
+            expect(DICOM_QUERY_KEY_PATTERN.test('0008,0052')).toBe(true);
+            expect(DICOM_QUERY_KEY_PATTERN.test('0010,0020')).toBe(true);
+        });
+
+        it('matches tag keys with values', () => {
+            expect(DICOM_QUERY_KEY_PATTERN.test('0008,0052=STUDY')).toBe(true);
+            expect(DICOM_QUERY_KEY_PATTERN.test('0010,0020=PAT001')).toBe(true);
+            expect(DICOM_QUERY_KEY_PATTERN.test('0010,0020=')).toBe(true);
+        });
+
+        it('matches dotted path keys', () => {
+            expect(DICOM_QUERY_KEY_PATTERN.test('0040,0100.0008,0060=CT')).toBe(true);
+        });
+
+        it('matches indexed path keys', () => {
+            expect(DICOM_QUERY_KEY_PATTERN.test('0040,A730[0].0008,0100=CODE')).toBe(true);
+        });
+
+        it('rejects keys not starting with a valid tag', () => {
+            expect(DICOM_QUERY_KEY_PATTERN.test('')).toBe(false);
+            expect(DICOM_QUERY_KEY_PATTERN.test('invalid')).toBe(false);
+            expect(DICOM_QUERY_KEY_PATTERN.test('-ep')).toBe(false);
+            expect(DICOM_QUERY_KEY_PATTERN.test('--extract')).toBe(false);
+            expect(DICOM_QUERY_KEY_PATTERN.test('ZZZZ,0010=value')).toBe(false);
+        });
+    });
+
+    describe('isValidDicomKey()', () => {
+        it('returns true for valid keys', () => {
+            expect(isValidDicomKey('0008,0052=STUDY')).toBe(true);
+            expect(isValidDicomKey('0010,0020=')).toBe(true);
+            expect(isValidDicomKey('0010,0020')).toBe(true);
+        });
+
+        it('returns false for flag injection attempts', () => {
+            expect(isValidDicomKey('-ep')).toBe(false);
+            expect(isValidDicomKey('--extract')).toBe(false);
+            expect(isValidDicomKey('-k 0010,0020')).toBe(false);
         });
     });
 

@@ -31,7 +31,13 @@ interface DictionaryEntry {
 // Dictionary data (typed)
 // ---------------------------------------------------------------------------
 
-/** Raw dictionary keyed by 8-char uppercase hex (e.g. "00100010"). */
+/**
+ * Raw dictionary keyed by 8-char uppercase hex (e.g. "00100010").
+ *
+ * The double cast (`as unknown as`) is required because TypeScript infers the
+ * JSON import as a generic object with `number[]` arrays, not the specific
+ * `[number, number | null]` tuple type that `DictionaryEntry.vm` requires.
+ */
 const dictionary = dictionaryData as unknown as Readonly<Record<string, DictionaryEntry>>;
 
 // ---------------------------------------------------------------------------
@@ -72,9 +78,7 @@ function buildNameIndex(): ReadonlyMap<string, { readonly tag: string; readonly 
 }
 
 function getNameIndex(): ReadonlyMap<string, { readonly tag: string; readonly entry: DictionaryEntry }> {
-    if (nameIndex === undefined) {
-        nameIndex = buildNameIndex();
-    }
+    nameIndex ??= buildNameIndex();
     return nameIndex;
 }
 

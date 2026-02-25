@@ -18,7 +18,14 @@ const DICOM_TAG_PATTERN = /^\([0-9A-Fa-f]{4},[0-9A-Fa-f]{4}\)$/;
 /** Matches a DICOM AE Title: letters, digits, spaces, and hyphens. */
 const AE_TITLE_PATTERN = /^[A-Za-z0-9 -]+$/;
 
-/** Matches a dotted numeric OID (e.g. `1.2.840.10008`). */
+/**
+ * Matches a dotted numeric OID (e.g. `1.2.840.10008`).
+ *
+ * Note: This intentionally accepts any syntactically valid dotted-numeric form.
+ * DICOM PS3.5 §9.1 requires UIDs start with a non-zero root (e.g., `0.0.0` is
+ * technically invalid), but real-world DICOM datasets contain such UIDs, so we
+ * validate syntax only and leave semantic UID validation to the application layer.
+ */
 const UID_PATTERN = /^[0-9]+(\.[0-9]+)*$/;
 
 /** Matches a single DICOM tag path segment with optional array index. */
@@ -47,11 +54,43 @@ const PORT_MIN = 1;
 const PORT_MAX = 65535;
 
 // ---------------------------------------------------------------------------
+// DICOM query key patterns
+// ---------------------------------------------------------------------------
+
+/**
+ * Matches a valid DICOM query key for `-k` arguments.
+ *
+ * Accepted formats:
+ * - `XXXX,XXXX` — bare tag
+ * - `XXXX,XXXX=value` — tag with value
+ * - `XXXX,XXXX[0].XXXX,XXXX=value` — nested path with value
+ * - `XXXX,XXXX.XXXX,XXXX=value` — dotted path with value
+ *
+ * The tag portion must start with a valid hex tag pair. Value after `=` is unconstrained.
+ */
+// eslint-disable-next-line no-useless-escape
+const DICOM_QUERY_KEY_PATTERN = /^[0-9A-Fa-f]{4},[0-9A-Fa-f]{4}(?:[\[.\]0-9A-Fa-f,]*)?(?:=.*)?$/;
+
+/**
+ * Returns true if the string is a valid DICOM query key for `-k` arguments.
+ */
+function isValidDicomKey(key: string): boolean {
+    return DICOM_QUERY_KEY_PATTERN.test(key);
+}
+
+// ---------------------------------------------------------------------------
 // Path safety
 // ---------------------------------------------------------------------------
 
 /** Pattern matching `..` as a path segment (between separators, or at start/end). */
 const PATH_TRAVERSAL_PATTERN = /(?:^|[\\/])\.\.(?:[\\/]|$)/;
+
+/**
+ * Returns true if the string contains only valid DICOM AE Title characters.
+ */
+function isValidAETitle(value: string): boolean {
+    return AE_TITLE_PATTERN.test(value);
+}
 
 /**
  * Returns true if the path does not contain traversal sequences.
@@ -74,6 +113,9 @@ export {
     UID_MAX_LENGTH,
     PORT_MIN,
     PORT_MAX,
+    DICOM_QUERY_KEY_PATTERN,
+    isValidDicomKey,
+    isValidAETitle,
     PATH_TRAVERSAL_PATTERN,
     isSafePath,
 };

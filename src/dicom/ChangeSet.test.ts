@@ -1,7 +1,19 @@
-import { describe, it, expect } from 'vitest';
-import { ChangeSet } from './ChangeSet';
+import { describe, it, expect, vi } from 'vitest';
 import type { DicomTagPath } from '../brands';
-import { MAX_CHANGESET_OPERATIONS } from '../constants';
+
+// Mock MAX_CHANGESET_OPERATIONS to a small value (10) so limit tests
+// don't loop 10,000 times and take 25+ seconds.
+vi.mock('../constants', async () => {
+    const actual = await vi.importActual<Record<string, unknown>>('../constants');
+    return {
+        ...actual,
+        MAX_CHANGESET_OPERATIONS: 10,
+    };
+});
+
+// Must import ChangeSet AFTER vi.mock so the mock is in effect.
+const { ChangeSet } = await import('./ChangeSet');
+const { MAX_CHANGESET_OPERATIONS } = await import('../constants');
 
 const path = (s: string): DicomTagPath => s as DicomTagPath;
 

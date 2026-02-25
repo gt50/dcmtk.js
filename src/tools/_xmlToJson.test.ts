@@ -296,4 +296,53 @@ describe('xmlToJson()', () => {
             expect(result.value['00081115']?.Value).toHaveLength(2);
         }
     });
+
+    it('accepts known standard VR codes as-is', () => {
+        const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<NativeDicomModel>
+  <DicomAttribute tag="00100020" vr="LO" keyword="PatientID">
+    <Value number="1">12345</Value>
+  </DicomAttribute>
+</NativeDicomModel>`;
+
+        const result = xmlToJson(xml);
+
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+            expect(result.value['00100020']?.vr).toBe('LO');
+        }
+    });
+
+    it('falls back to UN for unrecognized VR codes', () => {
+        const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<NativeDicomModel>
+  <DicomAttribute tag="00100020" vr="xs" keyword="PatientID">
+    <Value number="1">12345</Value>
+  </DicomAttribute>
+</NativeDicomModel>`;
+
+        const result = xmlToJson(xml);
+
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+            expect(result.value['00100020']?.vr).toBe('UN');
+        }
+    });
+
+    it('falls back to UN for retired DCMTK-internal VR "ox"', () => {
+        const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<NativeDicomModel>
+  <DicomAttribute tag="7FE00010" vr="ox" keyword="PixelData">
+    <InlineBinary>AQIDBA==</InlineBinary>
+  </DicomAttribute>
+</NativeDicomModel>`;
+
+        const result = xmlToJson(xml);
+
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+            expect(result.value['7FE00010']?.vr).toBe('UN');
+            expect(result.value['7FE00010']?.InlineBinary).toBe('AQIDBA==');
+        }
+    });
 });

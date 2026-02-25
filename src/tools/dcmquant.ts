@@ -17,7 +17,7 @@ import type { ToolBaseOptions } from './_toolTypes';
 interface DcmquantOptions extends ToolBaseOptions {
     /** Number of colors in the palette (2-65536). */
     readonly colors?: number | undefined;
-    /** Frame number to extract (0-based). */
+    /** Frame number to extract (0-based, max 65535). */
     readonly frame?: number | undefined;
 }
 
@@ -32,7 +32,7 @@ const DcmquantOptionsSchema = z
         timeoutMs: z.number().int().positive().optional(),
         signal: z.instanceof(AbortSignal).optional(),
         colors: z.number().int().min(2).max(65536).optional(),
-        frame: z.number().int().min(0).optional(),
+        frame: z.number().int().min(0).max(65535).optional(),
     })
     .strict()
     .optional();

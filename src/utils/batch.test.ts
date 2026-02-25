@@ -102,7 +102,7 @@ describe('batch()', () => {
             });
 
             expect(maxConcurrent).toBeLessThanOrEqual(4);
-            expect(maxConcurrent).toBeGreaterThanOrEqual(1);
+            expect(maxConcurrent).toBeGreaterThanOrEqual(2);
         });
 
         it('respects concurrency limit of 1 (sequential)', async () => {

@@ -10,6 +10,7 @@
 import type { DicomTagPath } from '../brands';
 import type { TagModification } from '../tools/dcmodify';
 import { MAX_CHANGESET_OPERATIONS } from '../constants';
+import { tagPathToSegments } from './tagPath';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -111,6 +112,7 @@ class ChangeSet {
         if (totalOps >= MAX_CHANGESET_OPERATIONS) {
             throw new Error(`ChangeSet operation limit (${MAX_CHANGESET_OPERATIONS}) exceeded`);
         }
+        tagPathToSegments(path);
         const sanitized = sanitizeValue(value);
         const newMods = new Map(this.mods);
         newMods.set(path, sanitized);
@@ -133,6 +135,7 @@ class ChangeSet {
         if (totalOps >= MAX_CHANGESET_OPERATIONS) {
             throw new Error(`ChangeSet operation limit (${MAX_CHANGESET_OPERATIONS}) exceeded`);
         }
+        tagPathToSegments(path);
         const newMods = new Map(this.mods);
         newMods.delete(path);
         const newErasures = new Set(this.erased);

@@ -91,16 +91,22 @@ function addFilterKeys(keys: string[], filter: object): void {
     }
 }
 
+/** Extracts the tag portion from a key string (before the '=' if present). */
+function extractTag(key: string): string {
+    const eqIndex = key.indexOf('=');
+    return eqIndex >= 0 ? key.substring(0, eqIndex) : key;
+}
+
 /**
  * Adds return keys that are not already present as filter keys.
- * Uses tag prefix matching to avoid duplicating tags.
+ * Uses exact tag matching to avoid duplicating tags.
  */
 function addReturnKeys(keys: string[], returnKeys: readonly string[]): void {
     for (let i = 0; i < returnKeys.length; i += 1) {
         const tag = returnKeys[i];
         /* v8 ignore next */
         if (tag === undefined) continue;
-        const alreadyPresent = keys.some(k => k.startsWith(tag));
+        const alreadyPresent = keys.some(k => extractTag(k) === tag);
         if (!alreadyPresent) {
             keys.push(`${tag}=`);
         }

@@ -131,9 +131,10 @@ describe('xmlToJson malformed XML inputs', () => {
         expect(result.ok).toBe(true);
         if (result.ok) {
             // Empty string tag is still a valid key — it will be stored under ""
-            // This is technically malformed DICOM but should not crash
+            // This is technically malformed DICOM but should not crash.
+            // Empty VR is not a known DICOM VR code, so it falls back to 'UN'.
             if (result.value[''] !== undefined) {
-                expect(result.value[''].vr).toBe('');
+                expect(result.value[''].vr).toBe('UN');
             }
         }
     });

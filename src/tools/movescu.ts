@@ -15,6 +15,7 @@ import { DEFAULT_TIMEOUT_MS } from '../constants';
 import { resolveBinary } from './_resolveBinary';
 import { createToolError } from './_toolError';
 import type { ToolBaseOptions } from './_toolTypes';
+import { isSafePath, isValidDicomKey, isValidAETitle } from '../patterns';
 
 /** Supported C-MOVE query models. */
 const MoveQueryModel = {
@@ -65,12 +66,12 @@ const MovescuOptionsSchema = z
         signal: z.instanceof(AbortSignal).optional(),
         host: z.string().min(1),
         port: z.number().int().min(1).max(65535),
-        callingAETitle: z.string().min(1).max(16).optional(),
-        calledAETitle: z.string().min(1).max(16).optional(),
+        callingAETitle: z.string().min(1).max(16).refine(isValidAETitle, { message: 'AE Title contains invalid characters' }).optional(),
+        calledAETitle: z.string().min(1).max(16).refine(isValidAETitle, { message: 'AE Title contains invalid characters' }).optional(),
         queryModel: z.enum(['patient', 'study']).optional(),
-        keys: z.array(z.string().min(1)).optional(),
-        moveDestination: z.string().min(1).max(16).optional(),
-        outputDirectory: z.string().min(1).optional(),
+        keys: z.array(z.string().min(1).refine(isValidDicomKey, { message: 'invalid DICOM query key format (expected XXXX,XXXX[=value])' })).optional(),
+        moveDestination: z.string().min(1).max(16).refine(isValidAETitle, { message: 'AE Title contains invalid characters' }).optional(),
+        outputDirectory: z.string().min(1).refine(isSafePath, { message: 'path traversal detected in outputDirectory' }).optional(),
     })
     .strict();
 

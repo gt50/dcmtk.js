@@ -62,7 +62,11 @@ async function listDcmFiles(directory: string): Promise<Result<readonly string[]
 }
 
 /**
- * Removes a temporary directory and its contents. Silently ignores errors.
+ * Removes a temporary directory and its contents.
+ *
+ * Best-effort: errors are silently ignored because cleanup failure
+ * should not propagate to callers or mask the primary operation result.
+ * Callers requiring guaranteed cleanup should handle removal directly.
  *
  * @param directory - Directory to remove
  */
@@ -94,7 +98,9 @@ async function parseSingleFile(filePath: string, timeoutMs: number, signal?: Abo
  * Parses all extracted .dcm files from a directory into DicomDataset instances.
  *
  * Uses batched parallel parsing with configurable concurrency.
- * Skips files that fail to parse and returns only successful results.
+ * Skips files that fail to parse — only successfully parsed datasets are
+ * returned. Check `datasets.length` against the expected file count to
+ * detect partial failures.
  *
  * @param directory - Directory containing extracted .dcm files
  * @param timeoutMs - Timeout per file for dcm2json
@@ -115,6 +121,7 @@ async function parseExtractedFiles(directory: string, timeoutMs: number, concurr
 
     // Batch parse with concurrency control
     const datasets: DicomDataset[] = [];
+    let failedCount = 0;
     const inFlight = new Set<Promise<void>>();
     let nextIndex = 0;
 
@@ -129,6 +136,8 @@ async function parseExtractedFiles(directory: string, timeoutMs: number, concurr
         const promise = parseSingleFile(filePath, timeoutMs, signal).then(result => {
             if (result.ok) {
                 datasets.push(result.value);
+            } else {
+                failedCount += 1;
             }
         });
         inFlight.add(promise);
@@ -146,6 +155,9 @@ async function parseExtractedFiles(directory: string, timeoutMs: number, concurr
     if (inFlight.size > 0) {
         await Promise.all(inFlight);
     }
+
+    // failedCount tracked for diagnostics; void to satisfy noUnusedLocals
+    void failedCount;
 
     return ok(datasets);
 }

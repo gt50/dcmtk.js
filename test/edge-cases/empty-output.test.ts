@@ -102,7 +102,7 @@ describe('dcm2json edge case outputs', () => {
 
         expect(result.ok).toBe(false);
         if (!result.ok) {
-            expect(result.error.message).toMatch(/failed to parse output/i);
+            expect(result.error.message).toMatch(/Parse error/i);
         }
     });
 

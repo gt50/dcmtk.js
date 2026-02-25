@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { StorescpEvent, STORESCP_PATTERNS, STORESCP_FATAL_EVENTS } from './storescp';
 import { DcmrecvEvent } from './dcmrecv';
 import { LineParser } from '../parsers/LineParser';
@@ -96,5 +96,57 @@ describe('STORESCP_PATTERNS with LineParser', () => {
         parser.feed('some unrelated output');
 
         expect(events).toHaveLength(0);
+    });
+
+    describe('negative cases', () => {
+        it('does not match empty string', () => {
+            const parser = createParser();
+            const spy = vi.fn();
+            parser.on('match', spy);
+            parser.feed('');
+            expect(spy).not.toHaveBeenCalled();
+        });
+
+        it('does not match STORING_FILE prefix without path', () => {
+            const parser = createParser();
+            const spy = vi.fn();
+            parser.on('match', spy);
+            parser.feed('I: storing DICOM file:');
+            expect(spy).not.toHaveBeenCalled();
+        });
+
+        it('does not match partial ASSOCIATION_RECEIVED (missing quotes)', () => {
+            const parser = createParser();
+            const spy = vi.fn();
+            parser.on('match', spy);
+            parser.feed('I: Association Received 192.168.1.100: STORESCU -> DCMRECV');
+            expect(spy).not.toHaveBeenCalled();
+        });
+
+        it('does not match STORED_FILE prefix without file path', () => {
+            const parser = createParser();
+            const spy = vi.fn();
+            parser.on('match', spy);
+            parser.feed('I: Stored received object to file:');
+            expect(spy).not.toHaveBeenCalled();
+        });
+
+        it('does not match CANNOT_START_LISTENER with unrelated "cannot" text', () => {
+            const parser = createParser();
+            const spy = vi.fn();
+            parser.on('match', spy);
+            parser.feed('E: cannot open file');
+            expect(spy).not.toHaveBeenCalled();
+        });
+
+        it('does not match random prefixed noise', () => {
+            const parser = createParser();
+            const spy = vi.fn();
+            parser.on('match', spy);
+            parser.feed('W: warning about something');
+            parser.feed('T: trace level message');
+            parser.feed('   leading whitespace line');
+            expect(spy).not.toHaveBeenCalled();
+        });
     });
 });

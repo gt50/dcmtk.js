@@ -299,4 +299,60 @@ describe('LineParser', () => {
             expect(matchSpy).not.toHaveBeenCalled();
         });
     });
+
+    describe('edge cases', () => {
+        it('ignores feed after dispose()', () => {
+            parser = new LineParser();
+            const matchSpy = vi.fn();
+
+            parser.addPattern({
+                event: 'TEST',
+                pattern: /test/,
+                processor: () => ({}),
+            });
+            parser.on('match', matchSpy);
+
+            parser[Symbol.dispose]();
+            parser.feed('test line');
+
+            expect(matchSpy).not.toHaveBeenCalled();
+        });
+
+        it('handles feeding the same line multiple times', () => {
+            parser = new LineParser();
+            const matches: string[] = [];
+
+            parser.addPattern({
+                event: 'REPEAT',
+                pattern: /^hello$/,
+                processor: () => ({}),
+            });
+            parser.on('match', ({ event }) => matches.push(event));
+
+            parser.feed('hello');
+            parser.feed('hello');
+            parser.feed('hello');
+
+            expect(matches).toHaveLength(3);
+        });
+
+        it('emits error event when processor throws', () => {
+            parser = new LineParser();
+            const errorSpy = vi.fn();
+
+            parser.addPattern({
+                event: 'THROWS',
+                pattern: /trigger/,
+                processor: () => {
+                    throw new Error('processor failed');
+                },
+            });
+            parser.on('error', errorSpy);
+
+            parser.feed('trigger');
+
+            expect(errorSpy).toHaveBeenCalledOnce();
+            expect(errorSpy.mock.calls[0]?.[0]).toBeInstanceOf(Error);
+        });
+    });
 });

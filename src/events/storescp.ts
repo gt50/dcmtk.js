@@ -44,14 +44,14 @@ interface SubdirectoryCreatedData {
 const STORESCP_ADDITIONAL_PATTERNS: readonly EventPattern[] = [
     {
         event: StorescpEvent.STORING_FILE,
-        pattern: /storing DICOM file:\s*(.+)/i,
+        pattern: /storing DICOM file:\s{0,20}(.{1,1024})/i,
         processor: (match): StoringFileData => ({
             filePath: (match[1] ?? '').trim(),
         }),
     },
     {
         event: StorescpEvent.SUBDIRECTORY_CREATED,
-        pattern: /created new subdirectory[:\s]*(.+)/i,
+        pattern: /created new subdirectory[:\s]{0,20}(.{1,1024})/i,
         processor: (match): SubdirectoryCreatedData => ({
             directory: (match[1] ?? '').trim(),
         }),

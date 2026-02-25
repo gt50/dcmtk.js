@@ -15,9 +15,9 @@ import type { ToolBaseOptions } from './_toolTypes';
 
 /** Options for {@link dcmscale}. */
 interface DcmscaleOptions extends ToolBaseOptions {
-    /** Horizontal scaling factor. */
+    /** Horizontal scaling factor (max 100). */
     readonly xFactor?: number | undefined;
-    /** Vertical scaling factor. */
+    /** Vertical scaling factor (max 100). */
     readonly yFactor?: number | undefined;
     /** Target width in pixels. */
     readonly xSize?: number | undefined;
@@ -35,8 +35,8 @@ const DcmscaleOptionsSchema = z
     .object({
         timeoutMs: z.number().int().positive().optional(),
         signal: z.instanceof(AbortSignal).optional(),
-        xFactor: z.number().positive().optional(),
-        yFactor: z.number().positive().optional(),
+        xFactor: z.number().positive().max(100).optional(),
+        yFactor: z.number().positive().max(100).optional(),
         xSize: z.number().int().positive().optional(),
         ySize: z.number().int().positive().optional(),
     })

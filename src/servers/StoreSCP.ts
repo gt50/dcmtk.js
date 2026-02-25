@@ -15,7 +15,7 @@ import { DcmtkProcess } from '../DcmtkProcess';
 import type { DcmtkProcessConfig } from '../DcmtkProcess';
 import { LineParser } from '../parsers/LineParser';
 import { resolveBinary } from '../tools/_resolveBinary';
-import { isSafePath } from '../patterns';
+import { isSafePath, isValidAETitle } from '../patterns';
 import { STORESCP_PATTERNS, STORESCP_FATAL_EVENTS } from '../events/storescp';
 import type {
     AssociationReceivedData,
@@ -148,7 +148,7 @@ type StoreSCPPresetName = keyof typeof StoreSCPPreset;
 const StoreSCPOptionsSchema = z
     .object({
         port: z.number().int().min(1).max(65535),
-        aeTitle: z.string().min(1).max(16).optional(),
+        aeTitle: z.string().min(1).max(16).refine(isValidAETitle, { message: 'AE Title contains invalid characters' }).optional(),
         outputDirectory: z.string().min(1).refine(isSafePath, { message: 'path traversal detected in outputDirectory' }).optional(),
         configFile: z.string().min(1).refine(isSafePath, { message: 'path traversal detected in configFile' }).optional(),
         configProfile: z.string().min(1).optional(),
@@ -301,6 +301,8 @@ function buildExecArgs(args: string[], options: StoreSCPOptions): void {
  */
 class StoreSCP extends DcmtkProcess {
     private readonly parser: LineParser;
+    private abortSignal: AbortSignal | undefined;
+    private abortHandler: (() => void) | undefined;
 
     private constructor(config: DcmtkProcessConfig, parser: LineParser, signal?: AbortSignal) {
         super(config);
@@ -318,6 +320,15 @@ class StoreSCP extends DcmtkProcess {
      * @param listener - Callback receiving typed event data
      * @returns this for chaining
      */
+    /** Disposes the server and its parser, preventing listener leaks. */
+    [Symbol.dispose](): void {
+        if (this.abortSignal !== undefined && this.abortHandler !== undefined) {
+            this.abortSignal.removeEventListener('abort', this.abortHandler);
+        }
+        this.parser[Symbol.dispose]();
+        super[Symbol.dispose]();
+    }
+
     onEvent<K extends keyof StoreSCPEventMap>(event: K, listener: (...args: StoreSCPEventMap[K]) => void): this {
         return this.on(event as string, listener as never);
     }
@@ -388,6 +399,7 @@ class StoreSCP extends DcmtkProcess {
         this.parser.on('match', ({ event, data }) => {
             if (STORESCP_FATAL_EVENTS.has(event)) {
                 this.emit('error', { error: new Error(`Fatal: ${event}`), fatal: true });
+                void this.stop();
             }
             this.emit(event, ...([data] as never));
         });
@@ -399,13 +411,11 @@ class StoreSCP extends DcmtkProcess {
             void this.stop();
             return;
         }
-        signal.addEventListener(
-            'abort',
-            () => {
-                void this.stop();
-            },
-            { once: true }
-        );
+        this.abortSignal = signal;
+        this.abortHandler = (): void => {
+            void this.stop();
+        };
+        signal.addEventListener('abort', this.abortHandler, { once: true });
     }
 }
 

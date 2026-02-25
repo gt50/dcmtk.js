@@ -157,7 +157,7 @@ describe('DcmtkProcess', () => {
         it('emits "line" events for stdout output', async () => {
             const proc = createProcess({
                 binary: process.execPath,
-                args: ['-e', 'console.log("LINE1");console.log("LINE2");setTimeout(()=>{},1000)'],
+                args: ['-e', 'console.log("LINE1");console.log("LINE2");setTimeout(()=>{},5000)'],
             });
 
             const lines: string[] = [];
@@ -167,8 +167,10 @@ describe('DcmtkProcess', () => {
 
             await proc.start();
 
-            // Wait for output to arrive (longer timeout for parallel test load)
-            await new Promise(resolve => setTimeout(resolve, 1500));
+            // Poll until expected output arrives instead of hardcoded delay
+            for (let i = 0; i < 50 && !lines.includes('LINE2'); i++) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
 
             expect(lines).toContain('LINE1');
             expect(lines).toContain('LINE2');
@@ -177,7 +179,7 @@ describe('DcmtkProcess', () => {
         it('emits "line" events for stderr output', async () => {
             const proc = createProcess({
                 binary: process.execPath,
-                args: ['-e', 'console.error("ERR_LINE");setTimeout(()=>{},1000)'],
+                args: ['-e', 'console.error("ERR_LINE");setTimeout(()=>{},5000)'],
             });
 
             const lines: Array<{ source: string; text: string }> = [];
@@ -186,7 +188,11 @@ describe('DcmtkProcess', () => {
             });
 
             await proc.start();
-            await new Promise(resolve => setTimeout(resolve, 1500));
+
+            // Poll until expected stderr output arrives instead of hardcoded delay
+            for (let i = 0; i < 50 && !lines.some(l => l.text === 'ERR_LINE'); i++) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
 
             const stderrLines = lines.filter(l => l.source === 'stderr');
             expect(stderrLines.some(l => l.text === 'ERR_LINE')).toBe(true);

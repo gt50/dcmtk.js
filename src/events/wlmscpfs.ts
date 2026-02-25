@@ -64,14 +64,14 @@ interface WlmCannotStartListenerData {
 const WLMSCPFS_PATTERNS: readonly EventPattern[] = [
     {
         event: WlmscpfsEvent.LISTENING,
-        pattern: /listening on port\s+(\d+)/i,
+        pattern: /listening on port\s{1,20}(\d+)/i,
         processor: (match): WlmListeningData => ({
             port: Number(match[1]),
         }),
     },
     {
         event: WlmscpfsEvent.ASSOCIATION_RECEIVED,
-        pattern: /Association Received\s*([^\r\n]+)/,
+        pattern: /Association Received\s{0,20}([^\r\n]+)/,
         processor: (match): WlmAssociationReceivedData => ({
             peerInfo: (match[1] ?? '').trim(),
         }),

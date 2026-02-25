@@ -146,6 +146,8 @@ function createAETitle(input: string): Result<AETitle> {
  * @returns A Result containing the branded DicomTagPath or an error
  */
 function createDicomTagPath(input: string): Result<DicomTagPath> {
+    // Empty check is duplicated in the Zod DicomTagPathSchema (.min(1)), but
+    // kept here for a clearer error message from the brands factory.
     if (input.length === 0) {
         return err(new Error('Invalid DICOM tag path: empty string'));
     }
@@ -201,6 +203,8 @@ function createDicomFilePath(input: string): Result<DicomFilePath> {
     if (PATH_TRAVERSAL_PATTERN.test(input)) {
         return err(new Error(`Invalid DICOM file path: path traversal detected in "${input}"`));
     }
+    // normalize() resolves `.` segments and trailing separators, ensuring
+    // consistent path comparison regardless of input style (e.g., `a//b` → `a/b`).
     const normalized = normalize(input);
     return ok(normalized as DicomFilePath);
 }

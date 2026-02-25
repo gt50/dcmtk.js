@@ -58,7 +58,7 @@ const Dcmj2pnmOptionsSchema = z
         timeoutMs: z.number().int().positive().optional(),
         signal: z.instanceof(AbortSignal).optional(),
         outputFormat: z.enum(['pnm', 'png', 'bmp', 'tiff', 'jpeg']).optional(),
-        frame: z.number().int().min(0).optional(),
+        frame: z.number().int().min(0).max(65535).optional(),
     })
     .strict()
     .optional();

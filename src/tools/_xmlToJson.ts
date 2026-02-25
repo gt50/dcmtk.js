@@ -78,6 +78,48 @@ const PN_REPS: readonly PnRepType[] = ['Alphabetic', 'Ideographic', 'Phonetic'];
 const ARRAY_TAG_NAMES = new Set(['DicomAttribute', 'Value', 'PersonName', 'Item']);
 
 /**
+ * The 34 standard DICOM VR codes (PS3.5 Table 6.2-1).
+ * Used to validate VR values from DCMTK XML output. Unrecognized VRs
+ * (e.g. retired/internal codes like "xs", "ox") fall back to 'UN'.
+ */
+const KNOWN_VR_CODES = new Set([
+    'AE',
+    'AS',
+    'AT',
+    'CS',
+    'DA',
+    'DS',
+    'DT',
+    'FD',
+    'FL',
+    'IS',
+    'LO',
+    'LT',
+    'OB',
+    'OD',
+    'OF',
+    'OL',
+    'OV',
+    'OW',
+    'PN',
+    'SH',
+    'SL',
+    'SQ',
+    'SS',
+    'ST',
+    'SV',
+    'TM',
+    'UC',
+    'UI',
+    'UL',
+    'UN',
+    'UR',
+    'US',
+    'UT',
+    'UV',
+]);
+
+/**
  * Builds a PN string from name components.
  */
 function buildPnString(comp: XmlPersonNameComponent): string {
@@ -181,7 +223,9 @@ function convertRegularValue(attr: XmlDicomAttribute, element: ElementBuilder): 
  * Converts a single DicomAttribute XML element to its DICOM JSON element.
  */
 function convertElement(attr: XmlDicomAttribute): DicomJsonElement {
-    const element: ElementBuilder = { vr: attr['@_vr'] };
+    const rawVr = attr['@_vr'];
+    const vr = KNOWN_VR_CODES.has(rawVr) ? rawVr : 'UN';
+    const element: ElementBuilder = { vr };
 
     if (attr.InlineBinary !== undefined) {
         convertInlineBinary(attr, element);
@@ -195,7 +239,7 @@ function convertElement(attr: XmlDicomAttribute): DicomJsonElement {
         convertRegularValue(attr, element);
     }
 
-    return element;
+    return Object.freeze(element) as DicomJsonElement;
 }
 
 /**

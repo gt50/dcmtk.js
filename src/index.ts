@@ -354,7 +354,7 @@ export type { WlmscpfsOptions, WlmscpfsEventMap } from './servers/Wlmscpfs';
 // High-level PACS client
 // ---------------------------------------------------------------------------
 
-export { PacsClient } from './pacs/PacsClient';
+export { PacsClient, DEFAULT_PARSE_CONCURRENCY } from './pacs/PacsClient';
 export { QueryLevel, RetrieveMode } from './pacs/types';
 export type {
     QueryLevelValue,

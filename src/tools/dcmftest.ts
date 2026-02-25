@@ -72,6 +72,8 @@ async function dcmftest(inputPath: string, options?: DcmftestOptions): Promise<R
         return err(result.error);
     }
 
+    // Defensive: dcmftest always returns exit code 0 regardless of whether the
+    // file is valid DICOM. Kept for safety in case future DCMTK versions change.
     if (result.value.exitCode !== 0) {
         return err(createToolError('dcmftest', args, result.value.exitCode, result.value.stderr));
     }

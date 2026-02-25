@@ -32,7 +32,7 @@ const Dcmp2pgmOptionsSchema = z
         timeoutMs: z.number().int().positive().optional(),
         signal: z.instanceof(AbortSignal).optional(),
         presentationState: z.string().min(1).optional(),
-        frame: z.number().int().min(0).optional(),
+        frame: z.number().int().min(0).max(65535).optional(),
     })
     .strict()
     .optional();

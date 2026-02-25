@@ -15,7 +15,7 @@ import type { ChildProcess } from 'node:child_process';
 import kill from 'tree-kill';
 import type { Result, LineSource } from './types';
 import { ok, err } from './types';
-import { DEFAULT_START_TIMEOUT_MS, DEFAULT_DRAIN_TIMEOUT_MS } from './constants';
+import { DEFAULT_START_TIMEOUT_MS, DEFAULT_DRAIN_TIMEOUT_MS, MAX_OUTPUT_BYTES } from './constants';
 
 // ---------------------------------------------------------------------------
 // Event types
@@ -96,12 +96,15 @@ class DcmtkProcess extends EventEmitter<DcmtkProcessEventMap> {
 
     constructor(config: DcmtkProcessConfig) {
         super();
+        // Servers can have up to ~15 event types plus internal listeners;
+        // raise above the default 10 to avoid MaxListenersExceeded warnings.
+        this.setMaxListeners(20);
         this.config = config;
-        // Prevent unhandled 'error' events from crashing the process.
-        // Consumers can add their own 'error' listener to override.
-        this.on('error', () => {
-            // Default no-op handler; errors are returned via Result from start()
-        });
+        // Prevent unhandled 'error' events from crashing the process (Node.js
+        // throws if 'error' is emitted with no listener). Consumers should
+        // register their own 'error' listener before calling start() to receive
+        // errors. Startup errors are also returned via Result from start().
+        this.on('error', () => {});
     }
 
     /** Whether the process is currently running. */
@@ -140,6 +143,8 @@ class DcmtkProcess extends EventEmitter<DcmtkProcessEventMap> {
                 resolve(err(new Error(`Process failed to start within ${timeoutMs}ms`)));
             }, timeoutMs);
 
+            // Safe from races: Node.js is single-threaded, so the `settled`
+            // flag check + set is atomic within each event handler invocation.
             const settle = (result: Result<void>): void => {
                 if (settled) return;
                 settled = true;
@@ -184,6 +189,10 @@ class DcmtkProcess extends EventEmitter<DcmtkProcessEventMap> {
                 resolve();
             }, drainMs);
 
+            // Safe: Node.js is single-threaded, so `this.child` cannot become null
+            // between the check and the `.once('close', ...)` registration. The
+            // drain timeout handles the edge case where the child exits before
+            // the close listener is registered.
             if (this.child) {
                 this.child.once('close', () => {
                     clearTimeout(timer);
@@ -290,14 +299,23 @@ class DcmtkProcess extends EventEmitter<DcmtkProcessEventMap> {
     private handleData(source: LineSource, chunk: Buffer | string): void {
         if (source === 'stdout') {
             this.stdoutBuffer += String(chunk);
-            this.processLines(source, 'stdoutBuffer');
         } else {
             this.stderrBuffer += String(chunk);
-            this.processLines(source, 'stderrBuffer');
         }
+
+        if (this.stdoutBuffer.length + this.stderrBuffer.length > MAX_OUTPUT_BYTES) {
+            this.emit('error', { error: new Error(`Process output exceeded ${MAX_OUTPUT_BYTES} bytes`), fatal: true });
+            this.killChild();
+            return;
+        }
+
+        this.processLines(source, source === 'stdout' ? 'stdoutBuffer' : 'stderrBuffer');
     }
 
     private processLines(source: LineSource, bufferKey: 'stdoutBuffer' | 'stderrBuffer'): void {
+        // Handle bare \r (CR-only) line endings by converting to \n
+        this[bufferKey] = this[bufferKey].replace(/\r(?!\n)/g, '\n');
+
         let newlineIdx = this[bufferKey].indexOf('\n');
 
         // Iterative line extraction — no recursion (Rule 8.2)

@@ -13,8 +13,9 @@ import { ok, err } from '../types';
 import { execCommand } from '../exec';
 import { DEFAULT_TIMEOUT_MS } from '../constants';
 import { resolveBinary } from './_resolveBinary';
-import { createToolError } from './_toolError';
+import { createToolError, createValidationError } from './_toolError';
 import type { ToolBaseOptions } from './_toolTypes';
+import { isSafePath, isValidDicomKey, isValidAETitle } from '../patterns';
 
 /** Supported C-FIND query models. */
 const QueryModel = {
@@ -67,14 +68,17 @@ const FindscuOptionsSchema = z
         signal: z.instanceof(AbortSignal).optional(),
         host: z.string().min(1),
         port: z.number().int().min(1).max(65535),
-        callingAETitle: z.string().min(1).max(16).optional(),
-        calledAETitle: z.string().min(1).max(16).optional(),
+        callingAETitle: z.string().min(1).max(16).refine(isValidAETitle, { message: 'AE Title contains invalid characters' }).optional(),
+        calledAETitle: z.string().min(1).max(16).refine(isValidAETitle, { message: 'AE Title contains invalid characters' }).optional(),
         queryModel: z.enum(['worklist', 'patient', 'study']).optional(),
-        keys: z.array(z.string().min(1)).optional(),
+        keys: z.array(z.string().min(1).refine(isValidDicomKey, { message: 'invalid DICOM query key format (expected XXXX,XXXX[=value])' })).optional(),
         extract: z.boolean().optional(),
-        outputDirectory: z.string().min(1).optional(),
+        outputDirectory: z.string().min(1).refine(isSafePath, { message: 'path traversal detected in outputDirectory' }).optional(),
     })
-    .strict();
+    .strict()
+    .refine(data => data.extract !== true || data.outputDirectory !== undefined, {
+        message: 'outputDirectory is required when extract is true',
+    });
 
 /**
  * Builds findscu command-line arguments from validated options.
@@ -135,7 +139,7 @@ function buildArgs(options: FindscuOptions): string[] {
 async function findscu(options: FindscuOptions): Promise<Result<FindscuResult>> {
     const validation = FindscuOptionsSchema.safeParse(options);
     if (!validation.success) {
-        return err(new Error(`findscu: invalid options: ${validation.error.message}`));
+        return err(createValidationError('findscu', validation.error));
     }
 
     const binaryResult = resolveBinary('findscu');

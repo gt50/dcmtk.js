@@ -10,8 +10,10 @@
 
 import { z } from 'zod';
 
+import { isValidAETitle } from '../patterns';
 import type { Result } from '../types';
 import { ok, err } from '../types';
+import { createValidationError } from '../tools/_toolError';
 import { DEFAULT_TIMEOUT_MS } from '../constants';
 import type { DicomDataset } from '../dicom/DicomDataset';
 import { echoscu } from '../tools/echoscu';
@@ -46,13 +48,13 @@ const PacsClientConfigSchema = z
     .object({
         host: z.string().min(1),
         port: z.number().int().min(1).max(65535),
-        callingAETitle: z.string().min(1).max(16).optional(),
-        calledAETitle: z.string().min(1).max(16).optional(),
+        callingAETitle: z.string().min(1).max(16).refine(isValidAETitle, { message: 'AE Title contains invalid characters' }).optional(),
+        calledAETitle: z.string().min(1).max(16).refine(isValidAETitle, { message: 'AE Title contains invalid characters' }).optional(),
         timeoutMs: z.number().int().positive().optional(),
     })
     .strict();
 
-/** Default concurrency for parallel file parsing. */
+/** Default concurrency for parallel file parsing in PacsClient queries. Exported for consumer reference. */
 const DEFAULT_PARSE_CONCURRENCY = 5;
 
 // ---------------------------------------------------------------------------
@@ -104,7 +106,7 @@ class PacsClient {
     static create(config: PacsClientConfig): Result<PacsClient> {
         const validation = PacsClientConfigSchema.safeParse(config);
         if (!validation.success) {
-            return err(new Error(`PacsClient: invalid config: ${validation.error.message}`));
+            return err(createValidationError('PacsClient', validation.error));
         }
         return ok(new PacsClient(config));
     }
@@ -207,6 +209,9 @@ class PacsClient {
      * @returns A Result containing matching DicomDatasets
      */
     async find(keys: readonly string[], options?: PacsQueryOptions): Promise<Result<readonly DicomDataset[]>> {
+        if (keys.length === 0) {
+            return err(new Error('PacsClient.find(): keys array must not be empty'));
+        }
         return this.executeQuery('study', keys, options);
     }
 
@@ -285,7 +290,8 @@ class PacsClient {
         options?: PacsQueryOptions
     ): Promise<Result<readonly DicomDataset[]>> {
         const timeoutMs = this.resolveTimeout(options?.timeoutMs);
-        const concurrency = options?.parseConcurrency ?? DEFAULT_PARSE_CONCURRENCY;
+        const rawConcurrency = options?.parseConcurrency ?? DEFAULT_PARSE_CONCURRENCY;
+        const concurrency = Math.max(1, Math.min(64, Math.floor(rawConcurrency)));
 
         const tempDirResult = await createTempDir();
         if (!tempDirResult.ok) {
@@ -396,4 +402,4 @@ class PacsClient {
     }
 }
 
-export { PacsClient };
+export { PacsClient, DEFAULT_PARSE_CONCURRENCY };

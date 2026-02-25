@@ -78,7 +78,7 @@ const DCMRECV_PATTERNS: readonly EventPattern[] = [
     },
     {
         event: DcmrecvEvent.ASSOCIATION_RECEIVED,
-        pattern: /Association Received\s+([^:]+):\s*"([^"]+)"\s*->\s*"([^"]+)"/,
+        pattern: /Association Received\s{1,100}([^:]+):\s*"([^"]+)"\s*->\s*"([^"]+)"/,
         processor: (match): AssociationReceivedData => ({
             address: match[1] ?? '',
             callingAE: match[2] ?? '',
@@ -101,7 +101,7 @@ const DCMRECV_PATTERNS: readonly EventPattern[] = [
     },
     {
         event: DcmrecvEvent.STORED_FILE,
-        pattern: /Stored received object to file:\s*(.+)/,
+        pattern: /Stored received object to file:\s{0,20}(.{1,1024})/,
         processor: (match): StoredFileData => ({
             filePath: (match[1] ?? '').trim(),
         }),
@@ -130,7 +130,7 @@ const DCMRECV_PATTERNS: readonly EventPattern[] = [
     },
     {
         event: DcmrecvEvent.REFUSING_ASSOCIATION,
-        pattern: /Refusing Association\s*\((.+)\)/,
+        pattern: /Refusing Association\s{0,20}\((.{1,500})\)/,
         processor: (match): RefusingAssociationData => ({
             reason: match[1] ?? '',
         }),

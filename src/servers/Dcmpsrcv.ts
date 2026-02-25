@@ -132,6 +132,8 @@ function buildArgs(options: DcmpsrcvOptions): string[] {
  */
 class Dcmpsrcv extends DcmtkProcess {
     private readonly parser: LineParser;
+    private abortSignal: AbortSignal | undefined;
+    private abortHandler: (() => void) | undefined;
 
     private constructor(config: DcmtkProcessConfig, parser: LineParser, signal?: AbortSignal) {
         super(config);
@@ -149,6 +151,15 @@ class Dcmpsrcv extends DcmtkProcess {
      * @param listener - Callback receiving typed event data
      * @returns this for chaining
      */
+    /** Disposes the server and its parser, preventing listener leaks. */
+    [Symbol.dispose](): void {
+        if (this.abortSignal !== undefined && this.abortHandler !== undefined) {
+            this.abortSignal.removeEventListener('abort', this.abortHandler);
+        }
+        this.parser[Symbol.dispose]();
+        super[Symbol.dispose]();
+    }
+
     onEvent<K extends keyof DcmpsrcvEventMap>(event: K, listener: (...args: DcmpsrcvEventMap[K]) => void): this {
         return this.on(event as string, listener as never);
     }
@@ -219,6 +230,7 @@ class Dcmpsrcv extends DcmtkProcess {
         this.parser.on('match', ({ event, data }) => {
             if (DCMPSRCV_FATAL_EVENTS.has(event)) {
                 this.emit('error', { error: new Error(`Fatal: ${event}`), fatal: true });
+                void this.stop();
             }
             this.emit(event, ...([data] as never));
         });
@@ -230,13 +242,11 @@ class Dcmpsrcv extends DcmtkProcess {
             void this.stop();
             return;
         }
-        signal.addEventListener(
-            'abort',
-            () => {
-                void this.stop();
-            },
-            { once: true }
-        );
+        this.abortSignal = signal;
+        this.abortHandler = (): void => {
+            void this.stop();
+        };
+        signal.addEventListener('abort', this.abortHandler, { once: true });
     }
 }
 

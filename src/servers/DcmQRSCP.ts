@@ -170,6 +170,8 @@ function buildNetworkArgs(args: string[], options: DcmQRSCPOptions): void {
  */
 class DcmQRSCP extends DcmtkProcess {
     private readonly parser: LineParser;
+    private abortSignal: AbortSignal | undefined;
+    private abortHandler: (() => void) | undefined;
 
     private constructor(config: DcmtkProcessConfig, parser: LineParser, signal?: AbortSignal) {
         super(config);
@@ -187,6 +189,15 @@ class DcmQRSCP extends DcmtkProcess {
      * @param listener - Callback receiving typed event data
      * @returns this for chaining
      */
+    /** Disposes the server and its parser, preventing listener leaks. */
+    [Symbol.dispose](): void {
+        if (this.abortSignal !== undefined && this.abortHandler !== undefined) {
+            this.abortSignal.removeEventListener('abort', this.abortHandler);
+        }
+        this.parser[Symbol.dispose]();
+        super[Symbol.dispose]();
+    }
+
     onEvent<K extends keyof DcmQRSCPEventMap>(event: K, listener: (...args: DcmQRSCPEventMap[K]) => void): this {
         return this.on(event as string, listener as never);
     }
@@ -259,6 +270,7 @@ class DcmQRSCP extends DcmtkProcess {
         this.parser.on('match', ({ event, data }) => {
             if (DCMQRSCP_FATAL_EVENTS.has(event)) {
                 this.emit('error', { error: new Error(`Fatal: ${event}`), fatal: true });
+                void this.stop();
             }
             this.emit(event, ...([data] as never));
         });
@@ -270,13 +282,11 @@ class DcmQRSCP extends DcmtkProcess {
             void this.stop();
             return;
         }
-        signal.addEventListener(
-            'abort',
-            () => {
-                void this.stop();
-            },
-            { once: true }
-        );
+        this.abortSignal = signal;
+        this.abortHandler = (): void => {
+            void this.stop();
+        };
+        signal.addEventListener('abort', this.abortHandler, { once: true });
     }
 }
 

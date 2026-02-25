@@ -73,6 +73,9 @@ const MAX_TRAVERSAL_DEPTH = 50;
 /** Maximum number of operations (modifications + erasures) in a single ChangeSet. */
 const MAX_CHANGESET_OPERATIONS = 10_000;
 
+/** Maximum bytes allowed for stdout + stderr buffering (100 MB). */
+const MAX_OUTPUT_BYTES = 100 * 1024 * 1024;
+
 export {
     DEFAULT_TIMEOUT_MS,
     DEFAULT_START_TIMEOUT_MS,
@@ -87,4 +90,5 @@ export {
     MAX_EVENT_PATTERNS,
     MAX_TRAVERSAL_DEPTH,
     MAX_CHANGESET_OPERATIONS,
+    MAX_OUTPUT_BYTES,
 };

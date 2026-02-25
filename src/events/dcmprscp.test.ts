@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { DcmprscpEvent, DCMPRSCP_PATTERNS, DCMPRSCP_FATAL_EVENTS } from './dcmprscp';
 import { LineParser } from '../parsers/LineParser';
 
@@ -176,5 +176,65 @@ describe('DCMPRSCP_PATTERNS with LineParser', () => {
 
     it('registers all patterns without exceeding limit', () => {
         expect(DCMPRSCP_PATTERNS.length).toBe(7);
+    });
+
+    describe('negative cases', () => {
+        it('does not match empty string', () => {
+            const parser = createParser();
+            const spy = vi.fn();
+            parser.on('match', spy);
+            parser.feed('');
+            expect(spy).not.toHaveBeenCalled();
+        });
+
+        it('does not match DATABASE_READY without quoted directory', () => {
+            const parser = createParser();
+            const spy = vi.fn();
+            parser.on('match', spy);
+            parser.feed('I: Using database in directory /var/lib/dcmtk/database');
+            expect(spy).not.toHaveBeenCalled();
+        });
+
+        it('does not match ASSOCIATION_RECEIVED without parentheses', () => {
+            const parser = createParser();
+            const spy = vi.fn();
+            parser.on('match', spy);
+            parser.feed('I: Association Received from peer');
+            expect(spy).not.toHaveBeenCalled();
+        });
+
+        it('does not match ASSOCIATION_ACKNOWLEDGED without PDV number', () => {
+            const parser = createParser();
+            const spy = vi.fn();
+            parser.on('match', spy);
+            parser.feed('I: Association Acknowledged (Max Send PDV:)');
+            expect(spy).not.toHaveBeenCalled();
+        });
+
+        it('does not match CANNOT_START_LISTENER with unrelated "cannot" text', () => {
+            const parser = createParser();
+            const spy = vi.fn();
+            parser.on('match', spy);
+            parser.feed('F: cannot open file');
+            expect(spy).not.toHaveBeenCalled();
+        });
+
+        it('does not match CONFIG_ERROR with unrelated error messages', () => {
+            const parser = createParser();
+            const spy = vi.fn();
+            parser.on('match', spy);
+            parser.feed('F: connection refused by remote host');
+            expect(spy).not.toHaveBeenCalled();
+        });
+
+        it('does not match random prefixed noise', () => {
+            const parser = createParser();
+            const spy = vi.fn();
+            parser.on('match', spy);
+            parser.feed('W: warning about something');
+            parser.feed('T: trace level message');
+            parser.feed('   leading whitespace line');
+            expect(spy).not.toHaveBeenCalled();
+        });
     });
 });

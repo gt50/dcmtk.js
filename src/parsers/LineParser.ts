@@ -24,8 +24,10 @@ import { MAX_BLOCK_LINES, MAX_EVENT_PATTERNS, DEFAULT_BLOCK_TIMEOUT_MS } from '.
 interface LineParserEventMap {
     /** Emitted when a pattern matches. Carries the event name and extracted data. */
     match: [{ readonly event: string; readonly data: unknown }];
-    /** Emitted when a multi-line block times out before the footer is matched. */
+    /** Emitted when a multi-line block times out before the footer is matched. Consumers should listen for this event to detect and handle incomplete blocks. */
     blockTimeout: [{ readonly event: string; readonly lines: readonly string[] }];
+    /** Emitted when a pattern processor throws. */
+    error: [Error];
 }
 
 /** Tracks the state of an in-progress multi-line block. */
@@ -62,6 +64,17 @@ interface BlockState {
 class LineParser extends EventEmitter<LineParserEventMap> {
     private readonly patterns: EventPattern[] = [];
     private activeBlock: BlockState | null = null;
+
+    constructor() {
+        super();
+        // LineParser is used internally and the number of patterns can be
+        // large — disable the listener limit (0 = unlimited) to avoid
+        // MaxListenersExceeded warnings.
+        this.setMaxListeners(0);
+        // Prevent unhandled 'error' events from crashing the process.
+        // Consumers should register their own 'error' listener.
+        this.on('error', () => {});
+    }
 
     /**
      * Registers an event pattern.
@@ -158,8 +171,13 @@ class LineParser extends EventEmitter<LineParserEventMap> {
 
             const match = pattern.pattern.exec(line);
             if (match) {
-                const data = pattern.processor(match);
-                this.emit('match', { event: pattern.event, data });
+                try {
+                    const data = pattern.processor(match);
+                    this.emit('match', { event: pattern.event, data });
+                } catch (thrown: unknown) {
+                    const processorError = thrown instanceof Error ? thrown : new Error(String(thrown));
+                    this.emit('error', processorError);
+                }
                 return; // First match wins
             }
         }
@@ -203,8 +221,13 @@ class LineParser extends EventEmitter<LineParserEventMap> {
             this.activeBlock = null;
 
             if (match) {
-                const data = pattern.processor(match);
-                this.emit('match', { event: pattern.event, data });
+                try {
+                    const data = pattern.processor(match);
+                    this.emit('match', { event: pattern.event, data });
+                } catch (thrown: unknown) {
+                    const processorError = thrown instanceof Error ? thrown : new Error(String(thrown));
+                    this.emit('error', processorError);
+                }
             }
             return;
         }

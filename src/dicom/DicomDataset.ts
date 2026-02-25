@@ -17,6 +17,36 @@ import { tagPathToSegments } from './tagPath';
 import type { DicomJsonElement, DicomJsonModel } from '../tools/_xmlToJson';
 
 // ---------------------------------------------------------------------------
+// Structural validation
+// ---------------------------------------------------------------------------
+
+const HEX_TAG_KEY = /^[0-9A-Fa-f]{8}$/;
+
+/**
+ * Returns true if the value looks like a DicomJsonElement (has a string `vr` property).
+ * This is a lightweight structural check, not a full VR validation.
+ */
+function isDicomJsonElement(value: unknown): value is DicomJsonElement {
+    return typeof value === 'object' && value !== null && 'vr' in value && typeof (value as Record<string, unknown>)['vr'] === 'string';
+}
+
+/**
+ * Returns true if the object looks like a DicomJsonModel.
+ * Every key must be an 8-char hex string and every value must have { vr: string }.
+ */
+function isValidDicomJsonModel(obj: Record<string, unknown>): boolean {
+    const keys = Object.keys(obj);
+    for (let i = 0; i < keys.length; i++) {
+        const key = keys[i];
+        /* v8 ignore next */
+        if (key === undefined) continue;
+        if (!HEX_TAG_KEY.test(key)) return false;
+        if (!isDicomJsonElement(obj[key])) return false;
+    }
+    return true;
+}
+
+// ---------------------------------------------------------------------------
 // Tag normalization
 // ---------------------------------------------------------------------------
 
@@ -51,7 +81,12 @@ function resolveElement(data: DicomJsonModel, tagKey: string): DicomJsonElement 
     return data[tagKey];
 }
 
-/** Extracts the Alphabetic component from a PN (PersonName) value. */
+/**
+ * Extracts the Alphabetic component from a PN (PersonName) value.
+ * Returns empty string if the Alphabetic component is missing or the
+ * value is not a valid PN object — consistent with DICOM PS3.5 which
+ * treats missing components as empty strings.
+ */
 function extractPNAlphabetic(first: unknown): string {
     if (typeof first !== 'object' || first === null) return '';
     const pn = first as Record<string, unknown>;
@@ -123,6 +158,11 @@ function getSequenceItems(element: DicomJsonElement): ReadonlyArray<unknown> | u
     return element.Value;
 }
 
+/** Returns true if the value is a plausible DicomJsonModel (non-null object with no array). */
+function isPlausibleModel(value: unknown): value is DicomJsonModel {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 /** Descends into a sequence item, returning the nested dataset or an error. */
 function descendIntoSequence(element: DicomJsonElement, seg: TagSegment): Result<DicomJsonModel> {
     const items = getSequenceItems(element);
@@ -131,10 +171,10 @@ function descendIntoSequence(element: DicomJsonElement, seg: TagSegment): Result
     }
     const idx = seg.index ?? 0;
     const item = items[idx];
-    if (item === undefined || typeof item !== 'object' || item === null) {
-        return err(new Error(`Sequence ${seg.tag} has no item at index ${idx}`));
+    if (!isPlausibleModel(item)) {
+        return err(new Error(`Sequence ${seg.tag} has no valid item at index ${idx}`));
     }
-    return ok(item as DicomJsonModel);
+    return ok(item);
 }
 
 /** Traverses a non-wildcard path iteratively through nested sequences. */
@@ -172,19 +212,26 @@ interface QueueEntry {
     readonly segmentIndex: number;
 }
 
+interface WildcardResult {
+    readonly values: ReadonlyArray<unknown>;
+    readonly truncated: boolean;
+}
+
 /** Collects all values matching a wildcard path using an iterative BFS queue. */
-function collectWildcard(data: DicomJsonModel, segments: ReadonlyArray<TagSegment>): ReadonlyArray<unknown> {
+function collectWildcard(data: DicomJsonModel, segments: ReadonlyArray<TagSegment>): WildcardResult {
     const results: unknown[] = [];
     const queue: QueueEntry[] = [{ data, segmentIndex: 0 }];
+    const maxIterations = MAX_TRAVERSAL_DEPTH * 100;
 
-    for (let iteration = 0; iteration < MAX_TRAVERSAL_DEPTH * 100 && queue.length > 0; iteration++) {
+    let iteration = 0;
+    for (; iteration < maxIterations && queue.length > 0; iteration++) {
         const entry = queue.shift();
         /* v8 ignore next */
         if (entry === undefined) break;
         processQueueEntry(entry, segments, results, queue);
     }
 
-    return results;
+    return { values: results, truncated: iteration >= maxIterations && queue.length > 0 };
 }
 
 /** Processes a single queue entry for wildcard collection. */
@@ -225,15 +272,15 @@ function enqueueSequenceItems(element: DicomJsonElement, seg: TagSegment, segmen
 
     if (seg.isWildcard === true) {
         for (const item of items) {
-            if (typeof item === 'object' && item !== null) {
-                queue.push({ data: item as DicomJsonModel, segmentIndex: segmentIndex + 1 });
+            if (isPlausibleModel(item)) {
+                queue.push({ data: item, segmentIndex: segmentIndex + 1 });
             }
         }
     } else {
         const idx = seg.index ?? 0;
         const item = items[idx];
-        if (typeof item === 'object' && item !== null) {
-            queue.push({ data: item as DicomJsonModel, segmentIndex: segmentIndex + 1 });
+        if (isPlausibleModel(item)) {
+            queue.push({ data: item, segmentIndex: segmentIndex + 1 });
         }
     }
 }
@@ -293,6 +340,10 @@ class DicomDataset {
     static fromJson(json: unknown): Result<DicomDataset> {
         if (json === null || json === undefined || typeof json !== 'object' || Array.isArray(json)) {
             return err(new Error('Invalid DICOM JSON: expected a non-null, non-array object'));
+        }
+        const obj = json as Record<string, unknown>;
+        if (!isValidDicomJsonModel(obj)) {
+            return err(new Error('Invalid DICOM JSON: every key must be an 8-char hex tag and every value must have a "vr" string property'));
         }
         return ok(new DicomDataset(json as DicomJsonModel));
     }
@@ -401,7 +452,12 @@ class DicomDataset {
      * @returns Result containing the element at the path or an error
      */
     getElementAtPath(path: DicomTagPath): Result<DicomJsonElement> {
-        const segments = tagPathToSegments(path);
+        let segments: ReadonlyArray<TagSegment>;
+        try {
+            segments = tagPathToSegments(path);
+        } catch (e: unknown) {
+            return err(e instanceof Error ? e : new Error(String(e)));
+        }
         return traversePath(this.data, segments);
     }
 
@@ -409,13 +465,22 @@ class DicomDataset {
      * Finds all values matching a path with wildcard `[*]` indices.
      *
      * Traverses all items in wildcard sequence positions using an iterative BFS queue.
+     * The traversal is bounded to {@link MAX_TRAVERSAL_DEPTH} * 100 iterations (5 000).
+     * For extremely large datasets this may truncate results silently; callers
+     * needing completeness guarantees should verify dataset size independently.
      *
      * @param path - A branded DicomTagPath, e.g. `(0040,A730)[*].(0040,A160)`
      * @returns A readonly array of all matching values (may be empty)
      */
     findValues(path: DicomTagPath): ReadonlyArray<unknown> {
-        const segments = tagPathToSegments(path);
-        return collectWildcard(this.data, segments);
+        let segments: ReadonlyArray<TagSegment>;
+        try {
+            segments = tagPathToSegments(path);
+        } catch {
+            return [];
+        }
+        const result = collectWildcard(this.data, segments);
+        return result.values;
     }
 
     // -----------------------------------------------------------------------

@@ -13,12 +13,13 @@ import { ok, err } from '../types';
 import { execCommand } from '../exec';
 import { DEFAULT_TIMEOUT_MS } from '../constants';
 import { resolveBinary } from './_resolveBinary';
-import { createToolError } from './_toolError';
+import { createToolError, createValidationError } from './_toolError';
 import type { ToolBaseOptions } from './_toolTypes';
+import { isValidAETitle } from '../patterns';
 
 /** Options for {@link echoscu}. */
 interface EchoscuOptions extends ToolBaseOptions {
-    /** Remote host or IP address. */
+    /** Remote host or IP address. **Security:** Not validated for SSRF — callers accepting user input should validate against private/internal IP ranges. */
     readonly host: string;
     /** Remote port number. */
     readonly port: number;
@@ -30,7 +31,7 @@ interface EchoscuOptions extends ToolBaseOptions {
 
 /** Result of a successful C-ECHO. */
 interface EchoscuResult {
-    /** Whether the echo succeeded (exit code 0). */
+    /** Always `true` when the Result is `ok` — redundant with `Result.ok` but kept for API compatibility. @deprecated Check `Result.ok` instead. */
     readonly success: boolean;
     /** Raw stderr output for diagnostic info. */
     readonly stderr: string;
@@ -42,8 +43,8 @@ const EchoscuOptionsSchema = z
         signal: z.instanceof(AbortSignal).optional(),
         host: z.string().min(1),
         port: z.number().int().min(1).max(65535),
-        callingAETitle: z.string().min(1).max(16).optional(),
-        calledAETitle: z.string().min(1).max(16).optional(),
+        callingAETitle: z.string().min(1).max(16).refine(isValidAETitle, { message: 'AE Title contains invalid characters' }).optional(),
+        calledAETitle: z.string().min(1).max(16).refine(isValidAETitle, { message: 'AE Title contains invalid characters' }).optional(),
     })
     .strict();
 
@@ -83,7 +84,7 @@ function buildArgs(options: EchoscuOptions): string[] {
 async function echoscu(options: EchoscuOptions): Promise<Result<EchoscuResult>> {
     const validation = EchoscuOptionsSchema.safeParse(options);
     if (!validation.success) {
-        return err(new Error(`echoscu: invalid options: ${validation.error.message}`));
+        return err(createValidationError('echoscu', validation.error));
     }
 
     const binaryResult = resolveBinary('echoscu');

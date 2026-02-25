@@ -11,6 +11,9 @@ import type {
     DicomTag,
     AETitle,
     Port,
+    DicomTagPath,
+    SOPClassUID,
+    TransferSyntaxUID,
     DcmrecvOptions,
     DcmrecvEventMap,
     StoreSCPOptions,
@@ -111,6 +114,36 @@ describe('Branded types', () => {
     it('branded types are not interchangeable', () => {
         type CheckNotAssignable = DicomTag extends AETitle ? true : false;
         expectTypeOf<CheckNotAssignable>().toEqualTypeOf<false>();
+    });
+});
+
+describe('branded type non-interchangeability', () => {
+    it('DicomTag is not assignable to AETitle', () => {
+        expectTypeOf<DicomTag>().not.toMatchTypeOf<AETitle>();
+    });
+
+    it('AETitle is not assignable to DicomTag', () => {
+        expectTypeOf<AETitle>().not.toMatchTypeOf<DicomTag>();
+    });
+
+    it('DicomTag is not assignable to Port', () => {
+        expectTypeOf<DicomTag>().not.toMatchTypeOf<Port>();
+    });
+
+    it('Port is not assignable to DicomTag', () => {
+        expectTypeOf<Port>().not.toMatchTypeOf<DicomTag>();
+    });
+
+    it('DicomTagPath is not assignable to DicomTag', () => {
+        expectTypeOf<DicomTagPath>().not.toMatchTypeOf<DicomTag>();
+    });
+
+    it('SOPClassUID is not assignable to TransferSyntaxUID', () => {
+        expectTypeOf<SOPClassUID>().not.toMatchTypeOf<TransferSyntaxUID>();
+    });
+
+    it('TransferSyntaxUID is not assignable to SOPClassUID', () => {
+        expectTypeOf<TransferSyntaxUID>().not.toMatchTypeOf<SOPClassUID>();
     });
 });
 

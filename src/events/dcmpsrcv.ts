@@ -90,7 +90,7 @@ interface ReceiverConfigErrorData {
 const DCMPSRCV_PATTERNS: readonly EventPattern[] = [
     {
         event: DcmpsrcvEvent.LISTENING,
-        pattern: /Receiver\s+(\S+)\s+on port\s+(\d+)/,
+        pattern: /Receiver\s{1,20}(\S+)\s{1,20}on port\s{1,20}(\d+)/,
         processor: (match): ReceiverListeningData => ({
             receiverId: match[1] ?? '',
             port: Number(match[2]),
@@ -133,7 +133,7 @@ const DCMPSRCV_PATTERNS: readonly EventPattern[] = [
     },
     {
         event: DcmpsrcvEvent.FILE_DELETED,
-        pattern: /Deleting Image File:\s*(.+)/,
+        pattern: /Deleting Image File:\s{0,20}(.{1,1024})/,
         processor: (match): FileDeletedData => ({
             filePath: (match[1] ?? '').trim(),
         }),

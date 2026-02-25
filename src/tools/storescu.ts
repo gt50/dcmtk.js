@@ -15,6 +15,7 @@ import { DEFAULT_TIMEOUT_MS } from '../constants';
 import { resolveBinary } from './_resolveBinary';
 import { createToolError } from './_toolError';
 import type { ToolBaseOptions } from './_toolTypes';
+import { isSafePath, isValidAETitle } from '../patterns';
 
 /** Options for {@link storescu}. */
 interface StorescuOptions extends ToolBaseOptions {
@@ -48,9 +49,9 @@ const StorescuOptionsSchema = z
         signal: z.instanceof(AbortSignal).optional(),
         host: z.string().min(1),
         port: z.number().int().min(1).max(65535),
-        files: z.array(z.string().min(1)).min(1),
-        callingAETitle: z.string().min(1).max(16).optional(),
-        calledAETitle: z.string().min(1).max(16).optional(),
+        files: z.array(z.string().min(1).refine(isSafePath, { message: 'path traversal detected in file path' })).min(1),
+        callingAETitle: z.string().min(1).max(16).refine(isValidAETitle, { message: 'AE Title contains invalid characters' }).optional(),
+        calledAETitle: z.string().min(1).max(16).refine(isValidAETitle, { message: 'AE Title contains invalid characters' }).optional(),
         scanDirectories: z.boolean().optional(),
         recurse: z.boolean().optional(),
     })

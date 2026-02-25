@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { DcmrecvEvent, DCMRECV_PATTERNS, DCMRECV_FATAL_EVENTS } from './dcmrecv';
 import { LineParser } from '../parsers/LineParser';
 
@@ -182,5 +182,64 @@ describe('DCMRECV_PATTERNS with LineParser', () => {
 
     it('registers all patterns without exceeding limit', () => {
         expect(DCMRECV_PATTERNS.length).toBe(10);
+    });
+
+    describe('negative cases', () => {
+        it('does not match empty string', () => {
+            const parser = createParser();
+            const spy = vi.fn();
+            parser.on('match', spy);
+            parser.feed('');
+            expect(spy).not.toHaveBeenCalled();
+        });
+
+        it('does not match partial ASSOCIATION_RECEIVED (missing quotes)', () => {
+            const parser = createParser();
+            const spy = vi.fn();
+            parser.on('match', spy);
+            parser.feed('I: Association Received 192.168.1.100: STORESCU -> DCMRECV');
+            expect(spy).not.toHaveBeenCalled();
+        });
+
+        it('does not match partial ASSOCIATION_ACKNOWLEDGED (missing PDV number)', () => {
+            const parser = createParser();
+            const spy = vi.fn();
+            parser.on('match', spy);
+            parser.feed('I: Association Acknowledged (Max Send PDV:)');
+            expect(spy).not.toHaveBeenCalled();
+        });
+
+        it('does not match STORED_FILE prefix without file path', () => {
+            const parser = createParser();
+            const spy = vi.fn();
+            parser.on('match', spy);
+            parser.feed('I: Stored received object to file:');
+            expect(spy).not.toHaveBeenCalled();
+        });
+
+        it('does not match REFUSING_ASSOCIATION without parenthesized reason', () => {
+            const parser = createParser();
+            const spy = vi.fn();
+            parser.on('match', spy);
+            parser.feed('I: Refusing Association bad application context name');
+            expect(spy).not.toHaveBeenCalled();
+        });
+
+        it('does not match CANNOT_START_LISTENER with unrelated "cannot" text', () => {
+            const parser = createParser();
+            const spy = vi.fn();
+            parser.on('match', spy);
+            parser.feed('E: cannot open file');
+            expect(spy).not.toHaveBeenCalled();
+        });
+
+        it('does not match ECHO_REQUEST with lowercase prefix', () => {
+            const parser = createParser();
+            const spy = vi.fn();
+            parser.on('match', spy);
+            // The ECHO_REQUEST pattern is case-sensitive
+            parser.feed('I: received c-echo request');
+            expect(spy).not.toHaveBeenCalled();
+        });
     });
 });

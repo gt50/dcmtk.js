@@ -48,7 +48,7 @@ interface PacsMethodOptions {
 
 /** Connection configuration for a PACS node. */
 interface PacsClientConfig {
-    /** Remote host or IP address. */
+    /** Remote host or IP address. **Security:** Not validated for SSRF — callers accepting user input should validate against private/internal IP ranges. */
     readonly host: string;
     /** Remote port number (1-65535). */
     readonly port: number;
@@ -69,7 +69,7 @@ type PacsEchoOptions = PacsMethodOptions;
 
 /** Options for {@link PacsClient.findStudies} and related query methods. */
 interface PacsQueryOptions extends PacsMethodOptions {
-    /** Maximum number of concurrent file parse operations. Defaults to 5. */
+    /** Maximum number of concurrent file parse operations. Defaults to 5. Clamped to range [1, 64]. */
     readonly parseConcurrency?: number | undefined;
 }
 

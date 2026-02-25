@@ -31,6 +31,10 @@ function truncate(value: string, maxLength: number): string {
 /**
  * Creates a standardized Error for a tool wrapper failure.
  *
+ * **Privacy note:** Arguments are included in the error message for debugging.
+ * These may contain file paths. Callers exposing errors to end users or external
+ * logs should sanitize sensitive paths before display.
+ *
  * @param toolName - The DCMTK binary name (e.g., "dcm2xml")
  * @param args - The command-line arguments passed to the tool
  * @param exitCode - The process exit code
@@ -50,4 +54,30 @@ function createToolError(toolName: string, args: readonly string[], exitCode: nu
     return new Error(parts.join(' | '));
 }
 
-export { createToolError, truncate, MAX_ARGS_LENGTH, MAX_STDERR_LENGTH };
+/**
+ * Formats a Zod validation error into a concise, human-readable string.
+ *
+ * Flattens nested Zod issues into `field: message` pairs, producing
+ * cleaner output than the raw Zod `.message` JSON string.
+ *
+ * @param toolName - The DCMTK tool name for context
+ * @param zodError - The Zod error object (must have `.issues` array)
+ * @returns A formatted Error
+ */
+function createValidationError(
+    toolName: string,
+    zodError: { readonly issues: ReadonlyArray<{ readonly path: ReadonlyArray<PropertyKey>; readonly message: string }> }
+): Error {
+    const parts: string[] = [];
+    for (let i = 0; i < zodError.issues.length; i++) {
+        const issue = zodError.issues[i];
+        /* v8 ignore next */
+        if (issue === undefined) continue;
+        const path = issue.path.length > 0 ? issue.path.map(String).join('.') : '(root)';
+        parts.push(`${path}: ${issue.message}`);
+    }
+    const detail = parts.length > 0 ? parts.join('; ') : 'unknown validation error';
+    return new Error(`${toolName}: invalid options — ${detail}`);
+}
+
+export { createToolError, createValidationError, truncate, MAX_ARGS_LENGTH, MAX_STDERR_LENGTH };

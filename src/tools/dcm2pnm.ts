@@ -40,7 +40,7 @@ const DCM2PNM_FORMAT_FLAGS: Record<Dcm2pnmOutputFormatValue, string> = {
 interface Dcm2pnmOptions extends ToolBaseOptions {
     /** Output image format. Defaults to PNM if not specified. */
     readonly outputFormat?: Dcm2pnmOutputFormatValue | undefined;
-    /** Frame number to extract (0-based). */
+    /** Frame number to extract (0-based, max 65535). */
     readonly frame?: number | undefined;
 }
 
@@ -55,7 +55,7 @@ const Dcm2pnmOptionsSchema = z
         timeoutMs: z.number().int().positive().optional(),
         signal: z.instanceof(AbortSignal).optional(),
         outputFormat: z.enum(['pnm', 'png', 'bmp', 'tiff']).optional(),
-        frame: z.number().int().min(0).optional(),
+        frame: z.number().int().min(0).max(65535).optional(),
     })
     .strict()
     .optional();

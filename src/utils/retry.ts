@@ -5,6 +5,7 @@
  */
 
 import type { Result } from '../types';
+import { err } from '../types';
 
 /** Default maximum number of attempts (including initial). */
 const DEFAULT_MAX_ATTEMPTS = 3;
@@ -71,7 +72,10 @@ function resolveConfig(opts: RetryOptions | undefined): ResolvedRetryConfig {
     return {
         ...DEFAULT_CONFIG,
         ...Object.fromEntries(Object.entries(opts).filter(([, v]) => v !== undefined)),
-        maxAttempts: Math.max(1, opts.maxAttempts ?? DEFAULT_MAX_ATTEMPTS),
+        maxAttempts: Math.max(1, Math.floor(opts.maxAttempts ?? DEFAULT_MAX_ATTEMPTS)),
+        initialDelayMs: Math.max(0, opts.initialDelayMs ?? DEFAULT_INITIAL_DELAY_MS),
+        maxDelayMs: Math.max(0, opts.maxDelayMs ?? DEFAULT_MAX_DELAY_MS),
+        backoffMultiplier: Math.max(1, opts.backoffMultiplier ?? DEFAULT_BACKOFF_MULTIPLIER),
     };
 }
 
@@ -157,7 +161,7 @@ function shouldBreakAfterFailure(attempt: number, lastError: Error, config: Reso
  */
 async function retry<T>(operation: () => Promise<Result<T>>, options?: RetryOptions): Promise<Result<T>> {
     const config = resolveConfig(options);
-    let lastResult: Result<T> | undefined;
+    let lastResult: Result<T> = err(new Error('No attempts executed'));
 
     for (let attempt = 0; attempt < config.maxAttempts; attempt += 1) {
         lastResult = await operation();
@@ -171,7 +175,7 @@ async function retry<T>(operation: () => Promise<Result<T>>, options?: RetryOpti
         if (!waitCompleted) break;
     }
 
-    return lastResult as Result<T>;
+    return lastResult;
 }
 
 export { retry };

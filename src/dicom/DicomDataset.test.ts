@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { DicomDataset } from './DicomDataset';
 import type { DicomTag, DicomTagPath } from '../brands';
-import type { DicomJsonModel } from '../tools/_xmlToJson';
+import type { DicomJsonModel, DicomJsonElement } from '../tools/_xmlToJson';
 
 // ---------------------------------------------------------------------------
 // Test fixtures
@@ -451,7 +451,7 @@ describe('DicomDataset.getElementAtPath', () => {
     it('returns error for out-of-range sequence index', () => {
         const result = ds.getElementAtPath('(0008,1115)[99].(0020,000E)' as DicomTagPath);
         expect(result.ok).toBe(false);
-        if (!result.ok) expect(result.error.message).toMatch(/no item at index/);
+        if (!result.ok) expect(result.error.message).toMatch(/no valid item at index/);
     });
 
     it('returns error when intermediate tag is not a sequence', () => {
@@ -665,7 +665,7 @@ describe('DicomDataset edge cases', () => {
         if (!r.ok) return;
         const result = r.value.getElementAtPath('(0008,1115)[0].(0020,000E)' as DicomTagPath);
         expect(result.ok).toBe(false);
-        if (!result.ok) expect(result.error.message).toMatch(/no item/);
+        if (!result.ok) expect(result.error.message).toMatch(/no valid item/);
     });
 
     it('handles null sequence item in wildcard traversal', () => {
@@ -676,5 +676,167 @@ describe('DicomDataset edge cases', () => {
         if (!r.ok) return;
         const values = r.value.findValues('(0008,1115)[*].(0020,000E)' as DicomTagPath);
         expect(values).toEqual(['1.2.3']);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Nested sequence edge cases
+// ---------------------------------------------------------------------------
+
+describe('DicomDataset nested sequence edge cases', () => {
+    it('handles 3-level deep nested sequence via getElementAtPath', () => {
+        const data: DicomJsonModel = {
+            '0040A730': {
+                vr: 'SQ',
+                Value: [
+                    {
+                        '0040A730': {
+                            vr: 'SQ',
+                            Value: [
+                                {
+                                    '0040A730': {
+                                        vr: 'SQ',
+                                        Value: [{ '0040A160': { vr: 'UT', Value: ['deep-value'] } }],
+                                    },
+                                },
+                            ],
+                        },
+                    },
+                ],
+            },
+        };
+        const r = DicomDataset.fromJson(data);
+        if (!r.ok) return;
+        const result = r.value.getElementAtPath('(0040,A730)[0].(0040,A730)[0].(0040,A730)[0].(0040,A160)' as DicomTagPath);
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+            expect(result.value.Value).toEqual(['deep-value']);
+        }
+    });
+
+    it('handles empty sequence (Value: [])', () => {
+        const data: DicomJsonModel = {
+            '00081115': {
+                vr: 'SQ',
+                Value: [],
+            },
+        };
+        const r = DicomDataset.fromJson(data);
+        if (!r.ok) return;
+
+        // Traversing into an empty sequence should fail
+        const result = r.value.getElementAtPath('(0008,1115)[0].(0020,000E)' as DicomTagPath);
+        expect(result.ok).toBe(false);
+        if (!result.ok) expect(result.error.message).toMatch(/no valid item/);
+    });
+
+    it('returns empty array for wildcard into empty sequence', () => {
+        const data: DicomJsonModel = {
+            '00081115': {
+                vr: 'SQ',
+                Value: [],
+            },
+        };
+        const r = DicomDataset.fromJson(data);
+        if (!r.ok) return;
+        const values = r.value.findValues('(0008,1115)[*].(0020,000E)' as DicomTagPath);
+        expect(values).toEqual([]);
+    });
+
+    it('wildcard path into 3-level nested sequences', () => {
+        const data: DicomJsonModel = {
+            '0040A730': {
+                vr: 'SQ',
+                Value: [
+                    {
+                        '0040A730': {
+                            vr: 'SQ',
+                            Value: [{ '0040A160': { vr: 'UT', Value: ['nested-a'] } }, { '0040A160': { vr: 'UT', Value: ['nested-b'] } }],
+                        },
+                    },
+                    {
+                        '0040A730': {
+                            vr: 'SQ',
+                            Value: [{ '0040A160': { vr: 'UT', Value: ['nested-c'] } }],
+                        },
+                    },
+                ],
+            },
+        };
+        const r = DicomDataset.fromJson(data);
+        if (!r.ok) return;
+        const values = r.value.findValues('(0040,A730)[*].(0040,A730)[*].(0040,A160)' as DicomTagPath);
+        expect(values).toEqual(['nested-a', 'nested-b', 'nested-c']);
+    });
+
+    it('multiple items in a sequence with wildcard returns all values', () => {
+        const data: DicomJsonModel = {
+            '00081115': {
+                vr: 'SQ',
+                Value: [
+                    { '0020000E': { vr: 'UI', Value: ['series-1'] } },
+                    { '0020000E': { vr: 'UI', Value: ['series-2'] } },
+                    { '0020000E': { vr: 'UI', Value: ['series-3'] } },
+                    { '0020000E': { vr: 'UI', Value: ['series-4'] } },
+                ],
+            },
+        };
+        const r = DicomDataset.fromJson(data);
+        if (!r.ok) return;
+        const values = r.value.findValues('(0008,1115)[*].(0020,000E)' as DicomTagPath);
+        expect(values).toEqual(['series-1', 'series-2', 'series-3', 'series-4']);
+    });
+
+    it('sequence with missing Value property treated as absent', () => {
+        const data: DicomJsonModel = {
+            '00081115': {
+                vr: 'SQ',
+            },
+        };
+        const r = DicomDataset.fromJson(data);
+        if (!r.ok) return;
+        const result = r.value.getElementAtPath('(0008,1115)[0].(0020,000E)' as DicomTagPath);
+        expect(result.ok).toBe(false);
+    });
+
+    it('deeply nested wildcard with some items missing the target tag', () => {
+        const data: DicomJsonModel = {
+            '0040A730': {
+                vr: 'SQ',
+                Value: [
+                    {
+                        '0040A730': {
+                            vr: 'SQ',
+                            Value: [{ '0040A160': { vr: 'UT', Value: ['found'] } }, { '00100010': { vr: 'PN', Value: [{ Alphabetic: 'irrelevant' }] } }],
+                        },
+                    },
+                ],
+            },
+        };
+        const r = DicomDataset.fromJson(data);
+        if (!r.ok) return;
+        const values = r.value.findValues('(0040,A730)[*].(0040,A730)[*].(0040,A160)' as DicomTagPath);
+        expect(values).toEqual(['found']);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Wildcard traversal truncation (D-9)
+// ---------------------------------------------------------------------------
+
+describe('DicomDataset wildcard traversal truncation', () => {
+    it('returns all results for datasets within the iteration limit', () => {
+        // Build a moderately-sized dataset — well within the 5000-iteration limit
+        const items: Record<string, DicomJsonElement>[] = [];
+        for (let i = 0; i < 100; i++) {
+            items.push({ '0020000E': { vr: 'UI', Value: [`1.2.3.${i}`] } });
+        }
+        const data: DicomJsonModel = {
+            '00081115': { vr: 'SQ', Value: items },
+        };
+        const r = DicomDataset.fromJson(data);
+        if (!r.ok) return;
+        const values = r.value.findValues('(0008,1115)[*].(0020,000E)' as DicomTagPath);
+        expect(values).toHaveLength(100);
     });
 });

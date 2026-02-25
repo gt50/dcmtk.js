@@ -15,7 +15,7 @@ import type { ChildProcess } from 'node:child_process';
 import kill from 'tree-kill';
 import type { Result, DcmtkProcessResult, ExecOptions, SpawnOptions } from './types';
 import { ok, err } from './types';
-import { DEFAULT_TIMEOUT_MS } from './constants';
+import { DEFAULT_TIMEOUT_MS, MAX_OUTPUT_BYTES } from './constants';
 
 /**
  * Kills a process tree by PID. Wraps tree-kill in a promise.
@@ -87,10 +87,18 @@ function wireSpawnListeners(child: ChildProcess, timeoutMs: number, resolve: (re
 
     child.stdout?.on('data', (chunk: Buffer | string) => {
         stdout += String(chunk);
+        if (stdout.length + stderr.length > MAX_OUTPUT_BYTES) {
+            if (child.pid !== undefined && child.pid !== null) killTree(child.pid);
+            settle(err(new Error(`Process output exceeded ${MAX_OUTPUT_BYTES} bytes`)));
+        }
     });
 
     child.stderr?.on('data', (chunk: Buffer | string) => {
         stderr += String(chunk);
+        if (stdout.length + stderr.length > MAX_OUTPUT_BYTES) {
+            if (child.pid !== undefined && child.pid !== null) killTree(child.pid);
+            settle(err(new Error(`Process output exceeded ${MAX_OUTPUT_BYTES} bytes`)));
+        }
     });
 
     child.on('error', (error: Error) => {

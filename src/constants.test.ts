@@ -7,6 +7,7 @@ import {
     PDU_SIZE,
     REQUIRED_BINARIES,
     MAX_BLOCK_LINES,
+    MAX_OUTPUT_BYTES,
 } from './constants';
 
 describe('constants', () => {
@@ -54,6 +55,14 @@ describe('constants', () => {
     describe('buffer limits', () => {
         it('has positive max block lines', () => {
             expect(MAX_BLOCK_LINES).toBeGreaterThan(0);
+        });
+
+        it('has positive max output bytes', () => {
+            expect(MAX_OUTPUT_BYTES).toBeGreaterThan(0);
+        });
+
+        it('max output bytes is at least 1 MB', () => {
+            expect(MAX_OUTPUT_BYTES).toBeGreaterThanOrEqual(1024 * 1024);
         });
     });
 });

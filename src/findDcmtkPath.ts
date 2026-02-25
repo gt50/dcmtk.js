@@ -15,6 +15,7 @@ import { execSync } from 'node:child_process';
 import type { Result } from './types';
 import { ok, err } from './types';
 import { WINDOWS_SEARCH_PATHS, UNIX_SEARCH_PATHS, REQUIRED_BINARIES } from './constants';
+import { isSafePath } from './patterns';
 
 /** Cached path result. Cleared only by passing `noCache: true`. */
 let cachedPath: string | undefined;
@@ -81,6 +82,9 @@ function searchEnvPath(): Result<string> | undefined {
     const envPath = process.env['DCMTK_PATH'];
     if (envPath === undefined || envPath.length === 0) {
         return undefined;
+    }
+    if (!isSafePath(envPath)) {
+        return err(new Error(`DCMTK_PATH="${envPath}" contains path traversal sequences`));
     }
     if (hasRequiredBinaries(envPath)) {
         return ok(envPath);

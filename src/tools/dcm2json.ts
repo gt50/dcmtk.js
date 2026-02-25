@@ -15,7 +15,7 @@ import { ok, err } from '../types';
 import { execCommand } from '../exec';
 import { DEFAULT_TIMEOUT_MS } from '../constants';
 import { resolveBinary } from './_resolveBinary';
-import { createToolError } from './_toolError';
+import { createToolError, createValidationError } from './_toolError';
 import { xmlToJson } from './_xmlToJson';
 import { repairJson } from './_repairJson';
 import type { DicomJsonModel } from './_xmlToJson';
@@ -62,7 +62,7 @@ async function tryXmlPath(inputPath: string, timeoutMs: number, signal?: AbortSi
     }
 
     if (xmlResult.value.exitCode !== 0) {
-        return err(createToolError('dcm2xml', [inputPath], xmlResult.value.exitCode, xmlResult.value.stderr));
+        return err(createToolError('dcm2xml', ['-nat', inputPath], xmlResult.value.exitCode, xmlResult.value.stderr));
     }
 
     const jsonResult = xmlToJson(xmlResult.value.stdout);
@@ -93,11 +93,13 @@ async function tryDirectPath(inputPath: string, timeoutMs: number, signal?: Abor
 
     try {
         const repaired = repairJson(result.value.stdout);
+        // Cast is safe: repairJson ensures valid DICOM JSON Model structure,
+        // and JSON.parse returns `unknown` in strict TS (we narrow via caller checks).
         const data = JSON.parse(repaired) as DicomJsonModel;
         return ok({ data, source: 'direct' as const });
     } catch (parseError: unknown) {
         const message = parseError instanceof Error ? parseError.message : 'Unknown parse error';
-        return err(new Error(`dcm2json: failed to parse output: ${message}`));
+        return err(createToolError('dcm2json', [inputPath], 1, `Parse error: ${message}`));
     }
 }
 
@@ -124,7 +126,7 @@ async function tryDirectPath(inputPath: string, timeoutMs: number, signal?: Abor
 async function dcm2json(inputPath: string, options?: Dcm2jsonOptions): Promise<Result<Dcm2jsonResult>> {
     const validation = Dcm2jsonOptionsSchema.safeParse(options);
     if (!validation.success) {
-        return err(new Error(`dcm2json: invalid options: ${validation.error.message}`));
+        return err(createValidationError('dcm2json', validation.error));
     }
 
     const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;

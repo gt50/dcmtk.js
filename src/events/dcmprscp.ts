@@ -70,7 +70,7 @@ const DCMPRSCP_PATTERNS: readonly EventPattern[] = [
     },
     {
         event: DcmprscpEvent.ASSOCIATION_RECEIVED,
-        pattern: /Association Received\s*\(([^)]+)\)/,
+        pattern: /Association Received\s{0,20}\(([^)]+)\)/,
         processor: (match): PrintAssociationReceivedData => ({
             peerInfo: (match[1] ?? '').trim(),
         }),

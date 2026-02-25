@@ -15,6 +15,7 @@ import { DEFAULT_TIMEOUT_MS } from '../constants';
 import { resolveBinary } from './_resolveBinary';
 import { createToolError } from './_toolError';
 import type { ToolBaseOptions } from './_toolTypes';
+import { isValidAETitle } from '../patterns';
 
 /** Options for {@link termscu}. */
 interface TermscuOptions extends ToolBaseOptions {
@@ -42,8 +43,8 @@ const TermscuOptionsSchema = z
         signal: z.instanceof(AbortSignal).optional(),
         host: z.string().min(1),
         port: z.number().int().min(1).max(65535),
-        callingAETitle: z.string().min(1).max(16).optional(),
-        calledAETitle: z.string().min(1).max(16).optional(),
+        callingAETitle: z.string().min(1).max(16).refine(isValidAETitle, { message: 'AE Title contains invalid characters' }).optional(),
+        calledAETitle: z.string().min(1).max(16).refine(isValidAETitle, { message: 'AE Title contains invalid characters' }).optional(),
     })
     .strict();
 

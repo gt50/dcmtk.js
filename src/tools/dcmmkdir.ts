@@ -20,7 +20,7 @@ const DEFAULT_DICOMDIR = 'DICOMDIR';
 interface DcmmkdirOptions extends ToolBaseOptions {
     /** One or more DICOM file paths to include in the DICOMDIR. */
     readonly inputFiles: readonly string[];
-    /** Output DICOMDIR file path. Defaults to 'DICOMDIR'. Maps to +D flag. */
+    /** Output DICOMDIR file path. Maps to +D flag. **Warning:** defaults to 'DICOMDIR' in the current working directory if omitted. */
     readonly outputFile?: string | undefined;
     /** File-set ID to embed in the DICOMDIR. Maps to +F flag. */
     readonly filesetId?: string | undefined;
