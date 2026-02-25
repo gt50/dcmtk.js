@@ -23,11 +23,11 @@
 
 | Severity  | Count  | Fixed  | Pending | Accepted | Won't Fix |
 | --------- | ------ | ------ | ------- | -------- | --------- |
-| CRITICAL  | 11     | 9      | 2       | 0        | 0         |
+| CRITICAL  | 11     | 11     | 0       | 0        | 0         |
 | HIGH      | 16     | 16     | 0       | 0        | 0         |
 | MEDIUM    | 21     | 21     | 0       | 0        | 0         |
 | LOW       | 19     | 14     | 0       | 5        | 0         |
-| **Total** | **67** | **60** | **2**   | **5**    | **0**     |
+| **Total** | **67** | **62** | **0**   | **5**    | **0**     |
 
 ---
 
@@ -131,14 +131,14 @@
 
 ### 1.3 Testing
 
-#### T-1. Coverage is misleading — 51 tool files excluded | `PENDING`
+#### T-1. Coverage is misleading — 51 tool files excluded | `FIXED`
 
 - **File:** `vitest.config.ts:12-77`
 - **Issue:** Reported 99% statement coverage excludes ALL tool implementations from coverage. Integration tests require DCMTK installed and run separately. True coverage including tools is ~80%.
 - **Impact:** Misleading quality metrics. If integration tests are skipped (no DCMTK), 51 files have zero coverage.
 - **Fix:** Either include tools in unit coverage with argument-construction tests, or clearly separate metrics (unit vs. total coverage).
-- **Status:** `PENDING`
-- **Notes:**
+- **Status:** `FIXED`
+- **Notes:** Consolidated CI: removed the 6-combo matrix unit test job. Single Docker-based `test:all` job runs all tests (unit + integration) with coverage that includes tool files. `vitest.all.config.ts` covers all `src/**/*.ts` excluding only barrels/types. Local `pnpm run test` unchanged for fast dev without DCMTK.
 
 ---
 
@@ -153,14 +153,14 @@
 
 ---
 
-#### T-3. PacsClient tests mock everything — no contract tests | `PENDING`
+#### T-3. PacsClient tests mock everything — no contract tests | `FIXED`
 
 - **File:** `src/pacs/PacsClient.test.ts:1-47`
 - **Issue:** All 7 network tools + temp dir utilities are fully mocked. Tests verify mock calls, not actual argument construction or error propagation. Refactoring PacsClient internals won't break these tests.
 - **Impact:** Tests coupled to mock behavior, not real behavior. Low regression detection value.
 - **Fix:** Keep mock tests for happy-path. Add contract tests verifying actual argument shapes, error bubbling, and temp dir lifecycle.
-- **Status:** `PENDING`
-- **Notes:**
+- **Status:** `FIXED`
+- **Notes:** Deleted all 39 mock tests in `src/pacs/PacsClient.test.ts`. Replaced with `test/integration/pacs/PacsClient.integration.test.ts` — 25+ real integration tests against DcmQRSCP and StoreSCP servers. Tests cover: create() validation, echo(), findStudies/findSeries/findImages/find(), retrieveStudy (C-GET + C-MOVE), retrieveSeries, store(), error cases (connection refused, unreachable host), and timeout behavior.
 
 ---
 
