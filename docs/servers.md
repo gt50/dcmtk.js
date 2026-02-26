@@ -1,0 +1,346 @@
+# Server Classes
+
+The library provides 6 long-lived server classes that wrap DCMTK server binaries. Each manages a child process with typed event listeners, graceful shutdown, and AbortSignal support.
+
+## Common Pattern
+
+All servers follow the same lifecycle:
+
+```typescript
+// 1. Create with validated options (returns Result)
+const result = ServerClass.create(options);
+if (!result.ok) {
+    /* handle error */
+}
+const server = result.value;
+
+// 2. Listen for typed events
+server.onEvent('EVENT_NAME', data => {
+    /* ... */
+});
+
+// 3. Start the server
+await server.start();
+
+// 4. Stop gracefully
+await server.stop();
+```
+
+### DcmtkProcess Base Class
+
+All servers extend `DcmtkProcess`, which provides:
+
+- **Typed EventEmitter** — `onEvent()` for strongly-typed event listeners
+- **Disposable** — `Symbol.dispose` / `Symbol.asyncDispose` for `using` statements
+- **AbortSignal** — pass `signal` in create options to externally abort
+- **Process state** — `ProcessState.IDLE | STARTING | RUNNING | STOPPING | STOPPED | ERRORED`
+
+---
+
+## Dcmrecv
+
+DICOM receiver (C-STORE SCP) using the `dcmrecv` binary. Receives and stores incoming DICOM files.
+
+### Options
+
+| Option             | Type                    | Default     | Description                       |
+| ------------------ | ----------------------- | ----------- | --------------------------------- |
+| `port`             | `number`                | —           | **Required.** Listening port      |
+| `outputDirectory`  | `string`                | —           | Directory to store received files |
+| `aeTitle`          | `string`                | —           | AE Title for this SCP             |
+| `subdirectoryMode` | `SubdirectoryModeValue` | `'none'`    | Subdirectory creation mode        |
+| `filenameMode`     | `FilenameModeValue`     | `'default'` | Filename generation mode          |
+| `storageMode`      | `StorageModeValue`      | `'normal'`  | How to handle incoming data       |
+| `startTimeoutMs`   | `number`                | —           | Timeout for server startup        |
+| `drainTimeoutMs`   | `number`                | —           | Timeout for graceful shutdown     |
+| `signal`           | `AbortSignal`           | —           | External cancellation             |
+
+### Events
+
+| Event                      | Data                                             | Description                   |
+| -------------------------- | ------------------------------------------------ | ----------------------------- |
+| `ASSOCIATION_RECEIVED`     | `{ callingAETitle, calledAETitle, peerAddress }` | New association request       |
+| `ASSOCIATION_ACKNOWLEDGED` | `{ maxSendPDV }`                                 | Association accepted          |
+| `C_STORE_REQUEST`          | `{ sopClassUID }`                                | Incoming storage request      |
+| `STORED_FILE`              | `{ filename }`                                   | File successfully written     |
+| `ASSOCIATION_RELEASE`      | —                                                | Association released normally |
+| `ASSOCIATION_ABORTED`      | —                                                | Association aborted           |
+| `ECHO_REQUEST`             | —                                                | C-ECHO verification request   |
+| `REFUSING_ASSOCIATION`     | `{ reason }`                                     | Association refused           |
+| `CANNOT_START_LISTENER`    | `{ message }`                                    | Fatal: failed to bind port    |
+| `LISTENING`                | —                                                | Server ready for connections  |
+
+### Example
+
+```typescript
+import { Dcmrecv } from 'dcmtk';
+
+const result = Dcmrecv.create({
+    port: 4242,
+    outputDirectory: './incoming',
+    aeTitle: 'MY_SCP',
+});
+
+if (result.ok) {
+    const server = result.value;
+
+    server.onEvent('C_STORE_REQUEST', data => {
+        console.log(`Receiving: ${data.sopClassUID}`);
+    });
+
+    server.onEvent('STORED_FILE', data => {
+        console.log(`Saved: ${data.filename}`);
+    });
+
+    await server.start();
+}
+```
+
+---
+
+## StoreSCP
+
+Advanced storage SCP using the `storescp` binary. Offers more configuration than Dcmrecv including config file support and transfer syntax negotiation.
+
+### Options
+
+| Option                    | Type                           | Default | Description                       |
+| ------------------------- | ------------------------------ | ------- | --------------------------------- |
+| `port`                    | `number`                       | —       | **Required.** Listening port      |
+| `aeTitle`                 | `string`                       | —       | AE Title for this SCP             |
+| `outputDirectory`         | `string`                       | —       | Directory to store received files |
+| `configFile`              | `string`                       | —       | Path to storescp config file      |
+| `configProfile`           | `string`                       | —       | Config profile name               |
+| `preferredTransferSyntax` | `PreferredTransferSyntaxValue` | —       | Preferred transfer syntax         |
+| `sortByStudy`             | `boolean`                      | —       | Sort files by study date          |
+| `sortByStudyInstanceUID`  | `boolean`                      | —       | Sort files by Study Instance UID  |
+| `startTimeoutMs`          | `number`                       | —       | Timeout for server startup        |
+| `drainTimeoutMs`          | `number`                       | —       | Timeout for graceful shutdown     |
+| `signal`                  | `AbortSignal`                  | —       | External cancellation             |
+
+### Events
+
+| Event                      | Data                                             | Description                      |
+| -------------------------- | ------------------------------------------------ | -------------------------------- |
+| `ASSOCIATION_RECEIVED`     | `{ callingAETitle, calledAETitle, peerAddress }` | New association request          |
+| `ASSOCIATION_ACKNOWLEDGED` | `{ maxSendPDV }`                                 | Association accepted             |
+| `C_STORE_REQUEST`          | `{ sopClassUID }`                                | Incoming storage request         |
+| `STORED_FILE`              | `{ filename }`                                   | File successfully written        |
+| `STORING_FILE`             | `{ filename }`                                   | File being written (in progress) |
+| `SUBDIRECTORY_CREATED`     | `{ directory }`                                  | New subdirectory created         |
+| `ASSOCIATION_RELEASE`      | —                                                | Association released normally    |
+| `ASSOCIATION_ABORTED`      | —                                                | Association aborted              |
+| `ECHO_REQUEST`             | —                                                | C-ECHO verification request      |
+| `REFUSING_ASSOCIATION`     | `{ reason }`                                     | Association refused              |
+| `CANNOT_START_LISTENER`    | `{ message }`                                    | Fatal: failed to bind port       |
+| `LISTENING`                | —                                                | Server ready for connections     |
+
+### Example
+
+```typescript
+import { StoreSCP } from 'dcmtk';
+
+const result = StoreSCP.create({
+    port: 11112,
+    outputDirectory: './received',
+    aeTitle: 'STORE_SCP',
+    sortByStudyInstanceUID: true,
+});
+
+if (result.ok) {
+    const scp = result.value;
+
+    scp.onEvent('STORING_FILE', data => {
+        console.log(`Storing: ${data.filename}`);
+    });
+
+    await scp.start();
+}
+```
+
+---
+
+## DcmQRSCP
+
+DICOM Query/Retrieve SCP using the `dcmqrscp` binary. Provides C-FIND, C-MOVE, and C-GET services backed by a DICOM database.
+
+### Options
+
+| Option           | Type          | Default | Description                                |
+| ---------------- | ------------- | ------- | ------------------------------------------ |
+| `configFile`     | `string`      | —       | **Required.** Path to dcmqrscp config file |
+| `port`           | `number`      | —       | Listening port                             |
+| `singleProcess`  | `boolean`     | —       | Run in single-process mode                 |
+| `checkFind`      | `boolean`     | —       | Enable C-FIND support checking             |
+| `checkMove`      | `boolean`     | —       | Enable C-MOVE support checking             |
+| `disableGet`     | `boolean`     | —       | Disable C-GET support                      |
+| `maxPdu`         | `number`      | —       | Maximum PDU size                           |
+| `acseTimeout`    | `number`      | —       | ACSE timeout in seconds                    |
+| `dimseTimeout`   | `number`      | —       | DIMSE timeout in seconds                   |
+| `verbose`        | `boolean`     | `true`  | Enable verbose output                      |
+| `startTimeoutMs` | `number`      | —       | Timeout for server startup                 |
+| `drainTimeoutMs` | `number`      | —       | Timeout for graceful shutdown              |
+| `signal`         | `AbortSignal` | —       | External cancellation                      |
+
+### Events
+
+| Event                      | Data             | Description                   |
+| -------------------------- | ---------------- | ----------------------------- |
+| `LISTENING`                | `{ port }`       | Server ready for connections  |
+| `ASSOCIATION_RECEIVED`     | `{ peerInfo }`   | New association request       |
+| `ASSOCIATION_ACKNOWLEDGED` | `{ maxSendPDV }` | Association accepted          |
+| `C_FIND_REQUEST`           | `{ raw }`        | Incoming C-FIND query         |
+| `C_MOVE_REQUEST`           | `{ raw }`        | Incoming C-MOVE request       |
+| `C_GET_REQUEST`            | `{ raw }`        | Incoming C-GET request        |
+| `C_STORE_REQUEST`          | `{ raw }`        | Incoming C-STORE request      |
+| `ASSOCIATION_RELEASE`      | —                | Association released normally |
+| `ASSOCIATION_ABORTED`      | —                | Association aborted           |
+| `CANNOT_START_LISTENER`    | `{ message }`    | Fatal: failed to bind port    |
+
+### Example
+
+```typescript
+import { DcmQRSCP } from 'dcmtk';
+
+const result = DcmQRSCP.create({
+    configFile: '/etc/dcmtk/dcmqrscp.cfg',
+    port: 4242,
+    singleProcess: true,
+});
+
+if (result.ok) {
+    const qr = result.value;
+
+    qr.onEvent('C_FIND_REQUEST', data => {
+        console.log('Query received:', data.raw);
+    });
+
+    qr.onEvent('C_MOVE_REQUEST', data => {
+        console.log('Move request:', data.raw);
+    });
+
+    await qr.start();
+}
+```
+
+---
+
+## Wlmscpfs
+
+DICOM Worklist Management SCP using the `wlmscpfs` binary. Serves worklist items from the filesystem.
+
+### Options
+
+| Option                | Type          | Default | Description                                       |
+| --------------------- | ------------- | ------- | ------------------------------------------------- |
+| `port`                | `number`      | —       | **Required.** Listening port                      |
+| `worklistDirectory`   | `string`      | —       | **Required.** Directory containing worklist files |
+| `enableFileRejection` | `boolean`     | `true`  | Reject invalid worklist files                     |
+| `maxPdu`              | `number`      | —       | Maximum PDU size                                  |
+| `acseTimeout`         | `number`      | —       | ACSE timeout in seconds                           |
+| `dimseTimeout`        | `number`      | —       | DIMSE timeout in seconds                          |
+| `maxAssociations`     | `number`      | —       | Max concurrent associations                       |
+| `verbose`             | `boolean`     | `true`  | Enable verbose output                             |
+| `startTimeoutMs`      | `number`      | —       | Timeout for server startup                        |
+| `drainTimeoutMs`      | `number`      | —       | Timeout for graceful shutdown                     |
+| `signal`              | `AbortSignal` | —       | External cancellation                             |
+
+### Events
+
+| Event                      | Data             | Description                    |
+| -------------------------- | ---------------- | ------------------------------ |
+| `LISTENING`                | `{ port }`       | Server ready for connections   |
+| `ASSOCIATION_RECEIVED`     | `{ peerInfo }`   | New association request        |
+| `ASSOCIATION_ACKNOWLEDGED` | `{ maxSendPDV }` | Association accepted           |
+| `C_FIND_REQUEST`           | `{ raw }`        | Incoming worklist C-FIND query |
+| `ASSOCIATION_RELEASE`      | —                | Association released normally  |
+| `ASSOCIATION_ABORTED`      | —                | Association aborted            |
+| `ECHO_REQUEST`             | —                | C-ECHO verification request    |
+| `CANNOT_START_LISTENER`    | `{ message }`    | Fatal: failed to bind port     |
+
+### Example
+
+```typescript
+import { Wlmscpfs } from 'dcmtk';
+
+const result = Wlmscpfs.create({
+    port: 4243,
+    worklistDirectory: './worklist-data',
+});
+
+if (result.ok) {
+    const wlm = result.value;
+
+    wlm.onEvent('C_FIND_REQUEST', data => {
+        console.log('Worklist query:', data.raw);
+    });
+
+    await wlm.start();
+}
+```
+
+---
+
+## DcmprsCP
+
+Print Management SCP using the `dcmprscp` binary. Manages DICOM print jobs via a configuration file.
+
+### Options
+
+| Option           | Type          | Default | Description                                    |
+| ---------------- | ------------- | ------- | ---------------------------------------------- |
+| `configFile`     | `string`      | —       | **Required.** Path to dcmpstat.cfg config file |
+| `printer`        | `string`      | —       | Printer name from config                       |
+| `dump`           | `boolean`     | —       | Dump print job details                         |
+| `logLevel`       | `string`      | —       | Log level (fatal/error/warn/info/debug/trace)  |
+| `logConfig`      | `string`      | —       | Path to log config file                        |
+| `startTimeoutMs` | `number`      | —       | Timeout for server startup                     |
+| `drainTimeoutMs` | `number`      | —       | Timeout for graceful shutdown                  |
+| `signal`         | `AbortSignal` | —       | External cancellation                          |
+
+### Events
+
+| Event                      | Data             | Description                   |
+| -------------------------- | ---------------- | ----------------------------- |
+| `DATABASE_READY`           | `{ directory }`  | Database initialized          |
+| `ASSOCIATION_RECEIVED`     | `{ peerInfo }`   | New association request       |
+| `ASSOCIATION_ACKNOWLEDGED` | `{ maxSendPDV }` | Association accepted          |
+| `ASSOCIATION_RELEASE`      | —                | Association released normally |
+| `ASSOCIATION_ABORTED`      | —                | Association aborted           |
+| `CANNOT_START_LISTENER`    | `{ message }`    | Fatal: failed to bind port    |
+| `CONFIG_ERROR`             | `{ message }`    | Fatal: configuration error    |
+
+---
+
+## Dcmpsrcv
+
+Viewer network receiver using the `dcmpsrcv` binary. Receives DICOM objects for a presentation state viewer.
+
+### Options
+
+| Option           | Type          | Default | Description                                    |
+| ---------------- | ------------- | ------- | ---------------------------------------------- |
+| `configFile`     | `string`      | —       | **Required.** Path to dcmpstat.cfg config file |
+| `receiverId`     | `string`      | —       | Receiver identifier                            |
+| `logLevel`       | `string`      | —       | Log level (fatal/error/warn/info/debug/trace)  |
+| `logConfig`      | `string`      | —       | Path to log config file                        |
+| `startTimeoutMs` | `number`      | —       | Timeout for server startup                     |
+| `drainTimeoutMs` | `number`      | —       | Timeout for graceful shutdown                  |
+| `signal`         | `AbortSignal` | —       | External cancellation                          |
+
+### Events
+
+| Event                      | Data                   | Description                   |
+| -------------------------- | ---------------------- | ----------------------------- |
+| `LISTENING`                | `{ port, receiverId }` | Server ready for connections  |
+| `DATABASE_READY`           | `{ directory }`        | Database initialized          |
+| `ASSOCIATION_RECEIVED`     | `{ peerInfo }`         | New association request       |
+| `ASSOCIATION_ACKNOWLEDGED` | `{ maxSendPDV }`       | Association accepted          |
+| `ECHO_REQUEST`             | `{ peerInfo }`         | C-ECHO verification request   |
+| `C_STORE_REQUEST`          | `{ sopClassUID }`      | Incoming storage request      |
+| `FILE_DELETED`             | `{ filename }`         | File removed                  |
+| `ASSOCIATION_RELEASE`      | —                      | Association released normally |
+| `ASSOCIATION_ABORTED`      | —                      | Association aborted           |
+| `CANNOT_START_LISTENER`    | `{ message }`          | Fatal: failed to bind port    |
+| `CONFIG_ERROR`             | `{ message }`          | Fatal: configuration error    |
+| `TERMINATING`              | —                      | Server shutting down          |

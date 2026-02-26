@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 dcmtk is a modern TypeScript library wrapping all 60+ DCMTK (DICOM Toolkit) C++ command-line binaries with type-safe APIs. Built to the standards defined in `docs/TypeScript Coding Standard for Mission-Critical Systems.md`. **Requires DCMTK installed on the system** (detected via `DCMTK_PATH` env var or known install locations).
 
-The full build plan is in `PLAN.md`. All implementation phases (1-7) are complete.
+The full build plan is in `PLAN.md`. All implementation phases (1-8) are complete.
 
 ## Commands
 
@@ -66,11 +66,11 @@ All code **shall** comply with `docs/TypeScript Coding Standard for Mission-Crit
 
 ### Short-lived Tool Wrappers (`src/tools/`)
 
-48 async functions wrapping DCMTK binaries, organized by category:
+51 async functions wrapping DCMTK binaries, organized by category:
 
-- **Data & Metadata** — `dcm2xml`, `dcm2json`, `dcmdump`, `dcmconv`, `dcmodify`, `dcmftest`, `dcmgpdir`, `dcmmkdir`
+- **Data & Metadata** — `dcm2xml`, `dcm2json`, `dcmdump`, `dcmconv`, `dcmodify`, `dcmftest`, `dcmgpdir`, `dcmmkdir`, `dcmqridx`
 - **File Conversion** — `xml2dcm`, `json2dcm`, `dump2dcm`, `img2dcm`, `pdf2dcm`, `dcm2pdf`, `cda2dcm`, `dcm2cda`, `stl2dcm`
-- **Compression** — `dcmcrle`, `dcmdrle`, `dcmencap`, `dcmdecap`, `dcmcjpeg`, `dcmdjpeg`
+- **Compression** — `dcmcrle`, `dcmdrle`, `dcmencap`, `dcmdecap`, `dcmcjpeg`, `dcmdjpeg`, `dcmcjpls`, `dcmdjpls`
 - **Image Processing** — `dcmj2pnm`, `dcm2pnm`, `dcmscale`, `dcmquant`, `dcmdspfn`, `dcod2lum`, `dconvlum`
 - **Network** — `echoscu`, `dcmsend`, `storescu`, `findscu`, `movescu`, `getscu`, `termscu`
 - **Structured Reports** — `dsrdump`, `dsr2xml`, `xml2dsr`, `drtdump`
@@ -80,6 +80,8 @@ All code **shall** comply with `docs/TypeScript Coding Standard for Mission-Crit
 
 - `Dcmrecv` — DICOM receiver (dcmrecv), C-STORE SCP
 - `StoreSCP` — Storage SCP (storescp), advanced options
+- `DcmQRSCP` — Query/Retrieve SCP (dcmqrscp), C-FIND/C-MOVE/C-GET
+- `Wlmscpfs` — Worklist Management SCP (wlmscpfs)
 - `DcmprsCP` — Print Management SCP (dcmprscp)
 - `Dcmpsrcv` — Viewer network receiver (dcmpsrcv)
 
@@ -166,7 +168,7 @@ Narrow with `if (result.ok)` before accessing `.value` or `.error`. Helpers: `ok
 
 Factory functions are unchecked. Validators return `Result<T>`.
 
-### Tool Wrappers (48 async functions)
+### Tool Wrappers (51 async functions)
 
 All tools: `(options) => Promise<Result<T>>`. All accept optional `signal: AbortSignal` and `timeoutMs: number`.
 
@@ -182,6 +184,7 @@ All tools: `(options) => Promise<Result<T>>`. All accept optional `signal: Abort
 | `dcmftest` | `(options) => Result<{isValidDicom}>`          | Validate DICOM file     |
 | `dcmgpdir` | `(options) => Result<{}>`                      | Modify DICOMDIR         |
 | `dcmmkdir` | `(options) => Result<{}>`                      | Create DICOMDIR         |
+| `dcmqridx` | `(options) => Result<{}>`                      | Index DICOM database    |
 
 #### File Conversion
 
@@ -207,6 +210,8 @@ All tools: `(options) => Promise<Result<T>>`. All accept optional `signal: Abort
 | `dcmdecap` | `(options) => Result<{outputPath}>` | Decapsulate compressed |
 | `dcmcjpeg` | `(options) => Result<{outputPath}>` | JPEG compress          |
 | `dcmdjpeg` | `(options) => Result<{outputPath}>` | JPEG decompress        |
+| `dcmcjpls` | `(options) => Result<{outputPath}>` | JPEG-LS compress       |
+| `dcmdjpls` | `(options) => Result<{outputPath}>` | JPEG-LS decompress     |
 
 #### Image Processing
 
@@ -261,6 +266,8 @@ All servers: `static create(options) => Result<Server>`, then `server.start() =>
 | ---------- | -------- | ------------------------------------ | ------------------------------------------------------------------ |
 | `Dcmrecv`  | dcmrecv  | `port`, `outputDirectory`, `aeTitle` | `ASSOCIATION_RECEIVED`, `C_STORE_REQUEST`, `STORED_FILE`, ...      |
 | `StoreSCP` | storescp | `port`, `outputDirectory`, `aeTitle` | `ASSOCIATION_RECEIVED`, `STORING_FILE`, `ASSOCIATION_RELEASE`, ... |
+| `DcmQRSCP` | dcmqrscp | `configFile`, `port`                 | `LISTENING`, `C_FIND_REQUEST`, `C_MOVE_REQUEST`, ...               |
+| `Wlmscpfs` | wlmscpfs | `port`, `worklistDirectory`          | `LISTENING`, `C_FIND_REQUEST`, `ECHO_REQUEST`, ...                 |
 | `DcmprsCP` | dcmprscp | `configFile`                         | `DATABASE_READY`, `ASSOCIATION_RECEIVED`, `CONFIG_ERROR`, ...      |
 | `Dcmpsrcv` | dcmpsrcv | `configFile`, `receiverId`           | `LISTENING`, `C_STORE_REQUEST`, `FILE_DELETED`, ...                |
 

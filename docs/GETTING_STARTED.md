@@ -749,7 +749,10 @@ import { lookupTag, lookupTagByKeyword, VR, sopClassNameFromUID } from 'dcmtk';
 
 ## Next Steps
 
-- **Full tool reference:** See the tool reference tables in [README.md](../README.md) for all 48 tool wrappers and 6 server classes.
-- **API reference for AI tools:** See [AI_README.md](../AI_README.md) for a condensed API reference suitable for LLM context.
+- **Tool reference:** Detailed documentation for all 51 tools organized by category in [docs/tools/](tools/).
+- **Server classes:** See [servers.md](servers.md) for all 6 long-lived server classes.
+- **PACS Client:** See [pacs-client.md](pacs-client.md) for the high-level PACS API.
+- **Core concepts:** See [core-concepts.md](core-concepts.md) for Result pattern, branded types, and cancellation.
+- **DICOM data layer:** See [dicom-data-layer.md](dicom-data-layer.md) for DicomDataset, ChangeSet, and DicomFile.
 - **DCMTK documentation:** https://dicom.offis.de/dcmtk.php.en -- the upstream C++ toolkit documentation.
 - **DICOM standard:** https://www.dicomstandard.org/ -- the official DICOM specification.
