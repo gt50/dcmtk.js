@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { dcm2json } from '../../../src/tools/dcm2json';
+import { describe, expect, it } from 'vitest';
+import { dcm2json } from '../../../src';
 import { dcmtkAvailable, SAMPLES } from '../helpers';
 
 describe.skipIf(!dcmtkAvailable)('dcm2json integration', () => {
