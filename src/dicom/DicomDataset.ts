@@ -7,6 +7,7 @@
  * @module dicom/DicomDataset
  */
 
+import { stderr } from 'stderr-lib';
 import type { DicomTag, DicomTagPath, SOPClassUID } from '../brands';
 import { createSOPClassUID } from '../brands';
 import { MAX_TRAVERSAL_DEPTH } from '../constants';
@@ -456,7 +457,7 @@ class DicomDataset {
         try {
             segments = tagPathToSegments(path);
         } catch (e: unknown) {
-            return err(e instanceof Error ? e : new Error(String(e)));
+            return err(stderr(e));
         }
         return traversePath(this.data, segments);
     }

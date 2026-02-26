@@ -8,6 +8,7 @@
  */
 
 import { copyFile, stat, unlink } from 'node:fs/promises';
+import { tryCatch } from 'stderr-lib';
 import type { DicomFilePath } from '../brands';
 import { createDicomFilePath } from '../brands';
 import { DEFAULT_TIMEOUT_MS } from '../constants';
@@ -54,35 +55,26 @@ async function applyModifications(filePath: DicomFilePath, changeset: ChangeSet,
 
 /** Wraps fs.copyFile in a Result. */
 async function copyFileSafe(source: string, dest: string): Promise<Result<void>> {
-    try {
-        await copyFile(source, dest);
-        return ok(undefined);
-    } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : 'Unknown copy error';
-        return err(new Error(`Failed to copy file: ${message}`));
-    }
+    return tryCatch(
+        () => copyFile(source, dest),
+        e => new Error(`Failed to copy file: ${e.message}`)
+    );
 }
 
 /** Wraps fs.stat in a Result, returning file size. */
 async function statFileSize(path: string): Promise<Result<number>> {
-    try {
-        const stats = await stat(path);
-        return ok(stats.size);
-    } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : 'Unknown stat error';
-        return err(new Error(`Failed to stat file: ${message}`));
-    }
+    return tryCatch(
+        async () => (await stat(path)).size,
+        e => new Error(`Failed to stat file: ${e.message}`)
+    );
 }
 
 /** Wraps fs.unlink in a Result. */
 async function unlinkFile(path: string): Promise<Result<void>> {
-    try {
-        await unlink(path);
-        return ok(undefined);
-    } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : 'Unknown unlink error';
-        return err(new Error(`Failed to delete file: ${message}`));
-    }
+    return tryCatch(
+        () => unlink(path),
+        e => new Error(`Failed to delete file: ${e.message}`)
+    );
 }
 
 // ---------------------------------------------------------------------------

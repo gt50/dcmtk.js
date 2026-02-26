@@ -131,6 +131,7 @@
     },
     "dependencies": {
         "fast-xml-parser": "^5.3.5",
+        "stderr-lib": "^2.2.0",
         "tree-kill": "^1.2.2",
         "zod": "^4.3.6"
     }

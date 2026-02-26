@@ -10,6 +10,7 @@
 import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { stderr, tryCatch } from 'stderr-lib';
 
 import type { Result } from '../types';
 import { ok, err } from '../types';
@@ -25,13 +26,10 @@ const MAX_RESPONSE_FILES = 10_000;
  * @returns A Result containing the temp directory path
  */
 async function createTempDir(): Promise<Result<string>> {
-    try {
-        const dir = await mkdtemp(join(tmpdir(), 'dcmtk-pacs-'));
-        return ok(dir);
-    } catch (thrown: unknown) {
-        const error = thrown instanceof Error ? thrown : new Error(String(thrown));
-        return err(new Error(`Failed to create temp directory: ${error.message}`));
-    }
+    return tryCatch(
+        () => mkdtemp(join(tmpdir(), 'dcmtk-pacs-')),
+        e => new Error(`Failed to create temp directory: ${e.message}`)
+    );
 }
 
 /**
@@ -56,8 +54,7 @@ async function listDcmFiles(directory: string): Promise<Result<readonly string[]
         dcmFiles.sort();
         return ok(dcmFiles);
     } catch (thrown: unknown) {
-        const error = thrown instanceof Error ? thrown : new Error(String(thrown));
-        return err(new Error(`Failed to list directory "${directory}": ${error.message}`));
+        return err(new Error(`Failed to list directory "${directory}": ${stderr(thrown).message}`));
     }
 }
 

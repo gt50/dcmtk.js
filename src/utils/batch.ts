@@ -9,6 +9,7 @@
  * @module utils/batch
  */
 
+import { stderr } from 'stderr-lib';
 import type { Result } from '../types';
 import { err } from '../types';
 
@@ -85,8 +86,7 @@ async function processItem<TItem, TResult>(
     try {
         result = await operation(item);
     } catch (thrown: unknown) {
-        const error = thrown instanceof Error ? thrown : new Error(String(thrown));
-        result = err(error);
+        result = err(stderr(thrown));
     }
     state.results[index] = result;
     state.completed += 1;

@@ -9,6 +9,7 @@
  * @module dcm2json
  */
 
+import { stderr } from 'stderr-lib';
 import { z } from 'zod';
 import type { Result } from '../types';
 import { ok, err } from '../types';
@@ -98,8 +99,7 @@ async function tryDirectPath(inputPath: string, timeoutMs: number, signal?: Abor
         const data = JSON.parse(repaired) as DicomJsonModel;
         return ok({ data, source: 'direct' as const });
     } catch (parseError: unknown) {
-        const message = parseError instanceof Error ? parseError.message : 'Unknown parse error';
-        return err(createToolError('dcm2json', [inputPath], 1, `Parse error: ${message}`));
+        return err(createToolError('dcm2json', [inputPath], 1, `Parse error: ${stderr(parseError).message}`));
     }
 }
 

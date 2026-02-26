@@ -11,6 +11,9 @@ importers:
       fast-xml-parser:
         specifier: ^5.3.5
         version: 5.3.5
+      stderr-lib:
+        specifier: ^2.2.0
+        version: 2.2.0
       tree-kill:
         specifier: ^1.2.2
         version: 1.2.2
@@ -1336,6 +1339,10 @@ packages:
 
   std-env@3.10.0:
     resolution: {integrity: sha512-5GS12FdOZNliM5mAOxFRg7Ir0pWz8MdpYm6AY6VPkGpbA7ZzmbzNcBJQ0GPvvyWgcY7QAhCgf9Uy89I03faLkg==}
+
+  stderr-lib@2.2.0:
+    resolution: {integrity: sha512-PI6uehBcOIsDshlCnTpaVog8NylyGe/Jerb7cVYisBLZJ8G2br+B0CO0G0g/DOgTouOXcwsZjzSToXLOBGnE1w==}
+    engines: {node: '>=18'}
 
   string-argv@0.3.2:
     resolution: {integrity: sha512-aqD2Q0144Z+/RqG52NeHEkZauTAUWJO8c6yTftGJKO3Tja5tUgIfmIl6kExvhtxSDP7fXB6DvzkfMpCd/F3G+Q==}
@@ -2763,6 +2770,8 @@ snapshots:
   stackback@0.0.2: {}
 
   std-env@3.10.0: {}
+
+  stderr-lib@2.2.0: {}
 
   string-argv@0.3.2: {}
 

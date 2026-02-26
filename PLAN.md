@@ -919,8 +919,8 @@ The d-dart `DicomJson` + `DicomObject` pattern was designed 10 years ago. This r
 
 - [x] Consistent error shapes across all tools (Result pattern with descriptive messages)
 - [x] Descriptive context in all errors (binary name, args, exit code, stderr excerpt)
-- [ ] Use `stderr-lib` for normalizing caught `unknown` errors (deferred — current error handling is comprehensive)
-- [ ] `tryCatch` from stderr-lib used at all `try/catch` boundaries (deferred)
+- [x] Use `stderr-lib` for normalizing caught `unknown` errors
+- [x] `tryCatch` from stderr-lib used at all `try/catch` boundaries
 
 ### 8.4 Observability — Per Rule 9.3
 

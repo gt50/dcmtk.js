@@ -12,6 +12,7 @@
 import { EventEmitter } from 'node:events';
 import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
+import { stderr } from 'stderr-lib';
 import kill from 'tree-kill';
 import type { Result, LineSource } from './types';
 import { ok, err } from './types';
@@ -159,8 +160,7 @@ class DcmtkProcess extends EventEmitter<DcmtkProcessEventMap> {
                 });
                 /* v8 ignore start -- spawn() rarely throws synchronously */
             } catch (e: unknown) {
-                const msg = e instanceof Error ? e.message : String(e);
-                settle(err(new Error(`Failed to spawn process: ${msg}`)));
+                settle(err(new Error(`Failed to spawn process: ${stderr(e).message}`)));
                 return;
             }
             /* v8 ignore stop */

@@ -28,6 +28,7 @@
  */
 
 import { XMLParser } from 'fast-xml-parser';
+import { stderr } from 'stderr-lib';
 import type { Result } from '../types';
 import { ok, err } from '../types';
 
@@ -287,8 +288,7 @@ function xmlToJson(xml: string): Result<DicomJsonModel> {
         }
         return ok(convertAttributes(root as Record<string, unknown>));
     } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : 'Unknown XML parse error';
-        return err(new Error(`Failed to parse dcm2xml XML: ${message}`));
+        return err(new Error(`Failed to parse dcm2xml XML: ${stderr(error).message}`));
     }
 }
 

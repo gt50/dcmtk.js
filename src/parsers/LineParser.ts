@@ -11,6 +11,7 @@
  */
 
 import { EventEmitter } from 'node:events';
+import { stderr } from 'stderr-lib';
 import type { EventPattern } from './EventPattern';
 import type { Result } from '../types';
 import { ok, err } from '../types';
@@ -175,8 +176,7 @@ class LineParser extends EventEmitter<LineParserEventMap> {
                     const data = pattern.processor(match);
                     this.emit('match', { event: pattern.event, data });
                 } catch (thrown: unknown) {
-                    const processorError = thrown instanceof Error ? thrown : new Error(String(thrown));
-                    this.emit('error', processorError);
+                    this.emit('error', stderr(thrown));
                 }
                 return; // First match wins
             }
@@ -225,8 +225,7 @@ class LineParser extends EventEmitter<LineParserEventMap> {
                     const data = pattern.processor(match);
                     this.emit('match', { event: pattern.event, data });
                 } catch (thrown: unknown) {
-                    const processorError = thrown instanceof Error ? thrown : new Error(String(thrown));
-                    this.emit('error', processorError);
+                    this.emit('error', stderr(thrown));
                 }
             }
             return;
