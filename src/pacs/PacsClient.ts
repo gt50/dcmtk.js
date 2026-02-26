@@ -389,7 +389,6 @@ class PacsClient {
             queryModel: 'study',
             keys: [...keys],
             moveDestination: options.moveDestination,
-            outputDirectory: options.outputDirectory,
             timeoutMs,
             signal: options.signal,
         });
