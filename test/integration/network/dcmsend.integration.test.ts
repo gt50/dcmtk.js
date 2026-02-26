@@ -1,10 +1,9 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import { StoreSCP } from '../../../src/servers/StoreSCP';
-import { dcmsend } from '../../../src/tools/dcmsend';
-import { dcmtkAvailable, SAMPLES, getAvailablePort, createTempDir, removeTempDir, withServer, waitForEvent, copyDicomToTemp } from '../helpers';
-import type { StoringFileData } from '../../../src/events/storescp';
+import type { StoringFileData } from '../../../src';
+import { dcmsend, StoreSCP } from '../../../src';
+import { copyDicomToTemp, createTempDir, dcmtkAvailable, getAvailablePort, removeTempDir, SAMPLES, waitForEvent, withServer } from '../helpers';
 
 describe.skipIf(!dcmtkAvailable)('dcmsend integration', () => {
     const servers: StoreSCP[] = [];
