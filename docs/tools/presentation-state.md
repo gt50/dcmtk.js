@@ -11,7 +11,7 @@ All tools return `Promise<Result<T>>` and accept optional `timeoutMs` and `signa
 Create a DICOM Grayscale Softcopy Presentation State from a DICOM image.
 
 ```typescript
-import { dcmpsmk } from 'dcmtk';
+import { dcmpsmk } from '@ubercode/dcmtk';
 
 const result = await dcmpsmk({
     inputPath: '/path/to/image.dcm',
@@ -28,7 +28,7 @@ const result = await dcmpsmk({
 Check the validity of a DICOM Presentation State object.
 
 ```typescript
-import { dcmpschk } from 'dcmtk';
+import { dcmpschk } from '@ubercode/dcmtk';
 
 const result = await dcmpschk({
     inputPath: '/path/to/pstate.dcm',
@@ -48,7 +48,7 @@ if (result.ok) {
 Send a print job to a DICOM Print Management SCP.
 
 ```typescript
-import { dcmprscu } from 'dcmtk';
+import { dcmprscu } from '@ubercode/dcmtk';
 
 const result = await dcmprscu({
     host: '192.168.1.100',
@@ -75,7 +75,7 @@ const result = await dcmprscu({
 Print a presentation state using a configured printer.
 
 ```typescript
-import { dcmpsprt } from 'dcmtk';
+import { dcmpsprt } from '@ubercode/dcmtk';
 
 const result = await dcmpsprt({
     inputPath: '/path/to/pstate.dcm',
@@ -96,7 +96,7 @@ const result = await dcmpsprt({
 Render a DICOM image with a presentation state applied, producing a PGM output.
 
 ```typescript
-import { dcmp2pgm } from 'dcmtk';
+import { dcmp2pgm } from '@ubercode/dcmtk';
 
 const result = await dcmp2pgm({
     inputPath: '/path/to/image.dcm',
@@ -120,7 +120,7 @@ const result = await dcmp2pgm({
 Create DICOM curve data and add it to a DICOM file.
 
 ```typescript
-import { dcmmkcrv } from 'dcmtk';
+import { dcmmkcrv } from '@ubercode/dcmtk';
 
 const result = await dcmmkcrv({
     inputPath: '/path/to/data.txt',
@@ -137,7 +137,7 @@ const result = await dcmmkcrv({
 Create a DICOM Modality, Presentation, or VOI lookup table.
 
 ```typescript
-import { dcmmklut, LutType } from 'dcmtk';
+import { dcmmklut, LutType } from '@ubercode/dcmtk';
 
 const result = await dcmmklut({
     inputPath: '/path/to/image.dcm',

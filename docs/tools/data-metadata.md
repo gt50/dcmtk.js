@@ -11,7 +11,7 @@ All tools return `Promise<Result<T>>` and accept optional `timeoutMs` and `signa
 Convert a DICOM file to XML representation.
 
 ```typescript
-import { dcm2xml } from 'dcmtk';
+import { dcm2xml } from '@ubercode/dcmtk';
 
 const result = await dcm2xml('/path/to/image.dcm');
 if (result.ok) {
@@ -35,7 +35,7 @@ if (result.ok) {
 Convert a DICOM file to DICOM JSON Model (PS3.18 F.2).
 
 ```typescript
-import { dcm2json } from 'dcmtk';
+import { dcm2json } from '@ubercode/dcmtk';
 
 const result = await dcm2json('/path/to/image.dcm');
 if (result.ok) {
@@ -59,7 +59,7 @@ Internally uses a two-phase strategy: dcm2xml then XML parsing (more reliable), 
 Dump DICOM file contents as text.
 
 ```typescript
-import { dcmdump } from 'dcmtk';
+import { dcmdump } from '@ubercode/dcmtk';
 
 const result = await dcmdump('/path/to/image.dcm');
 if (result.ok) {
@@ -88,7 +88,7 @@ const tagResult = await dcmdump('/path/to/image.dcm', {
 Convert DICOM file transfer syntax.
 
 ```typescript
-import { dcmconv, TransferSyntax } from 'dcmtk';
+import { dcmconv, TransferSyntax } from '@ubercode/dcmtk';
 
 const result = await dcmconv('/path/to/input.dcm', '/path/to/output.dcm', {
     transferSyntax: TransferSyntax.EXPLICIT_LITTLE,
@@ -120,7 +120,7 @@ const result = await dcmconv('/path/to/input.dcm', '/path/to/output.dcm', {
 Modify DICOM tags in-place.
 
 ```typescript
-import { dcmodify } from 'dcmtk';
+import { dcmodify } from '@ubercode/dcmtk';
 
 const result = await dcmodify('/path/to/image.dcm', {
     modifications: [
@@ -152,7 +152,7 @@ Uses `spawnCommand` (not exec) for injection safety — DICOM values may contain
 Test if a file is a valid DICOM Part 10 file.
 
 ```typescript
-import { dcmftest } from 'dcmtk';
+import { dcmftest } from '@ubercode/dcmtk';
 
 const result = await dcmftest('/path/to/file.dcm');
 if (result.ok) {
@@ -169,7 +169,7 @@ if (result.ok) {
 Modify an existing DICOMDIR file.
 
 ```typescript
-import { dcmgpdir } from 'dcmtk';
+import { dcmgpdir } from '@ubercode/dcmtk';
 
 const result = await dcmgpdir({
     inputFiles: ['image1.dcm', 'image2.dcm'],
@@ -196,7 +196,7 @@ const result = await dcmgpdir({
 Create a new DICOMDIR file.
 
 ```typescript
-import { dcmmkdir } from 'dcmtk';
+import { dcmmkdir } from '@ubercode/dcmtk';
 
 const result = await dcmmkdir({
     inputFiles: ['image1.dcm', 'image2.dcm'],
@@ -223,7 +223,7 @@ const result = await dcmmkdir({
 Register DICOM files in a Query/Retrieve SCP database index.
 
 ```typescript
-import { dcmqridx } from 'dcmtk';
+import { dcmqridx } from '@ubercode/dcmtk';
 
 // Register files
 const result = await dcmqridx({

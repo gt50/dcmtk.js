@@ -7,7 +7,7 @@ Helper functions for parallel processing and retry logic.
 Process an array of items in parallel with configurable concurrency control.
 
 ```typescript
-import { batch } from 'dcmtk';
+import { batch } from '@ubercode/dcmtk';
 ```
 
 ### Signature
@@ -41,7 +41,7 @@ interface BatchResult<T> {
 ### Example
 
 ```typescript
-import { batch, dcmftest } from 'dcmtk';
+import { batch, dcmftest } from '@ubercode/dcmtk';
 
 const files = ['a.dcm', 'b.dcm', 'c.dcm', 'd.dcm', 'e.dcm'];
 
@@ -60,7 +60,7 @@ console.log(`${batchResult.successCount} succeeded, ${batchResult.failureCount} 
 Retry a fallible operation with exponential backoff and jitter.
 
 ```typescript
-import { retry } from 'dcmtk';
+import { retry } from '@ubercode/dcmtk';
 ```
 
 ### Signature
@@ -86,7 +86,7 @@ A 10% jitter is applied to each computed delay to prevent thundering herd.
 ### Example
 
 ```typescript
-import { retry, echoscu } from 'dcmtk';
+import { retry, echoscu } from '@ubercode/dcmtk';
 
 const result = await retry(() => echoscu({ host: '192.168.1.100', port: 4242 }), {
     maxAttempts: 5,

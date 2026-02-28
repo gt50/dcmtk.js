@@ -5,7 +5,7 @@ High-level PACS client encapsulating DICOM network operations. Configure the con
 ## Creating a Client
 
 ```typescript
-import { PacsClient, unwrap } from 'dcmtk';
+import { PacsClient, unwrap } from '@ubercode/dcmtk';
 
 const client = unwrap(
     PacsClient.create({
@@ -174,7 +174,7 @@ All query methods (`findStudies`, `findSeries`, `findImages`, `findWorklist`, `f
 ## Retrieve Modes
 
 ```typescript
-import { RetrieveMode } from 'dcmtk';
+import { RetrieveMode } from '@ubercode/dcmtk';
 ```
 
 | Mode                  | Value      | Description                              |
@@ -185,7 +185,7 @@ import { RetrieveMode } from 'dcmtk';
 ## Full Workflow Example
 
 ```typescript
-import { PacsClient, RetrieveMode, unwrap } from 'dcmtk';
+import { PacsClient, RetrieveMode, unwrap } from '@ubercode/dcmtk';
 
 const client = unwrap(
     PacsClient.create({

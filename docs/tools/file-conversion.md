@@ -11,7 +11,7 @@ All tools return `Promise<Result<T>>` and accept optional `timeoutMs` and `signa
 Convert an XML file to DICOM format.
 
 ```typescript
-import { xml2dcm } from 'dcmtk';
+import { xml2dcm } from '@ubercode/dcmtk';
 
 const result = await xml2dcm({
     inputPath: '/path/to/input.xml',
@@ -33,7 +33,7 @@ const result = await xml2dcm({
 Convert a DICOM JSON Model file to DICOM format.
 
 ```typescript
-import { json2dcm } from 'dcmtk';
+import { json2dcm } from '@ubercode/dcmtk';
 
 const result = await json2dcm({
     inputPath: '/path/to/input.json',
@@ -50,7 +50,7 @@ const result = await json2dcm({
 Convert a DCMTK dump text file to DICOM format.
 
 ```typescript
-import { dump2dcm } from 'dcmtk';
+import { dump2dcm } from '@ubercode/dcmtk';
 
 const result = await dump2dcm({
     inputPath: '/path/to/input.txt',
@@ -73,7 +73,7 @@ const result = await dump2dcm({
 Convert a raster image (JPEG, BMP) to DICOM format.
 
 ```typescript
-import { img2dcm, Img2dcmInputFormat } from 'dcmtk';
+import { img2dcm, Img2dcmInputFormat } from '@ubercode/dcmtk';
 
 const result = await img2dcm('/path/to/photo.jpg', '/path/to/output.dcm', {
     inputFormat: Img2dcmInputFormat.JPEG,
@@ -94,7 +94,7 @@ const result = await img2dcm('/path/to/photo.jpg', '/path/to/output.dcm', {
 Encapsulate a PDF file inside a DICOM object.
 
 ```typescript
-import { pdf2dcm } from 'dcmtk';
+import { pdf2dcm } from '@ubercode/dcmtk';
 
 const result = await pdf2dcm({
     inputPath: '/path/to/report.pdf',
@@ -111,7 +111,7 @@ const result = await pdf2dcm({
 Extract an encapsulated PDF from a DICOM object.
 
 ```typescript
-import { dcm2pdf } from 'dcmtk';
+import { dcm2pdf } from '@ubercode/dcmtk';
 
 const result = await dcm2pdf({
     inputPath: '/path/to/encapsulated.dcm',
@@ -128,7 +128,7 @@ const result = await dcm2pdf({
 Encapsulate a CDA (Clinical Document Architecture) file inside a DICOM object.
 
 ```typescript
-import { cda2dcm } from 'dcmtk';
+import { cda2dcm } from '@ubercode/dcmtk';
 
 const result = await cda2dcm({
     inputPath: '/path/to/document.xml',
@@ -145,7 +145,7 @@ const result = await cda2dcm({
 Extract an encapsulated CDA document from a DICOM object.
 
 ```typescript
-import { dcm2cda } from 'dcmtk';
+import { dcm2cda } from '@ubercode/dcmtk';
 
 const result = await dcm2cda({
     inputPath: '/path/to/encapsulated.dcm',
@@ -162,7 +162,7 @@ const result = await dcm2cda({
 Encapsulate an STL (3D surface mesh) file inside a DICOM object.
 
 ```typescript
-import { stl2dcm } from 'dcmtk';
+import { stl2dcm } from '@ubercode/dcmtk';
 
 const result = await stl2dcm({
     inputPath: '/path/to/model.stl',

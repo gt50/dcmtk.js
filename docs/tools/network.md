@@ -11,7 +11,7 @@ All tools return `Promise<Result<T>>` and accept optional `timeoutMs` and `signa
 Test DICOM connectivity using C-ECHO (verification).
 
 ```typescript
-import { echoscu } from 'dcmtk';
+import { echoscu } from '@ubercode/dcmtk';
 
 const result = await echoscu({
     host: '192.168.1.100',
@@ -41,7 +41,7 @@ if (result.ok) {
 Send DICOM files using C-STORE (lightweight sender).
 
 ```typescript
-import { dcmsend } from 'dcmtk';
+import { dcmsend } from '@ubercode/dcmtk';
 
 const result = await dcmsend({
     host: '192.168.1.100',
@@ -69,7 +69,7 @@ const result = await dcmsend({
 Send DICOM files using C-STORE (full-featured SCU with more options than dcmsend).
 
 ```typescript
-import { storescu } from 'dcmtk';
+import { storescu } from '@ubercode/dcmtk';
 
 const result = await storescu({
     host: '192.168.1.100',
@@ -100,7 +100,7 @@ const result = await storescu({
 Query a remote SCP using C-FIND.
 
 ```typescript
-import { findscu, QueryModel } from 'dcmtk';
+import { findscu, QueryModel } from '@ubercode/dcmtk';
 
 const result = await findscu({
     host: '192.168.1.100',
@@ -139,7 +139,7 @@ For higher-level query operations with parsed results, see [PacsClient](../pacs-
 Retrieve DICOM objects from a remote SCP using C-MOVE.
 
 ```typescript
-import { movescu, MoveQueryModel } from 'dcmtk';
+import { movescu, MoveQueryModel } from '@ubercode/dcmtk';
 
 const result = await movescu({
     host: '192.168.1.100',
@@ -174,7 +174,7 @@ const result = await movescu({
 Retrieve DICOM objects from a remote SCP using C-GET (pull directly).
 
 ```typescript
-import { getscu, GetQueryModel } from 'dcmtk';
+import { getscu, GetQueryModel } from '@ubercode/dcmtk';
 
 const result = await getscu({
     host: '192.168.1.100',
@@ -207,7 +207,7 @@ const result = await getscu({
 Terminate a DICOM association on a remote SCP.
 
 ```typescript
-import { termscu } from 'dcmtk';
+import { termscu } from '@ubercode/dcmtk';
 
 const result = await termscu({
     host: '192.168.1.100',

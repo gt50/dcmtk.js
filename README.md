@@ -1,4 +1,11 @@
-# dcmtk
+# @ubercode/dcmtk
+
+[![npm version](https://img.shields.io/npm/v/@ubercode/dcmtk.svg)](https://www.npmjs.com/package/@ubercode/dcmtk)
+[![npm downloads](https://img.shields.io/npm/dm/@ubercode/dcmtk.svg)](https://www.npmjs.com/package/@ubercode/dcmtk)
+[![CI](https://github.com/MichaelLeeHobbs/dcmtk.js/actions/workflows/ci.yml/badge.svg)](https://github.com/MichaelLeeHobbs/dcmtk.js/actions/workflows/ci.yml)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue.svg)](https://www.typescriptlang.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D20-green.svg)](https://nodejs.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
 Type-safe Node.js bindings for the [DCMTK](https://dicom.offis.de/dcmtk.php.en) (DICOM Toolkit) command-line utilities. Wraps 51 DCMTK binaries and 6 long-lived server processes with a modern async/await API, branded types, and the Result pattern for safe error handling.
 
@@ -22,7 +29,11 @@ Type-safe Node.js bindings for the [DCMTK](https://dicom.offis.de/dcmtk.php.en) 
 ## Installation
 
 ```bash
-npm install dcmtk
+npm install @ubercode/dcmtk
+# or
+pnpm add @ubercode/dcmtk
+# or
+yarn add @ubercode/dcmtk
 ```
 
 ## Quick Start
@@ -30,7 +41,7 @@ npm install dcmtk
 ### Read DICOM metadata
 
 ```typescript
-import { dcm2json } from 'dcmtk';
+import { dcm2json } from '@ubercode/dcmtk';
 
 const result = await dcm2json('/path/to/image.dcm');
 
@@ -44,7 +55,7 @@ if (result.ok) {
 ### Network C-ECHO
 
 ```typescript
-import { echoscu } from 'dcmtk';
+import { echoscu } from '@ubercode/dcmtk';
 
 const result = await echoscu({
     host: '127.0.0.1',
@@ -60,7 +71,7 @@ if (result.ok) {
 ### Receive DICOM files
 
 ```typescript
-import { Dcmrecv } from 'dcmtk';
+import { Dcmrecv } from '@ubercode/dcmtk';
 
 const result = Dcmrecv.create({ port: 4242, outputDirectory: './incoming' });
 

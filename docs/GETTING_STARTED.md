@@ -46,7 +46,7 @@ sudo dnf install dcmtk
 ### Installing the Library
 
 ```bash
-npm install dcmtk
+npm install @ubercode/dcmtk
 ```
 
 or with pnpm:
@@ -93,7 +93,7 @@ If you are new to DICOM, here are the key terms you will encounter throughout th
 Before using any tool, verify that DCMTK is correctly installed and detectable:
 
 ```typescript
-import { findDcmtkPath } from 'dcmtk';
+import { findDcmtkPath } from '@ubercode/dcmtk';
 
 const result = findDcmtkPath();
 
@@ -125,7 +125,7 @@ type Result<T, E = Error> = { readonly ok: true; readonly value: T } | { readonl
 **Pattern: Check `result.ok` before accessing properties**
 
 ```typescript
-import { dcm2json } from 'dcmtk';
+import { dcm2json } from '@ubercode/dcmtk';
 
 const result = await dcm2json('/path/to/image.dcm');
 
@@ -159,7 +159,7 @@ const { data } = unwrap(await dcm2json('/path/to/image.dcm'));
 Check whether a file is a valid DICOM Part 10 file:
 
 ```typescript
-import { dcmftest } from 'dcmtk';
+import { dcmftest } from '@ubercode/dcmtk';
 
 const result = await dcmftest('/path/to/file.dcm');
 
@@ -177,7 +177,7 @@ if (result.ok) {
 **Text dump with dcmdump:**
 
 ```typescript
-import { dcmdump } from 'dcmtk';
+import { dcmdump } from '@ubercode/dcmtk';
 
 const result = await dcmdump('/path/to/image.dcm');
 
@@ -201,7 +201,7 @@ if (result.ok) {
 **JSON model with dcm2json:**
 
 ```typescript
-import { dcm2json } from 'dcmtk';
+import { dcm2json } from '@ubercode/dcmtk';
 
 const result = await dcm2json('/path/to/image.dcm');
 
@@ -216,7 +216,7 @@ if (result.ok) {
 **Structured access with DicomDataset:**
 
 ```typescript
-import { DicomDataset, dcm2json } from 'dcmtk';
+import { DicomDataset, dcm2json } from '@ubercode/dcmtk';
 
 const jsonResult = await dcm2json('/path/to/image.dcm');
 if (!jsonResult.ok) {
@@ -249,7 +249,7 @@ if (dsResult.ok) {
 **Convert transfer syntax with dcmconv:**
 
 ```typescript
-import { dcmconv, TransferSyntax } from 'dcmtk';
+import { dcmconv, TransferSyntax } from '@ubercode/dcmtk';
 
 const result = await dcmconv('/path/to/input.dcm', '/path/to/output.dcm', {
     transferSyntax: TransferSyntax.EXPLICIT_LITTLE,
@@ -265,7 +265,7 @@ Available transfer syntax presets: `IMPLICIT_LITTLE`, `EXPLICIT_LITTLE`, `EXPLIC
 **Convert a JPEG image to DICOM with img2dcm:**
 
 ```typescript
-import { img2dcm } from 'dcmtk';
+import { img2dcm } from '@ubercode/dcmtk';
 
 const result = await img2dcm('/path/to/photo.jpg', '/path/to/output.dcm', {
     inputFormat: 'jpeg',
@@ -279,7 +279,7 @@ if (result.ok) {
 **Export a DICOM image as PNG with dcmj2pnm:**
 
 ```typescript
-import { dcmj2pnm } from 'dcmtk';
+import { dcmj2pnm } from '@ubercode/dcmtk';
 
 const result = await dcmj2pnm('/path/to/image.dcm', '/path/to/image.png', {
     outputFormat: 'png',
@@ -297,7 +297,7 @@ if (result.ok) {
 **Low-level modification with dcmodify:**
 
 ```typescript
-import { dcmodify } from 'dcmtk';
+import { dcmodify } from '@ubercode/dcmtk';
 
 const result = await dcmodify('/path/to/image.dcm', {
     modifications: [
@@ -323,7 +323,7 @@ const result = await dcmodify('/path/to/image.dcm', {
 **High-level modification with ChangeSet and DicomFile:**
 
 ```typescript
-import { DicomFile, ChangeSet, createDicomTagPath } from 'dcmtk';
+import { DicomFile, ChangeSet, createDicomTagPath } from '@ubercode/dcmtk';
 
 // Open a DICOM file
 const openResult = await DicomFile.open('/path/to/image.dcm');
@@ -361,7 +361,7 @@ Each call to `setTag`, `eraseTag`, or `erasePrivateTags` returns a new `ChangeSe
 **Test connectivity with C-ECHO:**
 
 ```typescript
-import { echoscu } from 'dcmtk';
+import { echoscu } from '@ubercode/dcmtk';
 
 const result = await echoscu({
     host: '192.168.1.100',
@@ -380,7 +380,7 @@ if (result.ok) {
 **Send DICOM files with C-STORE:**
 
 ```typescript
-import { storescu } from 'dcmtk';
+import { storescu } from '@ubercode/dcmtk';
 
 const result = await storescu({
     host: '192.168.1.100',
@@ -399,7 +399,7 @@ if (result.ok) {
 **Query a PACS with C-FIND:**
 
 ```typescript
-import { findscu, QueryModel } from 'dcmtk';
+import { findscu, QueryModel } from '@ubercode/dcmtk';
 
 const result = await findscu({
     host: '192.168.1.100',
@@ -427,7 +427,7 @@ if (result.ok) {
 Start a DICOM storage server that receives files over the network:
 
 ```typescript
-import { Dcmrecv } from 'dcmtk';
+import { Dcmrecv } from '@ubercode/dcmtk';
 
 const createResult = Dcmrecv.create({
     port: 4242,
@@ -470,7 +470,7 @@ console.log('Server listening on port 4242');
 For more advanced storage server options (e.g., custom transfer syntax negotiation, config file), use `StoreSCP`:
 
 ```typescript
-import { StoreSCP } from 'dcmtk';
+import { StoreSCP } from '@ubercode/dcmtk';
 
 const createResult = StoreSCP.create({
     port: 11112,
@@ -496,7 +496,7 @@ if (createResult.ok) {
 All tools and servers support cancellation via the standard `AbortController`:
 
 ```typescript
-import { dcm2json } from 'dcmtk';
+import { dcm2json } from '@ubercode/dcmtk';
 
 const controller = new AbortController();
 
@@ -520,7 +520,7 @@ if (!result.ok) {
 Every tool accepts a `timeoutMs` option. The default is 30 seconds (30000 ms). For large files or slow networks, increase the timeout:
 
 ```typescript
-import { storescu } from 'dcmtk';
+import { storescu } from '@ubercode/dcmtk';
 
 const result = await storescu({
     host: '192.168.1.100',
@@ -539,7 +539,7 @@ The library uses branded types to prevent accidental mix-ups of primitive values
 **Creating branded values:**
 
 ```typescript
-import { createAETitle, createPort, createDicomTag, createDicomTagPath } from 'dcmtk';
+import { createAETitle, createPort, createDicomTag, createDicomTagPath } from '@ubercode/dcmtk';
 
 const aeTitle = createAETitle('MY_SCP'); // type: AETitle
 const port = createPort(4242); // type: Port
@@ -552,7 +552,7 @@ const path = createDicomTagPath('(0010,0010)'); // type: DicomTagPath
 The `create*` factory functions are unchecked -- they trust the caller. For runtime validation of user input, use the `parse*` functions, which return `Result<T>`:
 
 ```typescript
-import { parseAETitle, parsePort } from 'dcmtk';
+import { parseAETitle, parsePort } from '@ubercode/dcmtk';
 
 const aeResult = parseAETitle(userInput);
 if (aeResult.ok) {
@@ -576,7 +576,7 @@ if (portResult.ok) {
 This is the recommended approach. Check `result.ok` and handle both branches:
 
 ```typescript
-import { dcm2json } from 'dcmtk';
+import { dcm2json } from '@ubercode/dcmtk';
 
 const result = await dcm2json('/path/to/image.dcm');
 
@@ -595,7 +595,7 @@ if (result.ok) {
 When chaining multiple operations, return early on the first failure:
 
 ```typescript
-import { dcm2json, DicomDataset, dcmodify } from 'dcmtk';
+import { dcm2json, DicomDataset, dcmodify } from '@ubercode/dcmtk';
 
 async function anonymizeFile(inputPath: string): Promise<void> {
     // Step 1: Read the file
@@ -635,7 +635,7 @@ async function anonymizeFile(inputPath: string): Promise<void> {
 ### Pattern: Collecting errors from multiple operations
 
 ```typescript
-import { dcmftest } from 'dcmtk';
+import { dcmftest } from '@ubercode/dcmtk';
 
 const files = ['/path/to/file1.dcm', '/path/to/file2.dcm', '/path/to/file3.dcm'];
 const errors: string[] = [];
@@ -705,13 +705,13 @@ All exports are available from the root `'dcmtk'` import:
 
 ```typescript
 // Core utilities
-import { findDcmtkPath, ok, err, assertUnreachable } from 'dcmtk';
-import type { Result } from 'dcmtk';
+import { findDcmtkPath, ok, err, assertUnreachable } from '@ubercode/dcmtk';
+import type { Result } from '@ubercode/dcmtk';
 
 // Branded types and validation
-import { createAETitle, createPort, createDicomTag, createDicomTagPath } from 'dcmtk';
-import { parseAETitle, parsePort, parseDicomTag } from 'dcmtk';
-import type { AETitle, Port, DicomTag, DicomTagPath } from 'dcmtk';
+import { createAETitle, createPort, createDicomTag, createDicomTagPath } from '@ubercode/dcmtk';
+import { parseAETitle, parsePort, parseDicomTag } from '@ubercode/dcmtk';
+import type { AETitle, Port, DicomTag, DicomTagPath } from '@ubercode/dcmtk';
 
 // Tool wrappers
 import {
@@ -730,19 +730,19 @@ import {
     getscu,
     dsrdump,
     dsr2xml,
-} from 'dcmtk';
+} from '@ubercode/dcmtk';
 
 // Transfer syntax and query model constants
-import { TransferSyntax, QueryModel } from 'dcmtk';
+import { TransferSyntax, QueryModel } from '@ubercode/dcmtk';
 
 // DICOM data layer
-import { DicomDataset, ChangeSet, DicomFile } from 'dcmtk';
+import { DicomDataset, ChangeSet, DicomFile } from '@ubercode/dcmtk';
 
 // Server classes
-import { Dcmrecv, StoreSCP, DcmprsCP, Dcmpsrcv } from 'dcmtk';
+import { Dcmrecv, StoreSCP, DcmprsCP, Dcmpsrcv } from '@ubercode/dcmtk';
 
 // DICOM dictionary and VR utilities
-import { lookupTag, lookupTagByKeyword, VR, sopClassNameFromUID } from 'dcmtk';
+import { lookupTag, lookupTagByKeyword, VR, sopClassNameFromUID } from '@ubercode/dcmtk';
 ```
 
 ---

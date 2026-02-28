@@ -73,7 +73,7 @@ DICOM receiver (C-STORE SCP) using the `dcmrecv` binary. Receives and stores inc
 ### Example
 
 ```typescript
-import { Dcmrecv } from 'dcmtk';
+import { Dcmrecv } from '@ubercode/dcmtk';
 
 const result = Dcmrecv.create({
     port: 4242,
@@ -138,7 +138,7 @@ Advanced storage SCP using the `storescp` binary. Offers more configuration than
 ### Example
 
 ```typescript
-import { StoreSCP } from 'dcmtk';
+import { StoreSCP } from '@ubercode/dcmtk';
 
 const result = StoreSCP.create({
     port: 11112,
@@ -200,7 +200,7 @@ DICOM Query/Retrieve SCP using the `dcmqrscp` binary. Provides C-FIND, C-MOVE, a
 ### Example
 
 ```typescript
-import { DcmQRSCP } from 'dcmtk';
+import { DcmQRSCP } from '@ubercode/dcmtk';
 
 const result = DcmQRSCP.create({
     configFile: '/etc/dcmtk/dcmqrscp.cfg',
@@ -261,7 +261,7 @@ DICOM Worklist Management SCP using the `wlmscpfs` binary. Serves worklist items
 ### Example
 
 ```typescript
-import { Wlmscpfs } from 'dcmtk';
+import { Wlmscpfs } from '@ubercode/dcmtk';
 
 const result = Wlmscpfs.create({
     port: 4243,

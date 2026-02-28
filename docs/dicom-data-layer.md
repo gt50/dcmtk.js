@@ -9,7 +9,7 @@ Immutable wrapper around a DICOM JSON Model (PS3.18 F.2) with type-safe accessor
 ### Creating a Dataset
 
 ```typescript
-import { DicomDataset, dcm2json, unwrap } from 'dcmtk';
+import { DicomDataset, dcm2json, unwrap } from '@ubercode/dcmtk';
 
 // From a DICOM JSON Model object
 const ds = unwrap(DicomDataset.fromJson(jsonObject));
@@ -88,7 +88,7 @@ Immutable builder for tracking DICOM tag modifications. Every mutation returns a
 ### Building Changes
 
 ```typescript
-import { ChangeSet, createDicomTagPath } from 'dcmtk';
+import { ChangeSet, createDicomTagPath } from '@ubercode/dcmtk';
 
 const changes = ChangeSet.empty()
     .setTag(createDicomTagPath('(0010,0010)'), 'DOE^JOHN')
@@ -130,7 +130,7 @@ High-level file I/O facade combining `DicomDataset`, `ChangeSet`, and file path 
 ### Opening a File
 
 ```typescript
-import { DicomFile } from 'dcmtk';
+import { DicomFile } from '@ubercode/dcmtk';
 
 const result = await DicomFile.open('/path/to/image.dcm');
 if (result.ok) {
@@ -181,7 +181,7 @@ await updated.writeAs('/path/to/anonymized.dcm');
 ### Full Example
 
 ```typescript
-import { DicomFile, ChangeSet, createDicomTagPath, unwrap } from 'dcmtk';
+import { DicomFile, ChangeSet, createDicomTagPath, unwrap } from '@ubercode/dcmtk';
 
 // Open and inspect
 const file = unwrap(await DicomFile.open('/path/to/image.dcm'));
@@ -209,7 +209,7 @@ if (writeResult.ok) {
 ### Dictionary Lookups
 
 ```typescript
-import { lookupTag, lookupTagByName, lookupTagByKeyword } from 'dcmtk';
+import { lookupTag, lookupTagByName, lookupTagByKeyword } from '@ubercode/dcmtk';
 
 lookupTag('00100010'); // { name: 'Patient\'s Name', keyword: 'PatientName', vr: 'PN' }
 lookupTagByName("Patient's Name"); // { tag: '00100010', ... }
@@ -219,7 +219,7 @@ lookupTagByKeyword('PatientName'); // { tag: '00100010', ... }
 ### SOP Class Mappings
 
 ```typescript
-import { sopClassNameFromUID, SOP_CLASSES } from 'dcmtk';
+import { sopClassNameFromUID, SOP_CLASSES } from '@ubercode/dcmtk';
 
 sopClassNameFromUID('1.2.840.10008.5.1.4.1.1.2'); // 'CT Image Storage'
 ```
@@ -227,7 +227,7 @@ sopClassNameFromUID('1.2.840.10008.5.1.4.1.1.2'); // 'CT Image Storage'
 ### Value Representations
 
 ```typescript
-import { VR } from 'dcmtk';
+import { VR } from '@ubercode/dcmtk';
 
 VR.PN; // { code: 'PN', name: 'Person Name', maxLength: 64, ... }
 VR.DA; // { code: 'DA', name: 'Date', maxLength: 8, ... }

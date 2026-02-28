@@ -11,7 +11,7 @@ All tools return `Promise<Result<T>>` and accept optional `timeoutMs` and `signa
 Dump the contents of a DICOM Structured Report as text.
 
 ```typescript
-import { dsrdump } from 'dcmtk';
+import { dsrdump } from '@ubercode/dcmtk';
 
 const result = await dsrdump({
     inputPath: '/path/to/report.dcm',
@@ -38,7 +38,7 @@ if (result.ok) {
 Convert a DICOM Structured Report to XML.
 
 ```typescript
-import { dsr2xml } from 'dcmtk';
+import { dsr2xml } from '@ubercode/dcmtk';
 
 const result = await dsr2xml({
     inputPath: '/path/to/report.dcm',
@@ -64,7 +64,7 @@ if (result.ok) {
 Convert an XML file to a DICOM Structured Report.
 
 ```typescript
-import { xml2dsr } from 'dcmtk';
+import { xml2dsr } from '@ubercode/dcmtk';
 
 const result = await xml2dsr({
     inputPath: '/path/to/report.xml',
@@ -87,7 +87,7 @@ const result = await xml2dsr({
 Dump the contents of a DICOM Radiation Therapy (RT) object as text.
 
 ```typescript
-import { drtdump } from 'dcmtk';
+import { drtdump } from '@ubercode/dcmtk';
 
 const result = await drtdump({
     inputPath: '/path/to/rt-plan.dcm',

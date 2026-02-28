@@ -15,7 +15,7 @@ type Result<T, E = Error> = { readonly ok: true; readonly value: T } | { readonl
 Check `result.ok` before accessing `.value` or `.error`:
 
 ```typescript
-import { dcm2json } from 'dcmtk';
+import { dcm2json } from '@ubercode/dcmtk';
 
 const result = await dcm2json('/path/to/image.dcm');
 
@@ -52,7 +52,7 @@ console.log(dsResult.value.patientName);
 **Unwrap for exception-style code:**
 
 ```typescript
-import { unwrap } from 'dcmtk';
+import { unwrap } from '@ubercode/dcmtk';
 
 const { data } = unwrap(await dcm2json('/path/to/image.dcm'));
 // throws if dcm2json fails
@@ -78,7 +78,7 @@ Branded types prevent accidental mix-ups of primitive values at compile time. A 
 - **Validator functions** (`parse*`) also return `Result<T>` and are intended for runtime validation of untrusted user input via Zod schemas.
 
 ```typescript
-import { createAETitle, parseAETitle } from 'dcmtk';
+import { createAETitle, parseAETitle } from '@ubercode/dcmtk';
 
 // Factory — trusted input
 const aeTitle = createAETitle('MY_SCP');
@@ -100,7 +100,7 @@ if (parsed.ok) {
 Every async operation accepts an optional `timeoutMs` parameter. The default timeout is 30 seconds (30,000 ms).
 
 ```typescript
-import { storescu } from 'dcmtk';
+import { storescu } from '@ubercode/dcmtk';
 
 const result = await storescu({
     host: '192.168.1.100',
@@ -124,7 +124,7 @@ interface ToolBaseOptions {
 All tools and servers support cancellation via the standard `AbortController`:
 
 ```typescript
-import { dcm2json } from 'dcmtk';
+import { dcm2json } from '@ubercode/dcmtk';
 
 const controller = new AbortController();
 
@@ -144,7 +144,7 @@ if (!result.ok) {
 Servers also accept `AbortSignal` in their create options:
 
 ```typescript
-import { Dcmrecv } from 'dcmtk';
+import { Dcmrecv } from '@ubercode/dcmtk';
 
 const controller = new AbortController();
 const server = Dcmrecv.create({

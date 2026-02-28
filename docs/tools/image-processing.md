@@ -11,7 +11,7 @@ All tools return `Promise<Result<T>>` and accept optional `timeoutMs` and `signa
 Convert a DICOM image to a standard image format (BMP, JPEG, PNG, TIFF, PNM).
 
 ```typescript
-import { dcmj2pnm, Dcmj2pnmOutputFormat } from 'dcmtk';
+import { dcmj2pnm, Dcmj2pnmOutputFormat } from '@ubercode/dcmtk';
 
 const result = await dcmj2pnm('/path/to/image.dcm', '/path/to/image.png', {
     outputFormat: Dcmj2pnmOutputFormat.PNG,
@@ -32,7 +32,7 @@ const result = await dcmj2pnm('/path/to/image.dcm', '/path/to/image.png', {
 Convert a DICOM image to PNM/PGM/PPM or other formats. Similar to dcmj2pnm but without JPEG output support.
 
 ```typescript
-import { dcm2pnm, Dcm2pnmOutputFormat } from 'dcmtk';
+import { dcm2pnm, Dcm2pnmOutputFormat } from '@ubercode/dcmtk';
 
 const result = await dcm2pnm('/path/to/image.dcm', '/path/to/image.bmp', {
     outputFormat: Dcm2pnmOutputFormat.BMP,
@@ -53,7 +53,7 @@ const result = await dcm2pnm('/path/to/image.dcm', '/path/to/image.bmp', {
 Scale (resize) DICOM images by factor or target dimensions.
 
 ```typescript
-import { dcmscale } from 'dcmtk';
+import { dcmscale } from '@ubercode/dcmtk';
 
 // Scale by factor
 const result = await dcmscale({
@@ -88,7 +88,7 @@ const result2 = await dcmscale({
 Color-quantize DICOM images (reduce color palette).
 
 ```typescript
-import { dcmquant } from 'dcmtk';
+import { dcmquant } from '@ubercode/dcmtk';
 
 const result = await dcmquant({
     inputPath: '/path/to/image.dcm',
@@ -111,7 +111,7 @@ const result = await dcmquant({
 Display function utilities for monitor/camera/printer calibration.
 
 ```typescript
-import { dcmdspfn } from 'dcmtk';
+import { dcmdspfn } from '@ubercode/dcmtk';
 
 const result = await dcmdspfn({
     monitorFile: '/path/to/monitor.lut',
@@ -137,7 +137,7 @@ if (result.ok) {
 Convert optical density (OD) values to luminance.
 
 ```typescript
-import { dcod2lum } from 'dcmtk';
+import { dcod2lum } from '@ubercode/dcmtk';
 
 const result = await dcod2lum({
     inputPath: '/path/to/input.lut',
@@ -154,7 +154,7 @@ const result = await dcod2lum({
 Convert luminance calibration data between formats.
 
 ```typescript
-import { dconvlum } from 'dcmtk';
+import { dconvlum } from '@ubercode/dcmtk';
 
 const result = await dconvlum({
     inputPath: '/path/to/input.lut',

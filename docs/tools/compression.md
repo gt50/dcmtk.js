@@ -11,7 +11,7 @@ All tools return `Promise<Result<T>>` and accept optional `timeoutMs` and `signa
 Compress DICOM pixel data using RLE (Run-Length Encoding).
 
 ```typescript
-import { dcmcrle } from 'dcmtk';
+import { dcmcrle } from '@ubercode/dcmtk';
 
 const result = await dcmcrle({
     inputPath: '/path/to/image.dcm',
@@ -32,7 +32,7 @@ const result = await dcmcrle({
 Decompress RLE-encoded DICOM pixel data.
 
 ```typescript
-import { dcmdrle } from 'dcmtk';
+import { dcmdrle } from '@ubercode/dcmtk';
 
 const result = await dcmdrle({
     inputPath: '/path/to/compressed.dcm',
@@ -53,7 +53,7 @@ const result = await dcmdrle({
 Encapsulate already-compressed pixel data into a DICOM object.
 
 ```typescript
-import { dcmencap } from 'dcmtk';
+import { dcmencap } from '@ubercode/dcmtk';
 
 const result = await dcmencap({
     inputPath: '/path/to/compressed-data',
@@ -75,7 +75,7 @@ const result = await dcmencap({
 Decapsulate compressed pixel data from a DICOM object.
 
 ```typescript
-import { dcmdecap } from 'dcmtk';
+import { dcmdecap } from '@ubercode/dcmtk';
 
 const result = await dcmdecap({
     inputPath: '/path/to/encapsulated.dcm',
@@ -92,7 +92,7 @@ const result = await dcmdecap({
 Compress DICOM pixel data using JPEG.
 
 ```typescript
-import { dcmcjpeg } from 'dcmtk';
+import { dcmcjpeg } from '@ubercode/dcmtk';
 
 // Lossy JPEG compression
 const result = await dcmcjpeg({
@@ -123,7 +123,7 @@ const lossless = await dcmcjpeg({
 Decompress JPEG-encoded DICOM pixel data.
 
 ```typescript
-import { dcmdjpeg, ColorConversion } from 'dcmtk';
+import { dcmdjpeg, ColorConversion } from '@ubercode/dcmtk';
 
 const result = await dcmdjpeg({
     inputPath: '/path/to/compressed.dcm',
@@ -147,7 +147,7 @@ const result = await dcmdjpeg({
 Compress DICOM pixel data using JPEG-LS.
 
 ```typescript
-import { dcmcjpls } from 'dcmtk';
+import { dcmcjpls } from '@ubercode/dcmtk';
 
 // Lossless JPEG-LS
 const result = await dcmcjpls({
@@ -178,7 +178,7 @@ const nearLossless = await dcmcjpls({
 Decompress JPEG-LS-encoded DICOM pixel data.
 
 ```typescript
-import { dcmdjpls, JplsColorConversion } from 'dcmtk';
+import { dcmdjpls, JplsColorConversion } from '@ubercode/dcmtk';
 
 const result = await dcmdjpls({
     inputPath: '/path/to/compressed.dcm',
