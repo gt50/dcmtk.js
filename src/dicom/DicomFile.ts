@@ -7,8 +7,6 @@
  * @module dicom/DicomFile
  */
 
-import { copyFile, stat, unlink } from 'node:fs/promises';
-import { tryCatch } from 'stderr-lib';
 import type { DicomFilePath } from '../brands';
 import { createDicomFilePath } from '../brands';
 import { DEFAULT_TIMEOUT_MS } from '../constants';
@@ -17,65 +15,15 @@ import { ok, err } from '../types';
 import { ChangeSet } from './ChangeSet';
 import { DicomDataset } from './DicomDataset';
 import { dcm2json } from '../tools/dcm2json';
-import { dcmodify } from '../tools/dcmodify';
+import { applyModifications, copyFileSafe, statFileSize, unlinkFile } from './_fileHelpers';
+import type { FileIOOptions } from './_fileHelpers';
 
 // ---------------------------------------------------------------------------
 // Options
 // ---------------------------------------------------------------------------
 
 /** Options for DicomFile I/O operations. */
-interface DicomFileOptions {
-    /** Timeout in milliseconds. Defaults to DEFAULT_TIMEOUT_MS. */
-    readonly timeoutMs?: number | undefined;
-    /** AbortSignal for external cancellation. */
-    readonly signal?: AbortSignal | undefined;
-}
-
-// ---------------------------------------------------------------------------
-// Extracted helpers (keep methods ≤ 40 lines)
-// ---------------------------------------------------------------------------
-
-/** Bridges a ChangeSet to a dcmodify call on the given file. */
-async function applyModifications(filePath: DicomFilePath, changeset: ChangeSet, options: DicomFileOptions): Promise<Result<void>> {
-    const modifications = changeset.toModifications();
-    const erasures = changeset.toErasureArgs();
-
-    const result = await dcmodify(filePath, {
-        modifications: modifications.length > 0 ? modifications : undefined,
-        erasures: erasures.length > 0 ? erasures : undefined,
-        erasePrivateTags: changeset.erasePrivate || undefined,
-        insertIfMissing: true,
-        timeoutMs: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
-        signal: options.signal,
-    });
-
-    if (!result.ok) return err(result.error);
-    return ok(undefined);
-}
-
-/** Wraps fs.copyFile in a Result. */
-async function copyFileSafe(source: string, dest: string): Promise<Result<void>> {
-    return tryCatch(
-        () => copyFile(source, dest),
-        e => new Error(`Failed to copy file: ${e.message}`)
-    );
-}
-
-/** Wraps fs.stat in a Result, returning file size. */
-async function statFileSize(path: string): Promise<Result<number>> {
-    return tryCatch(
-        async () => (await stat(path)).size,
-        e => new Error(`Failed to stat file: ${e.message}`)
-    );
-}
-
-/** Wraps fs.unlink in a Result. */
-async function unlinkFile(path: string): Promise<Result<void>> {
-    return tryCatch(
-        () => unlink(path),
-        e => new Error(`Failed to delete file: ${e.message}`)
-    );
-}
+type DicomFileOptions = FileIOOptions;
 
 // ---------------------------------------------------------------------------
 // DicomFile class

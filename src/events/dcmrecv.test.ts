@@ -11,7 +11,7 @@ describe('DcmrecvEvent constants', () => {
     });
 
     it('has all expected events', () => {
-        expect(Object.keys(DcmrecvEvent)).toHaveLength(10);
+        expect(Object.keys(DcmrecvEvent)).toHaveLength(12);
     });
 });
 
@@ -46,17 +46,17 @@ describe('DCMRECV_PATTERNS with LineParser', () => {
         expect(events[0]?.event).toBe(DcmrecvEvent.LISTENING);
     });
 
-    it('matches ASSOCIATION_RECEIVED pattern', () => {
+    it('matches ASSOCIATION_RECEIVED pattern with unquoted AE titles', () => {
         const parser = createParser();
         const events: Array<{ event: string; data: unknown }> = [];
         parser.on('match', evt => events.push(evt));
 
-        parser.feed('I: Association Received 192.168.1.100: "STORESCU" -> "DCMRECV"');
+        parser.feed('I: Association Received db: STORESCU -> DCMRECV');
 
         expect(events).toHaveLength(1);
         expect(events[0]?.event).toBe(DcmrecvEvent.ASSOCIATION_RECEIVED);
-        const data = events[0]?.data as { address: string; callingAE: string; calledAE: string };
-        expect(data.address).toBe('192.168.1.100');
+        const data = events[0]?.data as { source: string; callingAE: string; calledAE: string };
+        expect(data.source).toBe('db');
         expect(data.callingAE).toBe('STORESCU');
         expect(data.calledAE).toBe('DCMRECV');
     });
@@ -98,12 +98,23 @@ describe('DCMRECV_PATTERNS with LineParser', () => {
         expect(data.filePath).toBe('/tmp/dcmrecv/image001.dcm');
     });
 
-    it('matches ASSOCIATION_RELEASE pattern', () => {
+    it('matches ASSOCIATION_RELEASE pattern (dcmrecv format)', () => {
         const parser = createParser();
         const events: Array<{ event: string; data: unknown }> = [];
         parser.on('match', evt => events.push(evt));
 
-        parser.feed('I: Received Association Release');
+        parser.feed('I: Received Association Release Request');
+
+        expect(events).toHaveLength(1);
+        expect(events[0]?.event).toBe(DcmrecvEvent.ASSOCIATION_RELEASE);
+    });
+
+    it('matches ASSOCIATION_RELEASE pattern (storescp format)', () => {
+        const parser = createParser();
+        const events: Array<{ event: string; data: unknown }> = [];
+        parser.on('match', evt => events.push(evt));
+
+        parser.feed('I: Association Release');
 
         expect(events).toHaveLength(1);
         expect(events[0]?.event).toBe(DcmrecvEvent.ASSOCIATION_RELEASE);
@@ -193,11 +204,12 @@ describe('DCMRECV_PATTERNS with LineParser', () => {
             expect(spy).not.toHaveBeenCalled();
         });
 
-        it('does not match partial ASSOCIATION_RECEIVED (missing quotes)', () => {
+        it('does not match ASSOCIATION_RECEIVED without AE details', () => {
             const parser = createParser();
             const spy = vi.fn();
             parser.on('match', spy);
-            parser.feed('I: Association Received 192.168.1.100: STORESCU -> DCMRECV');
+            parser.feed('I: Association Received');
+            // dcmrecv pattern requires source + AE titles, plain "Association Received" should not match
             expect(spy).not.toHaveBeenCalled();
         });
 

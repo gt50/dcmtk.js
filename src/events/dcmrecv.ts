@@ -25,6 +25,10 @@ const DcmrecvEvent = {
     ECHO_REQUEST: 'ECHO_REQUEST',
     CANNOT_START_LISTENER: 'CANNOT_START_LISTENER',
     REFUSING_ASSOCIATION: 'REFUSING_ASSOCIATION',
+    /** Synthetic: STORED_FILE enriched with association context. */
+    FILE_RECEIVED: 'FILE_RECEIVED',
+    /** Synthetic: emitted on association release/abort with summary. */
+    ASSOCIATION_COMPLETE: 'ASSOCIATION_COMPLETE',
 } as const;
 
 type DcmrecvEventValue = (typeof DcmrecvEvent)[keyof typeof DcmrecvEvent];
@@ -35,7 +39,7 @@ type DcmrecvEventValue = (typeof DcmrecvEvent)[keyof typeof DcmrecvEvent];
 
 /** Data for ASSOCIATION_RECEIVED event. */
 interface AssociationReceivedData {
-    readonly address: string;
+    readonly source: string;
     readonly callingAE: string;
     readonly calledAE: string;
 }
@@ -65,6 +69,26 @@ interface CannotStartListenerData {
     readonly message: string;
 }
 
+/** Data for FILE_RECEIVED synthetic event. */
+interface FileReceivedData {
+    readonly filePath: string;
+    readonly associationId: string;
+    readonly callingAE: string;
+    readonly calledAE: string;
+    readonly source: string;
+}
+
+/** Data for ASSOCIATION_COMPLETE synthetic event. */
+interface AssociationCompleteData {
+    readonly associationId: string;
+    readonly callingAE: string;
+    readonly calledAE: string;
+    readonly source: string;
+    readonly files: readonly string[];
+    readonly durationMs: number;
+    readonly endReason: 'release' | 'abort';
+}
+
 // ---------------------------------------------------------------------------
 // Regex patterns for dcmrecv verbose output
 // ---------------------------------------------------------------------------
@@ -78,9 +102,9 @@ const DCMRECV_PATTERNS: readonly EventPattern[] = [
     },
     {
         event: DcmrecvEvent.ASSOCIATION_RECEIVED,
-        pattern: /Association Received\s{1,100}([^:]+):\s*"([^"]+)"\s*->\s*"([^"]+)"/,
+        pattern: /Association Received\s{1,100}(\S+):\s+(\S+)\s+->\s+(\S+)/,
         processor: (match): AssociationReceivedData => ({
-            address: match[1] ?? '',
+            source: match[1] ?? '',
             callingAE: match[2] ?? '',
             calledAE: match[3] ?? '',
         }),
@@ -108,7 +132,7 @@ const DCMRECV_PATTERNS: readonly EventPattern[] = [
     },
     {
         event: DcmrecvEvent.ASSOCIATION_RELEASE,
-        pattern: /Received Association Release/i,
+        pattern: /Association Release/i,
         processor: () => undefined,
     },
     {
@@ -149,4 +173,6 @@ export type {
     StoredFileData,
     RefusingAssociationData,
     CannotStartListenerData,
+    FileReceivedData,
+    AssociationCompleteData,
 };

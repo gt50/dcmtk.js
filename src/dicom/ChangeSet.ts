@@ -7,9 +7,9 @@
  * @module dicom/ChangeSet
  */
 
-import type { DicomTagPath } from '../brands';
 import type { TagModification } from '../tools/dcmodify';
 import { MAX_CHANGESET_OPERATIONS } from '../constants';
+import type { DicomTagPath } from '../brands';
 import { tagPathToSegments } from './tagPath';
 
 // ---------------------------------------------------------------------------
@@ -63,6 +63,22 @@ function buildMergedModifications(
     return merged;
 }
 
+/** Iteratively applies all entries to a ChangeSet, returning the final result. */
+function applyBatchEntries(initial: ChangeSet, entries: Readonly<Record<string, string>>): ChangeSet {
+    const keys = Object.keys(entries);
+    let cs = initial;
+    for (let i = 0; i < keys.length; i++) {
+        const key = keys[i];
+        /* v8 ignore next */
+        if (key === undefined) continue;
+        const value = entries[key];
+        /* v8 ignore next */
+        if (value === undefined) continue;
+        cs = cs.setTag(key, value);
+    }
+    return cs;
+}
+
 // ---------------------------------------------------------------------------
 // ChangeSet class
 // ---------------------------------------------------------------------------
@@ -102,17 +118,17 @@ class ChangeSet {
      * Control characters (except LF/CR) are stripped from the value.
      * If the tag was previously erased, it is removed from the erasure set.
      *
-     * @param path - The DICOM tag path to set
+     * @param path - The DICOM tag path to set (e.g. `'(0010,0010)'`)
      * @param value - The new value for the tag
      * @returns A new ChangeSet with the modification applied
      * @throws Error if operation count would exceed MAX_CHANGESET_OPERATIONS
      */
-    setTag(path: DicomTagPath, value: string): ChangeSet {
+    setTag(path: string, value: string): ChangeSet {
         const totalOps = this.mods.size + this.erased.size;
         if (totalOps >= MAX_CHANGESET_OPERATIONS) {
             throw new Error(`ChangeSet operation limit (${MAX_CHANGESET_OPERATIONS}) exceeded`);
         }
-        tagPathToSegments(path);
+        tagPathToSegments(path as DicomTagPath);
         const sanitized = sanitizeValue(value);
         const newMods = new Map(this.mods);
         newMods.set(path, sanitized);
@@ -126,16 +142,16 @@ class ChangeSet {
      *
      * If the tag was previously set, the modification is removed.
      *
-     * @param path - The DICOM tag path to erase
+     * @param path - The DICOM tag path to erase (e.g. `'(0010,0010)'`)
      * @returns A new ChangeSet with the erasure applied
      * @throws Error if operation count would exceed MAX_CHANGESET_OPERATIONS
      */
-    eraseTag(path: DicomTagPath): ChangeSet {
+    eraseTag(path: string): ChangeSet {
         const totalOps = this.mods.size + this.erased.size;
         if (totalOps >= MAX_CHANGESET_OPERATIONS) {
             throw new Error(`ChangeSet operation limit (${MAX_CHANGESET_OPERATIONS}) exceeded`);
         }
-        tagPathToSegments(path);
+        tagPathToSegments(path as DicomTagPath);
         const newMods = new Map(this.mods);
         newMods.delete(path);
         const newErasures = new Set(this.erased);
@@ -157,6 +173,60 @@ class ChangeSet {
         const newErasures = new Set(this.erased);
         newErasures.add(ERASE_PRIVATE_SENTINEL);
         return new ChangeSet(new Map(this.mods), newErasures);
+    }
+
+    // -----------------------------------------------------------------------
+    // Convenience setters for common DICOM tags
+    // -----------------------------------------------------------------------
+
+    /** Sets Patient's Name (0010,0010). */
+    setPatientName(value: string): ChangeSet {
+        return this.setTag('(0010,0010)', value);
+    }
+
+    /** Sets Patient ID (0010,0020). */
+    setPatientID(value: string): ChangeSet {
+        return this.setTag('(0010,0020)', value);
+    }
+
+    /** Sets Study Date (0008,0020). */
+    setStudyDate(value: string): ChangeSet {
+        return this.setTag('(0008,0020)', value);
+    }
+
+    /** Sets Modality (0008,0060). */
+    setModality(value: string): ChangeSet {
+        return this.setTag('(0008,0060)', value);
+    }
+
+    /** Sets Accession Number (0008,0050). */
+    setAccessionNumber(value: string): ChangeSet {
+        return this.setTag('(0008,0050)', value);
+    }
+
+    /** Sets Study Description (0008,1030). */
+    setStudyDescription(value: string): ChangeSet {
+        return this.setTag('(0008,1030)', value);
+    }
+
+    /** Sets Series Description (0008,103E). */
+    setSeriesDescription(value: string): ChangeSet {
+        return this.setTag('(0008,103E)', value);
+    }
+
+    /** Sets Institution Name (0008,0080). */
+    setInstitutionName(value: string): ChangeSet {
+        return this.setTag('(0008,0080)', value);
+    }
+
+    /**
+     * Sets multiple tags at once, returning a new ChangeSet.
+     *
+     * @param entries - A record of tag path → value pairs
+     * @returns A new ChangeSet with all modifications applied
+     */
+    setBatch(entries: Readonly<Record<string, string>>): ChangeSet {
+        return applyBatchEntries(this, entries);
     }
 
     /** All pending tag modifications as a readonly map of path → value. */

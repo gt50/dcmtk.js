@@ -7,7 +7,7 @@ export { ok, err, assertUnreachable, unwrap, mapResult } from './types';
 export type { Result, ResultValue, DcmtkProcessResult, ExecOptions, SpawnOptions, LineSource, ProcessLine } from './types';
 
 // Branded types + factories
-export { createDicomTag, createAETitle, createDicomTagPath, createSOPClassUID, createTransferSyntaxUID, createDicomFilePath, createPort } from './brands';
+export { createDicomTag, createAETitle, createDicomTagPath, createSOPClassUID, createTransferSyntaxUID, createDicomFilePath, createPort, tag } from './brands';
 export type { Brand, DicomTag, AETitle, DicomTagPath, SOPClassUID, TransferSyntaxUID, DicomFilePath, Port } from './brands';
 
 // Validation schemas + parsers
@@ -80,6 +80,7 @@ export { DicomDataset } from './dicom/DicomDataset';
 export { ChangeSet } from './dicom/ChangeSet';
 export { DicomFile } from './dicom/DicomFile';
 export type { DicomFileOptions } from './dicom/DicomFile';
+export { DicomInstance } from './dicom/DicomInstance';
 export { xmlToJson } from './dicom/xmlToJson';
 
 // ---------------------------------------------------------------------------
@@ -207,8 +208,8 @@ export type { EchoscuOptions, EchoscuResult } from './tools/echoscu';
 export { dcmsend } from './tools/dcmsend';
 export type { DcmsendOptions, DcmsendResult } from './tools/dcmsend';
 
-export { storescu } from './tools/storescu';
-export type { StorescuOptions, StorescuResult } from './tools/storescu';
+export { storescu, ProposedTransferSyntax } from './tools/storescu';
+export type { StorescuOptions, StorescuResult, ProposedTransferSyntaxValue } from './tools/storescu';
 
 export { findscu, QueryModel } from './tools/findscu';
 export type { FindscuOptions, FindscuResult, QueryModelValue } from './tools/findscu';
@@ -276,6 +277,8 @@ export type {
     StoredFileData,
     RefusingAssociationData,
     CannotStartListenerData,
+    FileReceivedData,
+    AssociationCompleteData,
 } from './events/dcmrecv';
 
 export { StorescpEvent, STORESCP_PATTERNS, STORESCP_FATAL_EVENTS } from './events/storescp';
@@ -349,6 +352,9 @@ export type { DcmQRSCPOptions, DcmQRSCPEventMap } from './servers/DcmQRSCP';
 
 export { Wlmscpfs } from './servers/Wlmscpfs';
 export type { WlmscpfsOptions, WlmscpfsEventMap } from './servers/Wlmscpfs';
+
+export { AssociationTracker } from './servers/AssociationTracker';
+export type { AssociationContext, TrackedFile, AssociationSummary } from './servers/AssociationTracker';
 
 // ---------------------------------------------------------------------------
 // High-level PACS client

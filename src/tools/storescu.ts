@@ -17,6 +17,41 @@ import { createToolError } from './_toolError';
 import type { ToolBaseOptions } from './_toolTypes';
 import { isSafePath, isValidAETitle } from '../patterns';
 
+// ---------------------------------------------------------------------------
+// Transfer syntax proposal constants
+// ---------------------------------------------------------------------------
+
+/** Proposed transfer syntax for outgoing C-STORE associations. */
+const ProposedTransferSyntax = {
+    UNCOMPRESSED: 'uncompressed',
+    LITTLE_ENDIAN: 'littleEndian',
+    BIG_ENDIAN: 'bigEndian',
+    IMPLICIT_VR: 'implicitVR',
+    JPEG_LOSSLESS: 'jpegLossless',
+    JPEG_8BIT: 'jpeg8Bit',
+    JPEG_12BIT: 'jpeg12Bit',
+    J2K_LOSSLESS: 'j2kLossless',
+    J2K_LOSSY: 'j2kLossy',
+    JLS_LOSSLESS: 'jlsLossless',
+    JLS_LOSSY: 'jlsLossy',
+} as const;
+
+type ProposedTransferSyntaxValue = (typeof ProposedTransferSyntax)[keyof typeof ProposedTransferSyntax];
+
+const PROPOSED_TS_FLAG_MAP: Record<ProposedTransferSyntaxValue, string> = {
+    [ProposedTransferSyntax.UNCOMPRESSED]: '-x=',
+    [ProposedTransferSyntax.LITTLE_ENDIAN]: '-xe',
+    [ProposedTransferSyntax.BIG_ENDIAN]: '-xb',
+    [ProposedTransferSyntax.IMPLICIT_VR]: '-xi',
+    [ProposedTransferSyntax.JPEG_LOSSLESS]: '-xs',
+    [ProposedTransferSyntax.JPEG_8BIT]: '-xy',
+    [ProposedTransferSyntax.JPEG_12BIT]: '-xx',
+    [ProposedTransferSyntax.J2K_LOSSLESS]: '-xv',
+    [ProposedTransferSyntax.J2K_LOSSY]: '-xw',
+    [ProposedTransferSyntax.JLS_LOSSLESS]: '-xt',
+    [ProposedTransferSyntax.JLS_LOSSY]: '-xu',
+};
+
 /** Options for {@link storescu}. */
 interface StorescuOptions extends ToolBaseOptions {
     /** Remote host or IP address. */
@@ -33,6 +68,8 @@ interface StorescuOptions extends ToolBaseOptions {
     readonly scanDirectories?: boolean | undefined;
     /** Recurse into subdirectories (requires scanDirectories). */
     readonly recurse?: boolean | undefined;
+    /** Proposed transfer syntax for the association. */
+    readonly proposedTransferSyntax?: ProposedTransferSyntaxValue | undefined;
 }
 
 /** Result of a successful C-STORE send. */
@@ -54,6 +91,21 @@ const StorescuOptionsSchema = z
         calledAETitle: z.string().min(1).max(16).refine(isValidAETitle, { message: 'AE Title contains invalid characters' }).optional(),
         scanDirectories: z.boolean().optional(),
         recurse: z.boolean().optional(),
+        proposedTransferSyntax: z
+            .enum([
+                'uncompressed',
+                'littleEndian',
+                'bigEndian',
+                'implicitVR',
+                'jpegLossless',
+                'jpeg8Bit',
+                'jpeg12Bit',
+                'j2kLossless',
+                'j2kLossy',
+                'jlsLossless',
+                'jlsLossy',
+            ])
+            .optional(),
     })
     .strict();
 
@@ -77,6 +129,10 @@ function buildArgs(options: StorescuOptions): string[] {
 
     if (options.recurse === true) {
         args.push('+r');
+    }
+
+    if (options.proposedTransferSyntax !== undefined) {
+        args.push(PROPOSED_TS_FLAG_MAP[options.proposedTransferSyntax]);
     }
 
     args.push(options.host, String(options.port));
@@ -134,5 +190,5 @@ async function storescu(options: StorescuOptions): Promise<Result<StorescuResult
     return ok({ success: true, stderr: result.value.stderr });
 }
 
-export { storescu };
-export type { StorescuOptions, StorescuResult };
+export { storescu, ProposedTransferSyntax };
+export type { StorescuOptions, StorescuResult, ProposedTransferSyntaxValue };

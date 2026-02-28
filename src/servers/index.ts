@@ -12,6 +12,9 @@ export type { DcmrecvOptions, DcmrecvEventMap, SubdirectoryModeValue, FilenameMo
 export { StoreSCP, PreferredTransferSyntax } from './StoreSCP';
 export type { StoreSCPOptions, StoreSCPEventMap, PreferredTransferSyntaxValue } from './StoreSCP';
 
+export { AssociationTracker } from './AssociationTracker';
+export type { AssociationContext, TrackedFile, AssociationSummary } from './AssociationTracker';
+
 export { DcmprsCP } from './DcmprsCP';
 export type { DcmprsCPOptions, DcmprsCPEventMap } from './DcmprsCP';
 
@@ -37,6 +40,8 @@ export type {
     StoredFileData,
     RefusingAssociationData,
     CannotStartListenerData,
+    FileReceivedData,
+    AssociationCompleteData,
 } from '../events/dcmrecv';
 
 export { StorescpEvent, STORESCP_PATTERNS, STORESCP_FATAL_EVENTS } from '../events/storescp';

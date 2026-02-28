@@ -222,5 +222,21 @@ function createPort(input: number): Result<Port> {
     return ok(input as Port);
 }
 
-export { createDicomTag, createAETitle, createDicomTagPath, createSOPClassUID, createTransferSyntaxUID, createDicomFilePath, createPort };
+/**
+ * Shorthand for creating a DicomTagPath, throwing on invalid input.
+ *
+ * Use this when you know the tag path is valid (e.g. hardcoded constants).
+ * For user-supplied input, use {@link createDicomTagPath} which returns a Result.
+ *
+ * @param input - A DICOM tag path string, e.g. `'(0010,0010)'`
+ * @returns The branded DicomTagPath
+ * @throws Error if the input is not a valid DICOM tag path
+ */
+function tag(input: string): DicomTagPath {
+    const result = createDicomTagPath(input);
+    if (!result.ok) throw result.error;
+    return result.value;
+}
+
+export { createDicomTag, createAETitle, createDicomTagPath, createSOPClassUID, createTransferSyntaxUID, createDicomFilePath, createPort, tag };
 export type { Brand, DicomTag, AETitle, DicomTagPath, SOPClassUID, TransferSyntaxUID, DicomFilePath, Port };

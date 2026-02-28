@@ -16,7 +16,7 @@ import type { DcmtkProcessConfig } from '../DcmtkProcess';
 import { LineParser } from '../parsers/LineParser';
 import { resolveBinary } from '../tools/_resolveBinary';
 import { isSafePath, isValidAETitle } from '../patterns';
-import { DCMRECV_PATTERNS, DCMRECV_FATAL_EVENTS } from '../events/dcmrecv';
+import { DcmrecvEvent, DCMRECV_PATTERNS, DCMRECV_FATAL_EVENTS } from '../events/dcmrecv';
 import type {
     AssociationReceivedData,
     AssociationAcknowledgedData,
@@ -24,7 +24,10 @@ import type {
     StoredFileData,
     RefusingAssociationData,
     CannotStartListenerData,
+    FileReceivedData,
+    AssociationCompleteData,
 } from '../events/dcmrecv';
+import { AssociationTracker } from './AssociationTracker';
 
 // ---------------------------------------------------------------------------
 // Event map type (for documentation — consumers see typed overloads on class)
@@ -42,6 +45,8 @@ interface DcmrecvEventMap {
     ECHO_REQUEST: [];
     CANNOT_START_LISTENER: [CannotStartListenerData];
     REFUSING_ASSOCIATION: [RefusingAssociationData];
+    FILE_RECEIVED: [FileReceivedData];
+    ASSOCIATION_COMPLETE: [AssociationCompleteData];
 }
 
 // ---------------------------------------------------------------------------
@@ -219,13 +224,16 @@ function addNetworkArgs(args: string[], options: DcmrecvOptions): void {
  */
 class Dcmrecv extends DcmtkProcess {
     private readonly parser: LineParser;
+    private readonly tracker: AssociationTracker;
     private abortSignal: AbortSignal | undefined;
     private abortHandler: (() => void) | undefined;
 
     private constructor(config: DcmtkProcessConfig, parser: LineParser, signal?: AbortSignal) {
         super(config);
         this.parser = parser;
+        this.tracker = new AssociationTracker();
         this.wireParser();
+        this.wireTracker();
         if (signal !== undefined) {
             this.wireAbortSignal(signal);
         }
@@ -269,6 +277,26 @@ class Dcmrecv extends DcmtkProcess {
      */
     onStoredFile(listener: (...args: DcmrecvEventMap['STORED_FILE']) => void): this {
         return this.onEvent('STORED_FILE', listener);
+    }
+
+    /**
+     * Registers a listener for received files enriched with association context.
+     *
+     * @param listener - Callback receiving tracked file data
+     * @returns this for chaining
+     */
+    onFileReceived(listener: (...args: DcmrecvEventMap['FILE_RECEIVED']) => void): this {
+        return this.onEvent('FILE_RECEIVED', listener);
+    }
+
+    /**
+     * Registers a listener for completed associations.
+     *
+     * @param listener - Callback receiving association summary
+     * @returns this for chaining
+     */
+    onAssociationComplete(listener: (...args: DcmrecvEventMap['ASSOCIATION_COMPLETE']) => void): this {
+        return this.onEvent('ASSOCIATION_COMPLETE', listener);
     }
 
     /**
@@ -320,6 +348,32 @@ class Dcmrecv extends DcmtkProcess {
                 void this.stop();
             }
             this.emit(event, ...([data] as never));
+        });
+    }
+
+    /** Wires the AssociationTracker to server events. */
+    private wireTracker(): void {
+        this.onEvent('ASSOCIATION_RECEIVED', data => {
+            this.tracker.beginAssociation(data);
+        });
+
+        this.onEvent('STORED_FILE', data => {
+            const tracked = this.tracker.trackFile(data.filePath);
+            this.emit(DcmrecvEvent.FILE_RECEIVED, ...([tracked] as never));
+        });
+
+        this.onEvent('ASSOCIATION_RELEASE', () => {
+            const summary = this.tracker.endAssociation('release');
+            if (summary !== undefined) {
+                this.emit(DcmrecvEvent.ASSOCIATION_COMPLETE, ...([summary] as never));
+            }
+        });
+
+        this.onEvent('ASSOCIATION_ABORTED', () => {
+            const summary = this.tracker.endAssociation('abort');
+            if (summary !== undefined) {
+                this.emit(DcmrecvEvent.ASSOCIATION_COMPLETE, ...([summary] as never));
+            }
         });
     }
 

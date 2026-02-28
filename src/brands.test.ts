@@ -1,6 +1,6 @@
 import { normalize } from 'node:path';
 import { describe, it, expect } from 'vitest';
-import { createDicomTag, createAETitle, createDicomTagPath, createSOPClassUID, createTransferSyntaxUID, createDicomFilePath, createPort } from './brands';
+import { createDicomTag, createAETitle, createDicomTagPath, createSOPClassUID, createTransferSyntaxUID, createDicomFilePath, createPort, tag } from './brands';
 
 describe('Branded type factories', () => {
     describe('createDicomTag()', () => {
@@ -193,6 +193,31 @@ describe('Branded type factories', () => {
         it('accepts paths with double-dot in filename (not traversal)', () => {
             const result = createDicomFilePath('/data/file..name.dcm');
             expect(result.ok).toBe(true);
+        });
+    });
+
+    describe('tag()', () => {
+        it('returns DicomTagPath for valid single tag', () => {
+            const result = tag('(0010,0010)');
+            expect(result).toBe('(0010,0010)');
+        });
+
+        it('returns DicomTagPath for valid dotted path', () => {
+            const result = tag('(0040,0275).(0008,1110)');
+            expect(result).toBe('(0040,0275).(0008,1110)');
+        });
+
+        it('returns DicomTagPath for path with array index', () => {
+            const result = tag('(0040,0275)[0].(0008,1155)');
+            expect(result).toBe('(0040,0275)[0].(0008,1155)');
+        });
+
+        it('throws for empty string', () => {
+            expect(() => tag('')).toThrow(/empty string/);
+        });
+
+        it('throws for invalid format', () => {
+            expect(() => tag('not-a-tag')).toThrow(/Invalid DICOM tag path/);
         });
     });
 

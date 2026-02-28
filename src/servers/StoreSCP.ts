@@ -17,6 +17,7 @@ import { LineParser } from '../parsers/LineParser';
 import { resolveBinary } from '../tools/_resolveBinary';
 import { isSafePath, isValidAETitle } from '../patterns';
 import { STORESCP_PATTERNS, STORESCP_FATAL_EVENTS } from '../events/storescp';
+import { DcmrecvEvent } from '../events/dcmrecv';
 import type {
     AssociationReceivedData,
     AssociationAcknowledgedData,
@@ -24,8 +25,11 @@ import type {
     StoredFileData,
     RefusingAssociationData,
     CannotStartListenerData,
+    FileReceivedData,
+    AssociationCompleteData,
 } from '../events/dcmrecv';
 import type { StoringFileData, SubdirectoryCreatedData } from '../events/storescp';
+import { AssociationTracker } from './AssociationTracker';
 
 // ---------------------------------------------------------------------------
 // Event map type (for documentation — consumers see typed overloads on class)
@@ -45,6 +49,8 @@ interface StoreSCPEventMap {
     REFUSING_ASSOCIATION: [RefusingAssociationData];
     STORING_FILE: [StoringFileData];
     SUBDIRECTORY_CREATED: [SubdirectoryCreatedData];
+    FILE_RECEIVED: [FileReceivedData];
+    ASSOCIATION_COMPLETE: [AssociationCompleteData];
 }
 
 // ---------------------------------------------------------------------------
@@ -301,13 +307,16 @@ function buildExecArgs(args: string[], options: StoreSCPOptions): void {
  */
 class StoreSCP extends DcmtkProcess {
     private readonly parser: LineParser;
+    private readonly tracker: AssociationTracker;
     private abortSignal: AbortSignal | undefined;
     private abortHandler: (() => void) | undefined;
 
     private constructor(config: DcmtkProcessConfig, parser: LineParser, signal?: AbortSignal) {
         super(config);
         this.parser = parser;
+        this.tracker = new AssociationTracker();
         this.wireParser();
+        this.wireTracker();
         if (signal !== undefined) {
             this.wireAbortSignal(signal);
         }
@@ -351,6 +360,26 @@ class StoreSCP extends DcmtkProcess {
      */
     onStoringFile(listener: (...args: StoreSCPEventMap['STORING_FILE']) => void): this {
         return this.onEvent('STORING_FILE', listener);
+    }
+
+    /**
+     * Registers a listener for received files enriched with association context.
+     *
+     * @param listener - Callback receiving tracked file data
+     * @returns this for chaining
+     */
+    onFileReceived(listener: (...args: StoreSCPEventMap['FILE_RECEIVED']) => void): this {
+        return this.onEvent('FILE_RECEIVED', listener);
+    }
+
+    /**
+     * Registers a listener for completed associations.
+     *
+     * @param listener - Callback receiving association summary
+     * @returns this for chaining
+     */
+    onAssociationComplete(listener: (...args: StoreSCPEventMap['ASSOCIATION_COMPLETE']) => void): this {
+        return this.onEvent('ASSOCIATION_COMPLETE', listener);
     }
 
     /**
@@ -402,6 +431,32 @@ class StoreSCP extends DcmtkProcess {
                 void this.stop();
             }
             this.emit(event, ...([data] as never));
+        });
+    }
+
+    /** Wires the AssociationTracker to server events. */
+    private wireTracker(): void {
+        this.onEvent('ASSOCIATION_RECEIVED', data => {
+            this.tracker.beginAssociation(data);
+        });
+
+        this.onEvent('STORED_FILE', data => {
+            const tracked = this.tracker.trackFile(data.filePath);
+            this.emit(DcmrecvEvent.FILE_RECEIVED, ...([tracked] as never));
+        });
+
+        this.onEvent('ASSOCIATION_RELEASE', () => {
+            const summary = this.tracker.endAssociation('release');
+            if (summary !== undefined) {
+                this.emit(DcmrecvEvent.ASSOCIATION_COMPLETE, ...([summary] as never));
+            }
+        });
+
+        this.onEvent('ASSOCIATION_ABORTED', () => {
+            const summary = this.tracker.endAssociation('abort');
+            if (summary !== undefined) {
+                this.emit(DcmrecvEvent.ASSOCIATION_COMPLETE, ...([summary] as never));
+            }
         });
     }
 

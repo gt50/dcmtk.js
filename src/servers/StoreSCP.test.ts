@@ -230,9 +230,13 @@ describe('StoreSCP', () => {
             const spy = vi.fn();
             server.onAssociationReceived(spy);
 
-            server.emit('line', { source: 'stderr', text: 'I: Association Received 10.0.0.1: "SCU" -> "SCP"' });
+            server.emit('line', { source: 'stderr', text: 'I: Association Received' });
 
             expect(spy).toHaveBeenCalledOnce();
+            const data = spy.mock.calls[0]?.[0] as { source: string; callingAE: string; calledAE: string };
+            expect(data.source).toBe('');
+            expect(data.callingAE).toBe('');
+            expect(data.calledAE).toBe('');
             server[Symbol.dispose]();
         });
 
@@ -249,6 +253,46 @@ describe('StoreSCP', () => {
 
             expect(spy).toHaveBeenCalledOnce();
             expect(spy).toHaveBeenCalledWith({ filePath: '/output/CT.1.2.3.dcm' });
+            server[Symbol.dispose]();
+        });
+
+        it('emits FILE_RECEIVED with association context', () => {
+            const result = StoreSCP.create({ port: 11112 });
+            expect(result.ok).toBe(true);
+            if (!result.ok) return;
+
+            const server = result.value;
+            const spy = vi.fn();
+            server.onFileReceived(spy);
+
+            // storescp ASSOCIATION_RECEIVED has empty AE fields
+            server.emit('line', { source: 'stderr', text: 'I: Association Received' });
+            server.emit('line', { source: 'stderr', text: 'I: Stored received object to file: /tmp/file.dcm' });
+
+            expect(spy).toHaveBeenCalledOnce();
+            const data = spy.mock.calls[0]?.[0] as { filePath: string; associationId: string };
+            expect(data.filePath).toBe('/tmp/file.dcm');
+            expect(data.associationId).toMatch(/^assoc-/);
+            server[Symbol.dispose]();
+        });
+
+        it('emits ASSOCIATION_COMPLETE on release', () => {
+            const result = StoreSCP.create({ port: 11112 });
+            expect(result.ok).toBe(true);
+            if (!result.ok) return;
+
+            const server = result.value;
+            const spy = vi.fn();
+            server.onAssociationComplete(spy);
+
+            server.emit('line', { source: 'stderr', text: 'I: Association Received' });
+            server.emit('line', { source: 'stderr', text: 'I: Stored received object to file: /tmp/file.dcm' });
+            server.emit('line', { source: 'stderr', text: 'I: Association Release' });
+
+            expect(spy).toHaveBeenCalledOnce();
+            const data = spy.mock.calls[0]?.[0] as { files: string[]; endReason: string };
+            expect(data.files).toHaveLength(1);
+            expect(data.endReason).toBe('release');
             server[Symbol.dispose]();
         });
 
@@ -270,7 +314,7 @@ describe('StoreSCP', () => {
             server[Symbol.dispose]();
         });
 
-        it('emits ASSOCIATION_RECEIVED with parsed data', () => {
+        it('emits ASSOCIATION_RECEIVED with empty fields (storescp format)', () => {
             const result = StoreSCP.create({ port: 11112 });
             expect(result.ok).toBe(true);
             if (!result.ok) return;
@@ -279,9 +323,13 @@ describe('StoreSCP', () => {
             const spy = vi.fn();
             server.onEvent('ASSOCIATION_RECEIVED', spy);
 
-            server.emit('line', { source: 'stderr', text: 'I: Association Received 10.0.0.1: "SCU" -> "SCP"' });
+            server.emit('line', { source: 'stderr', text: 'I: Association Received' });
 
             expect(spy).toHaveBeenCalledOnce();
+            const data = spy.mock.calls[0]?.[0] as { source: string; callingAE: string; calledAE: string };
+            expect(data.source).toBe('');
+            expect(data.callingAE).toBe('');
+            expect(data.calledAE).toBe('');
             server[Symbol.dispose]();
         });
     });

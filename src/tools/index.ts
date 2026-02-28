@@ -127,8 +127,8 @@ export type { EchoscuOptions, EchoscuResult } from './echoscu';
 export { dcmsend } from './dcmsend';
 export type { DcmsendOptions, DcmsendResult } from './dcmsend';
 
-export { storescu } from './storescu';
-export type { StorescuOptions, StorescuResult } from './storescu';
+export { storescu, ProposedTransferSyntax } from './storescu';
+export type { StorescuOptions, StorescuResult, ProposedTransferSyntaxValue } from './storescu';
 
 export { findscu, QueryModel } from './findscu';
 export type { FindscuOptions, FindscuResult, QueryModelValue } from './findscu';

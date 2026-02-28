@@ -206,10 +206,11 @@ describe('Dcmrecv', () => {
             const spy = vi.fn();
             server.onEvent('ASSOCIATION_RECEIVED', spy);
 
-            server.emit('line', { source: 'stderr', text: 'I: Association Received 10.0.0.1: "SCU" -> "SCP"' });
+            server.emit('line', { source: 'stderr', text: 'I: Association Received db: SCU -> SCP' });
 
             expect(spy).toHaveBeenCalledOnce();
-            const data = spy.mock.calls[0]?.[0] as { callingAE: string; calledAE: string };
+            const data = spy.mock.calls[0]?.[0] as { source: string; callingAE: string; calledAE: string };
+            expect(data.source).toBe('db');
             expect(data.callingAE).toBe('SCU');
             expect(data.calledAE).toBe('SCP');
             server[Symbol.dispose]();
@@ -224,7 +225,7 @@ describe('Dcmrecv', () => {
             const spy = vi.fn();
             server.onAssociationReceived(spy);
 
-            server.emit('line', { source: 'stderr', text: 'I: Association Received 10.0.0.1: "SCU" -> "SCP"' });
+            server.emit('line', { source: 'stderr', text: 'I: Association Received db: SCU -> SCP' });
 
             expect(spy).toHaveBeenCalledOnce();
             const data = spy.mock.calls[0]?.[0] as { callingAE: string; calledAE: string };
@@ -246,6 +247,67 @@ describe('Dcmrecv', () => {
 
             expect(spy).toHaveBeenCalledOnce();
             expect(spy).toHaveBeenCalledWith({ filePath: '/tmp/image.dcm' });
+            server[Symbol.dispose]();
+        });
+
+        it('emits FILE_RECEIVED with association context', () => {
+            const result = Dcmrecv.create({ port: 11112 });
+            expect(result.ok).toBe(true);
+            if (!result.ok) return;
+
+            const server = result.value;
+            const spy = vi.fn();
+            server.onFileReceived(spy);
+
+            // Simulate association + file
+            server.emit('line', { source: 'stderr', text: 'I: Association Received db: SCU -> SCP' });
+            server.emit('line', { source: 'stderr', text: 'I: Stored received object to file: /tmp/file.dcm' });
+
+            expect(spy).toHaveBeenCalledOnce();
+            const data = spy.mock.calls[0]?.[0] as { filePath: string; callingAE: string; associationId: string };
+            expect(data.filePath).toBe('/tmp/file.dcm');
+            expect(data.callingAE).toBe('SCU');
+            expect(data.associationId).toMatch(/^assoc-/);
+            server[Symbol.dispose]();
+        });
+
+        it('emits ASSOCIATION_COMPLETE on release', () => {
+            const result = Dcmrecv.create({ port: 11112 });
+            expect(result.ok).toBe(true);
+            if (!result.ok) return;
+
+            const server = result.value;
+            const spy = vi.fn();
+            server.onAssociationComplete(spy);
+
+            server.emit('line', { source: 'stderr', text: 'I: Association Received db: SCU -> SCP' });
+            server.emit('line', { source: 'stderr', text: 'I: Stored received object to file: /tmp/file1.dcm' });
+            server.emit('line', { source: 'stderr', text: 'I: Stored received object to file: /tmp/file2.dcm' });
+            server.emit('line', { source: 'stderr', text: 'I: Received Association Release Request' });
+
+            expect(spy).toHaveBeenCalledOnce();
+            const data = spy.mock.calls[0]?.[0] as { files: string[]; endReason: string; callingAE: string };
+            expect(data.files).toHaveLength(2);
+            expect(data.endReason).toBe('release');
+            expect(data.callingAE).toBe('SCU');
+            server[Symbol.dispose]();
+        });
+
+        it('emits ASSOCIATION_COMPLETE on abort', () => {
+            const result = Dcmrecv.create({ port: 11112 });
+            expect(result.ok).toBe(true);
+            if (!result.ok) return;
+
+            const server = result.value;
+            const spy = vi.fn();
+            server.onAssociationComplete(spy);
+
+            server.emit('line', { source: 'stderr', text: 'I: Association Received db: SCU -> SCP' });
+            server.emit('line', { source: 'stderr', text: 'I: Received Association Abort' });
+
+            expect(spy).toHaveBeenCalledOnce();
+            const data = spy.mock.calls[0]?.[0] as { endReason: string };
+            expect(data.endReason).toBe('abort');
             server[Symbol.dispose]();
         });
 

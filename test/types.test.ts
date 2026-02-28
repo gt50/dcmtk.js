@@ -281,7 +281,7 @@ describe('Server options types', () => {
 
 describe('Event data types', () => {
     it('AssociationReceivedData has expected fields', () => {
-        expectTypeOf<AssociationReceivedData>().toHaveProperty('address');
+        expectTypeOf<AssociationReceivedData>().toHaveProperty('source');
         expectTypeOf<AssociationReceivedData>().toHaveProperty('callingAE');
         expectTypeOf<AssociationReceivedData>().toHaveProperty('calledAE');
     });

@@ -276,6 +276,102 @@ describe('ChangeSet', () => {
         });
     });
 
+    describe('string path signatures', () => {
+        it('setTag accepts plain string path', () => {
+            const cs = ChangeSet.empty().setTag('(0010,0010)', 'Anonymous');
+            expect(cs.modifications.get('(0010,0010)')).toBe('Anonymous');
+        });
+
+        it('eraseTag accepts plain string path', () => {
+            const cs = ChangeSet.empty().eraseTag('(0010,0020)');
+            expect(cs.erasures.has('(0010,0020)')).toBe(true);
+        });
+
+        it('setTag throws for invalid path', () => {
+            expect(() => ChangeSet.empty().setTag('not-a-tag', 'value')).toThrow();
+        });
+
+        it('eraseTag throws for invalid path', () => {
+            expect(() => ChangeSet.empty().eraseTag('bad-path')).toThrow();
+        });
+    });
+
+    describe('convenience setters', () => {
+        it('setPatientName sets (0010,0010)', () => {
+            const cs = ChangeSet.empty().setPatientName('DOE^JOHN');
+            expect(cs.modifications.get('(0010,0010)')).toBe('DOE^JOHN');
+        });
+
+        it('setPatientID sets (0010,0020)', () => {
+            const cs = ChangeSet.empty().setPatientID('PAT001');
+            expect(cs.modifications.get('(0010,0020)')).toBe('PAT001');
+        });
+
+        it('setStudyDate sets (0008,0020)', () => {
+            const cs = ChangeSet.empty().setStudyDate('20260101');
+            expect(cs.modifications.get('(0008,0020)')).toBe('20260101');
+        });
+
+        it('setModality sets (0008,0060)', () => {
+            const cs = ChangeSet.empty().setModality('CT');
+            expect(cs.modifications.get('(0008,0060)')).toBe('CT');
+        });
+
+        it('setAccessionNumber sets (0008,0050)', () => {
+            const cs = ChangeSet.empty().setAccessionNumber('ACC001');
+            expect(cs.modifications.get('(0008,0050)')).toBe('ACC001');
+        });
+
+        it('setStudyDescription sets (0008,1030)', () => {
+            const cs = ChangeSet.empty().setStudyDescription('Chest CT');
+            expect(cs.modifications.get('(0008,1030)')).toBe('Chest CT');
+        });
+
+        it('setSeriesDescription sets (0008,103E)', () => {
+            const cs = ChangeSet.empty().setSeriesDescription('Axial');
+            expect(cs.modifications.get('(0008,103E)')).toBe('Axial');
+        });
+
+        it('setInstitutionName sets (0008,0080)', () => {
+            const cs = ChangeSet.empty().setInstitutionName('Hospital');
+            expect(cs.modifications.get('(0008,0080)')).toBe('Hospital');
+        });
+    });
+
+    describe('setBatch()', () => {
+        it('sets multiple tags', () => {
+            const cs = ChangeSet.empty().setBatch({
+                '(0010,0010)': 'DOE^JOHN',
+                '(0010,0020)': 'PAT001',
+                '(0008,0060)': 'CT',
+            });
+            expect(cs.modifications.size).toBe(3);
+            expect(cs.modifications.get('(0010,0010)')).toBe('DOE^JOHN');
+            expect(cs.modifications.get('(0010,0020)')).toBe('PAT001');
+            expect(cs.modifications.get('(0008,0060)')).toBe('CT');
+        });
+
+        it('returns same instance for empty entries', () => {
+            const cs = ChangeSet.empty();
+            const result = cs.setBatch({});
+            expect(result.isEmpty).toBe(true);
+        });
+
+        it('sanitizes values in batch', () => {
+            const cs = ChangeSet.empty().setBatch({
+                '(0010,0010)': 'Test\x00Value',
+            });
+            expect(cs.modifications.get('(0010,0010)')).toBe('TestValue');
+        });
+
+        it('chains with other methods', () => {
+            const cs = ChangeSet.empty().setBatch({ '(0010,0010)': 'Name' }).eraseTag('(0010,0020)').erasePrivateTags();
+            expect(cs.modifications.size).toBe(1);
+            expect(cs.erasures.has('(0010,0020)')).toBe(true);
+            expect(cs.erasePrivate).toBe(true);
+        });
+    });
+
     describe('control character sanitization', () => {
         it('strips NULL (0x00)', () => {
             const cs = ChangeSet.empty().setTag(path('(0010,0010)'), 'A\x00B');
