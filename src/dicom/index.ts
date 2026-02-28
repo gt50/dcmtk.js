@@ -29,8 +29,6 @@ export type { TagSegment } from './tagPath';
 
 export { DicomDataset } from './DicomDataset';
 export { ChangeSet } from './ChangeSet';
-export { DicomFile } from './DicomFile';
-export type { DicomFileOptions } from './DicomFile';
 export { DicomInstance } from './DicomInstance';
 export { xmlToJson } from './xmlToJson';
 

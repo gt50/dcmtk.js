@@ -1,7 +1,7 @@
 /**
- * Shared file operation helpers for DicomFile and DicomInstance.
+ * File operation helpers for DicomInstance.
  *
- * Extracted to avoid code duplication between the two file I/O classes.
+ * Extracted to keep DicomInstance methods under line-count limits.
  *
  * @module dicom/_fileHelpers
  */

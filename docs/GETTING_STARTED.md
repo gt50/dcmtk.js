@@ -320,39 +320,35 @@ const result = await dcmodify('/path/to/image.dcm', {
 });
 ```
 
-**High-level modification with ChangeSet and DicomFile:**
+**High-level modification with DicomInstance:**
 
 ```typescript
-import { DicomFile, ChangeSet, createDicomTagPath } from '@ubercode/dcmtk';
+import { DicomInstance } from '@ubercode/dcmtk';
 
 // Open a DICOM file
-const openResult = await DicomFile.open('/path/to/image.dcm');
+const openResult = await DicomInstance.open('/path/to/image.dcm');
 if (!openResult.ok) {
     console.error(openResult.error.message);
     process.exit(1);
 }
 
-const file = openResult.value;
+const inst = openResult.value;
 
 // Read the current patient name
-console.log('Current patient:', file.dataset.patientName);
+console.log('Current patient:', inst.patientName);
 
-// Build an immutable set of changes
-const changes = ChangeSet.empty()
-    .setTag(createDicomTagPath('(0010,0010)'), 'ANONYMOUS')
-    .setTag(createDicomTagPath('(0010,0020)'), 'ANON-001')
-    .erasePrivateTags();
+// Fluent modification API — every setter returns a new instance
+const anonymized = inst.setPatientName('ANONYMOUS').setPatientID('ANON-001').erasePrivateTags();
 
 // Write changes to a new file (original is untouched)
-const updated = file.withChanges(changes);
-const writeResult = await updated.writeAs('/path/to/anonymized.dcm');
+const writeResult = await anonymized.writeAs('/path/to/anonymized.dcm');
 
 if (writeResult.ok) {
     console.log('Anonymized copy created');
 }
 ```
 
-Each call to `setTag`, `eraseTag`, or `erasePrivateTags` returns a new `ChangeSet` instance. The original is never modified.
+Every setter returns a new `DicomInstance` — the original is never modified.
 
 ---
 
@@ -736,7 +732,7 @@ import {
 import { TransferSyntax, QueryModel } from '@ubercode/dcmtk';
 
 // DICOM data layer
-import { DicomDataset, ChangeSet, DicomFile } from '@ubercode/dcmtk';
+import { DicomDataset, ChangeSet, DicomInstance } from '@ubercode/dcmtk';
 
 // Server classes
 import { Dcmrecv, StoreSCP, DcmprsCP, Dcmpsrcv } from '@ubercode/dcmtk';
@@ -753,6 +749,6 @@ import { lookupTag, lookupTagByKeyword, VR, sopClassNameFromUID } from '@ubercod
 - **Server classes:** See [servers.md](servers.md) for all 6 long-lived server classes.
 - **PACS Client:** See [pacs-client.md](pacs-client.md) for the high-level PACS API.
 - **Core concepts:** See [core-concepts.md](core-concepts.md) for Result pattern, branded types, and cancellation.
-- **DICOM data layer:** See [dicom-data-layer.md](dicom-data-layer.md) for DicomDataset, ChangeSet, and DicomFile.
+- **DICOM data layer:** See [dicom-data-layer.md](dicom-data-layer.md) for DicomDataset, ChangeSet, and DicomInstance.
 - **DCMTK documentation:** https://dicom.offis.de/dcmtk.php.en -- the upstream C++ toolkit documentation.
 - **DICOM standard:** https://www.dicomstandard.org/ -- the official DICOM specification.

@@ -100,7 +100,7 @@ All code **shall** comply with `docs/TypeScript Coding Standard for Mission-Crit
 
 - `DicomDataset` — Immutable dataset with typed accessors, path traversal, wildcard search
 - `ChangeSet` — Immutable builder for tag modifications and erasures
-- `DicomFile` — File I/O facade (open, apply changes, write copies)
+- `DicomInstance` — Unified DICOM object with fluent API (open, modify, write)
 - `vr.ts` — 34 standard DICOM Value Representations
 - `dictionary.ts` — 4,902-entry DICOM tag dictionary
 - `tagPath.ts` — Tag path parsing and segment utilities
@@ -325,21 +325,24 @@ changes.toModifications(); // TagModification[]
 changes.merge(other); // ChangeSet
 ```
 
-#### DicomFile
+#### DicomInstance
 
-File I/O combining dataset reading and modification.
+Unified DICOM object with fluent API for reading, modifying, and writing.
 
 ```typescript
-const file = unwrap(await DicomFile.open('/path/to/file.dcm'));
-file.dataset; // DicomDataset
-file.filePath; // DicomFilePath
-file.changes; // ChangeSet
+const inst = unwrap(await DicomInstance.open('/path/to/file.dcm'));
+inst.patientName; // string (convenience getter)
+inst.dataset; // DicomDataset
+inst.filePath; // string | undefined
+inst.changes; // ChangeSet
 
-const updated = file.withChanges(changes); // new DicomFile
-await updated.applyChanges(); // modify in-place
-await updated.writeAs('/output.dcm'); // copy + modify
-await file.fileSize(); // Result<number>
-await file.unlink(); // delete file
+const modified = inst.setPatientName('DOE^JOHN').erasePrivateTags();
+const updated = inst.withChanges(changes); // merge external ChangeSet
+const moved = inst.withFilePath('/new/path.dcm'); // change file path
+await modified.applyChanges(); // modify in-place
+await modified.writeAs('/output.dcm'); // copy + modify → new DicomInstance
+await inst.fileSize(); // Result<number>
+await inst.unlink(); // delete file
 ```
 
 ### Key Utilities

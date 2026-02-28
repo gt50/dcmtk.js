@@ -78,8 +78,6 @@ export type { TagSegment } from './dicom/tagPath';
 // Dataset, ChangeSet, File I/O
 export { DicomDataset } from './dicom/DicomDataset';
 export { ChangeSet } from './dicom/ChangeSet';
-export { DicomFile } from './dicom/DicomFile';
-export type { DicomFileOptions } from './dicom/DicomFile';
 export { DicomInstance } from './dicom/DicomInstance';
 export { xmlToJson } from './dicom/xmlToJson';
 

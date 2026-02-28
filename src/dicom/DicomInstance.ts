@@ -296,6 +296,31 @@ class DicomInstance {
         return new DicomInstance(this.ds, this.cs.setBatch(entries), this.fp, this.meta);
     }
 
+    /**
+     * Returns a new DicomInstance with the given changes merged into pending changes.
+     *
+     * @param changes - A ChangeSet to merge with existing pending changes
+     * @returns A new DicomInstance with accumulated changes
+     */
+    withChanges(changes: ChangeSet): DicomInstance {
+        return new DicomInstance(this.ds, this.cs.merge(changes), this.fp, this.meta);
+    }
+
+    /**
+     * Returns a new DicomInstance pointing to a different file path.
+     *
+     * Preserves the dataset, pending changes, and metadata.
+     *
+     * @param newPath - The new filesystem path (validated via createDicomFilePath)
+     * @returns A new DicomInstance with the updated path
+     * @throws If the path is invalid
+     */
+    withFilePath(newPath: string): DicomInstance {
+        const result = createDicomFilePath(newPath);
+        if (!result.ok) throw result.error;
+        return new DicomInstance(this.ds, this.cs, result.value, this.meta);
+    }
+
     // -----------------------------------------------------------------------
     // File I/O
     // -----------------------------------------------------------------------

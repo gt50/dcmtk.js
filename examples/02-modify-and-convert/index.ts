@@ -2,7 +2,7 @@
  * Example 02: Modify and Convert DICOM Files
  *
  * Demonstrates modifying DICOM tags with dcmodify, converting transfer
- * syntax with dcmconv, and using the high-level ChangeSet + DicomFile APIs.
+ * syntax with dcmconv, and using the high-level ChangeSet + DicomInstance APIs.
  *
  * Run: pnpm tsx examples/02-modify-and-convert/index.ts
  */
@@ -10,7 +10,7 @@ import { resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { copyFile, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dcmodify, dcmconv, dcm2json, unwrap, DicomDataset, ChangeSet, DicomFile, createDicomTagPath } from '@ubercode/dcmtk';
+import { dcmodify, dcmconv, dcm2json, unwrap, DicomDataset, ChangeSet, DicomInstance, createDicomTagPath } from '@ubercode/dcmtk';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const SAMPLE = resolve(__dirname, '../../dicomSamples/other/0002d.DCM');
@@ -62,10 +62,10 @@ async function main() {
         console.log(`  Transfer Syntax UID: ${convertedDs.transferSyntaxUID ?? '(not set)'}`);
 
         // -------------------------------------------------------------------
-        // 5. DicomFile + ChangeSet — high-level modification API
+        // 5. DicomInstance + ChangeSet — high-level modification API
         // -------------------------------------------------------------------
-        console.log('\n--- DicomFile + ChangeSet API ---');
-        const file = unwrap(await DicomFile.open(convertedFile));
+        console.log('\n--- DicomInstance + ChangeSet API ---');
+        const file = unwrap(await DicomInstance.open(convertedFile));
         console.log(`  Opened: ${file.filePath}`);
         console.log(`  Current Patient Name: ${file.dataset.patientName}`);
 
@@ -79,7 +79,7 @@ async function main() {
         console.log('  Changes applied via ChangeSet.');
 
         // Re-read to verify
-        const verifyFile = unwrap(await DicomFile.open(convertedFile));
+        const verifyFile = unwrap(await DicomInstance.open(convertedFile));
         console.log(`  Patient Name after ChangeSet: ${verifyFile.dataset.patientName}`);
         console.log(`  Patient ID after ChangeSet:   ${verifyFile.dataset.patientID}`);
 

@@ -25,7 +25,7 @@ Each example is a standalone TypeScript file. Run with `tsx`:
 # Inspect DICOM files (dcm2xml, dcm2json, dcmdump, DicomDataset)
 pnpm tsx examples/01-inspect-dicom/index.ts
 
-# Modify and convert DICOM files (dcmodify, dcmconv, ChangeSet, DicomFile)
+# Modify and convert DICOM files (dcmodify, dcmconv, ChangeSet, DicomInstance)
 pnpm tsx examples/02-modify-and-convert/index.ts
 
 # Structured Reports (xml2dsr, dsrdump, dsr2xml)
@@ -46,7 +46,7 @@ pnpm tsx examples/06-query-retrieve/index.ts
 | Example                 | Tools / APIs                                             | Description                                     |
 | ----------------------- | -------------------------------------------------------- | ----------------------------------------------- |
 | `01-inspect-dicom`      | dcm2xml, dcm2json, dcmdump, DicomDataset                 | Read and inspect DICOM file metadata            |
-| `02-modify-and-convert` | dcmodify, dcmconv, ChangeSet, DicomFile                  | Modify tags and convert transfer syntax         |
+| `02-modify-and-convert` | dcmodify, dcmconv, ChangeSet, DicomInstance              | Modify tags and convert transfer syntax         |
 | `03-structured-reports` | xml2dsr, dsrdump, dsr2xml                                | Create, dump, and round-trip structured reports |
 | `04-dcmrecv-server`     | Dcmrecv, echoscu, storescu, dcmsend                      | Simple DICOM receiver with concurrent sends     |
 | `05-storescp-server`    | StoreSCP, echoscu, storescu, dcmsend, termscu            | Advanced storage SCP with protocol shutdown     |

@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Stats } from 'node:fs';
 import { DicomInstance } from './DicomInstance';
 import { DicomDataset } from './DicomDataset';
+import { ChangeSet } from './ChangeSet';
 import type { DicomTagPath } from '../brands';
 import type { DicomJsonModel } from '../tools/_xmlToJson';
 
@@ -201,6 +202,73 @@ describe('DicomInstance', () => {
             if (!result.ok) return;
             const values = result.value.findValues('(0010,0020)' as DicomTagPath);
             expect(values).toContain('12345');
+        });
+    });
+
+    describe('withChanges()', () => {
+        it('returns new instance with merged changes', async () => {
+            const result = await DicomInstance.open('/path/to/test.dcm');
+            expect(result.ok).toBe(true);
+            if (!result.ok) return;
+
+            const changes = ChangeSet.empty().setTag('(0010,0010)', 'Anonymous');
+            const modified = result.value.withChanges(changes);
+
+            expect(modified.changes.modifications.get('(0010,0010)')).toBe('Anonymous');
+            expect(modified.hasUnsavedChanges).toBe(true);
+        });
+
+        it('does not modify the original instance', async () => {
+            const result = await DicomInstance.open('/path/to/test.dcm');
+            expect(result.ok).toBe(true);
+            if (!result.ok) return;
+
+            const changes = ChangeSet.empty().setTag('(0010,0010)', 'Anonymous');
+            result.value.withChanges(changes);
+
+            expect(result.value.hasUnsavedChanges).toBe(false);
+        });
+
+        it('accumulates changes across multiple calls', async () => {
+            const result = await DicomInstance.open('/path/to/test.dcm');
+            expect(result.ok).toBe(true);
+            if (!result.ok) return;
+
+            const cs1 = ChangeSet.empty().setTag('(0010,0010)', 'Name');
+            const cs2 = ChangeSet.empty().setTag('(0010,0020)', 'ID');
+            const modified = result.value.withChanges(cs1).withChanges(cs2);
+
+            expect(modified.changes.modifications.size).toBe(2);
+        });
+    });
+
+    describe('withFilePath()', () => {
+        it('returns new instance with new path', async () => {
+            const result = await DicomInstance.open('/path/to/test.dcm');
+            expect(result.ok).toBe(true);
+            if (!result.ok) return;
+
+            const moved = result.value.withFilePath('/new/path.dcm');
+            expect(moved.filePath).toBe(normalize('/new/path.dcm'));
+        });
+
+        it('preserves dataset and changes', async () => {
+            const result = await DicomInstance.open('/path/to/test.dcm');
+            expect(result.ok).toBe(true);
+            if (!result.ok) return;
+
+            const modified = result.value.setTag('(0010,0010)', 'Test').withFilePath('/new/path.dcm');
+
+            expect(modified.dataset.patientName).toBe('Smith^John');
+            expect(modified.changes.modifications.get('(0010,0010)')).toBe('Test');
+        });
+
+        it('throws for invalid path', async () => {
+            const result = await DicomInstance.open('/path/to/test.dcm');
+            expect(result.ok).toBe(true);
+            if (!result.ok) return;
+
+            expect(() => result.value.withFilePath('')).toThrow();
         });
     });
 

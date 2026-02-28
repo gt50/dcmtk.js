@@ -16,7 +16,7 @@ Type-safe Node.js bindings for the [DCMTK](https://dicom.offis.de/dcmtk.php.en) 
 - **51 tool wrappers** — async functions for every DCMTK command-line binary (data conversion, network, image processing, structured reports, presentation state)
 - **6 server classes** — long-lived DICOM listeners with typed EventEmitter APIs and graceful shutdown
 - **PacsClient** — high-level PACS client with Echo, Query, Retrieve, and Store operations
-- **DICOM data layer** — immutable `DicomDataset`, explicit `ChangeSet` builder, and `DicomFile` I/O
+- **DICOM data layer** — immutable `DicomDataset`, explicit `ChangeSet` builder, and `DicomInstance` unified file I/O
 - **Result pattern** — all fallible operations return `Result<T>` instead of throwing
 - **Branded types** — `DicomTag`, `AETitle`, `Port`, and more prevent primitive-type mix-ups at compile time
 - **Full TypeScript** — strict mode, dual CJS/ESM build, complete `.d.ts` declarations
@@ -99,7 +99,7 @@ if (result.ok) {
 | [Getting Started](docs/GETTING_STARTED.md)   | Installation, DICOM glossary, tutorials, troubleshooting |
 | [Core Concepts](docs/core-concepts.md)       | Result pattern, branded types, timeouts, AbortSignal     |
 | [PACS Client](docs/pacs-client.md)           | High-level Echo, Query, Retrieve, Store API              |
-| [DICOM Data Layer](docs/dicom-data-layer.md) | DicomDataset, ChangeSet, DicomFile                       |
+| [DICOM Data Layer](docs/dicom-data-layer.md) | DicomDataset, ChangeSet, DicomInstance                   |
 | [Servers](docs/servers.md)                   | 6 long-lived server classes with typed events            |
 | [Utilities](docs/utilities.md)               | batch processing, retry with backoff                     |
 

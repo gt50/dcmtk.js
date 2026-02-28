@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { ChangeSet } from '../../../src/dicom/ChangeSet';
-import { DicomFile } from '../../../src/dicom/DicomFile';
+import { DicomInstance } from '../../../src/dicom/DicomInstance';
 import { dcm2json } from '../../../src/tools/dcm2json';
 import { dcmtkAvailable, SAMPLES, createTempDir, removeTempDir, copyDicomToTemp } from '../helpers';
 import type { DicomTagPath } from '../../../src/brands';
@@ -19,7 +19,7 @@ describe.skipIf(!dcmtkAvailable)('ChangeSet integration', () => {
     it('full workflow: build changeset, apply, verify', async () => {
         const filePath = await copyDicomToTemp(SAMPLES.MR_BRAIN, tempDir, 'cs-workflow.dcm');
 
-        const fileResult = await DicomFile.open(filePath);
+        const fileResult = await DicomInstance.open(filePath);
         expect(fileResult.ok).toBe(true);
         if (!fileResult.ok) return;
 
@@ -59,7 +59,7 @@ describe.skipIf(!dcmtkAvailable)('ChangeSet integration', () => {
     it('merge two changesets and apply', async () => {
         const filePath = await copyDicomToTemp(SAMPLES.MR_BRAIN, tempDir, 'cs-merge.dcm');
 
-        const fileResult = await DicomFile.open(filePath);
+        const fileResult = await DicomInstance.open(filePath);
         if (!fileResult.ok) return;
 
         const cs1 = ChangeSet.empty().setTag('(0010,0010)' as DicomTagPath, 'MergeA');
@@ -91,7 +91,7 @@ describe.skipIf(!dcmtkAvailable)('ChangeSet integration', () => {
     it('changeset with erasure removes tag from file', async () => {
         const filePath = await copyDicomToTemp(SAMPLES.MR_BRAIN, tempDir, 'cs-erase.dcm');
 
-        const fileResult = await DicomFile.open(filePath);
+        const fileResult = await DicomInstance.open(filePath);
         if (!fileResult.ok) return;
 
         const changeset = ChangeSet.empty()

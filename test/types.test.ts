@@ -35,7 +35,6 @@ import type {
     VRValue,
     DictionaryEntry,
     TagSegment,
-    DicomFileOptions,
     AssociationReceivedData,
     StoredFileData,
     DatabaseReadyData,
@@ -327,10 +326,6 @@ describe('DICOM data layer types', () => {
         expectTypeOf<ChangeSet>().toHaveProperty('setTag');
         expectTypeOf<ChangeSet>().toHaveProperty('eraseTag');
         expectTypeOf<ChangeSet>().toHaveProperty('isEmpty');
-    });
-
-    it('DicomFileOptions has expected shape', () => {
-        expectTypeOf<DicomFileOptions>().toHaveProperty('signal');
     });
 
     it('VRValue includes standard VRs', () => {

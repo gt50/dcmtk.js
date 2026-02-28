@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { join, resolve } from 'node:path';
-import { DicomFile } from '../../../src/dicom/DicomFile';
+import { DicomInstance } from '../../../src/dicom/DicomInstance';
 import { ChangeSet } from '../../../src/dicom/ChangeSet';
 import { Dcmrecv } from '../../../src/servers/Dcmrecv';
 import { storescu } from '../../../src/tools/storescu';
@@ -49,7 +49,7 @@ describe.skipIf(!dcmtkAvailable)('anonymize-and-send workflow', () => {
         const port = await getAvailablePort();
 
         // Open and anonymize
-        const fileResult = await DicomFile.open(uncompressedPath);
+        const fileResult = await DicomInstance.open(uncompressedPath);
         expect(fileResult.ok).toBe(true);
         if (!fileResult.ok) return;
 
@@ -117,7 +117,7 @@ describe.skipIf(!dcmtkAvailable)('anonymize-and-send workflow', () => {
         expect(decompResult.ok).toBe(true);
 
         // Open decompressed, modify, verify
-        const fileResult = await DicomFile.open(decompressedPath);
+        const fileResult = await DicomInstance.open(decompressedPath);
         expect(fileResult.ok).toBe(true);
         if (!fileResult.ok) return;
 
