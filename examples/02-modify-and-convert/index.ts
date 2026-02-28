@@ -13,7 +13,7 @@ import { tmpdir } from 'node:os';
 import { dcmodify, dcmconv, dcm2json, unwrap, DicomDataset, ChangeSet, DicomFile, createDicomTagPath } from '@ubercode/dcmtk';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
-const SAMPLE = resolve(__dirname, '../../dicomSamples/1010_brain_mr_12_jpg/IM-0001-0001.dcm');
+const SAMPLE = resolve(__dirname, '../../dicomSamples/other/0002d.DCM');
 
 async function main() {
     console.log('=== Example 02: Modify and Convert DICOM ===\n');

@@ -11,7 +11,12 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { xml2dsr, dsrdump, dsr2xml, unwrap } from '@ubercode/dcmtk';
 
-// Minimal Comprehensive SR XML template (DCMTK dsr2xml/xml2dsr format)
+// Minimal Comprehensive SR XML template (DCMTK dsr2xml/xml2dsr format).
+// Format follows the dsr2xml.xsd schema bundled with DCMTK:
+// - UIDs are XML attributes on study/series/instance elements
+// - Content date/time go inside <content>, not <document>
+// - Codes use <concept> with children: <value>, <scheme>, <meaning>
+// - Relationship types are child elements, not attributes
 const SR_XML = `<?xml version="1.0" encoding="UTF-8"?>
 <report type="Comprehensive SR">
   <sopclass uid="1.2.840.10008.5.1.4.1.1.88.33">Comprehensive SR</sopclass>
@@ -19,32 +24,44 @@ const SR_XML = `<?xml version="1.0" encoding="UTF-8"?>
   <modality>SR</modality>
   <manufacturer>dcmtk.js Example</manufacturer>
   <patient>
-    <name>DOE^JOHN</name>
     <id>EX-001</id>
+    <name>DOE^JOHN</name>
   </patient>
-  <study>
-    <uid>1.2.3.4.5</uid>
+  <study uid="1.2.3.4.5">
     <date>20260228</date>
   </study>
-  <series>
-    <uid>1.2.3.4.5.1</uid>
+  <series uid="1.2.3.4.5.1">
     <number>1</number>
   </series>
-  <instance>
-    <uid>1.2.3.4.5.1.1</uid>
+  <instance uid="1.2.3.4.5.1.1">
     <number>1</number>
   </instance>
   <document>
+    <completion flag="COMPLETE"/>
+    <verification flag="UNVERIFIED"/>
     <content>
-      <text relationship="contains" valtype="TEXT">
-        <conceptname>
-          <meaning>Finding</meaning>
-          <designator>DCM</designator>
-          <version>01</version>
-          <value>121071</value>
-        </conceptname>
-        <value>This is a sample structured report created by dcmtk.js.</value>
-      </text>
+      <date>20260228</date>
+      <time>120000</time>
+      <container flag="SEPARATE">
+        <concept>
+          <value>11528-7</value>
+          <scheme>
+            <designator>LN</designator>
+          </scheme>
+          <meaning>Radiology Report</meaning>
+        </concept>
+        <text>
+          <relationship>CONTAINS</relationship>
+          <concept>
+            <value>121071</value>
+            <scheme>
+              <designator>DCM</designator>
+            </scheme>
+            <meaning>Finding</meaning>
+          </concept>
+          <value>This is a sample structured report created by dcmtk.js.</value>
+        </text>
+      </container>
     </content>
   </document>
 </report>`;

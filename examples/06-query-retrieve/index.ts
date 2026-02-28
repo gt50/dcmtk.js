@@ -22,8 +22,8 @@ import { DcmQRSCP, StoreSCP, dcmqridx, dcm2json, findscu, getscu, movescu, unwra
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const SAMPLE = resolve(__dirname, '../../dicomSamples/other/0002d.DCM');
 
-const QR_AE = 'EXAMPLE_QR';
-const MOVE_AE = 'MOVE_DEST';
+const QR_AE = 'EXAMPLEQR';
+const MOVE_AE = 'MOVEDEST';
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 

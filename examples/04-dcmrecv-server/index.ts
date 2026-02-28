@@ -4,8 +4,8 @@
  * Demonstrates running a DICOM receiver (Dcmrecv) with typed event handling
  * and concurrent file sends via storescu and dcmsend.
  *
- * Dcmrecv is the simpler DICOM receiver — no config file needed,
- * good for basic C-STORE SCP use cases.
+ * Dcmrecv is the simpler DICOM receiver — good for basic C-STORE SCP
+ * use cases. A config file is needed to define accepted transfer syntaxes.
  *
  * Run: pnpm tsx examples/04-dcmrecv-server/index.ts
  */
@@ -18,6 +18,7 @@ import { Dcmrecv, echoscu, storescu, dcmsend, unwrap } from '@ubercode/dcmtk';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const SAMPLE = resolve(__dirname, '../../dicomSamples/other/0002d.DCM');
+const CONFIG_FILE = resolve(__dirname, '../../src/data/storescp.cfg');
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -49,7 +50,9 @@ async function main() {
     const createResult = Dcmrecv.create({
         port,
         outputDirectory: tempDir,
-        aeTitle: 'DCMRECV_DEMO',
+        aeTitle: 'DCMRECVDEMO',
+        configFile: CONFIG_FILE,
+        configProfile: 'Default',
     });
     if (!createResult.ok) {
         console.error(`Failed to create Dcmrecv: ${createResult.error.message}`);
@@ -86,7 +89,7 @@ async function main() {
         // 4. Verify connectivity with C-ECHO
         // -------------------------------------------------------------------
         console.log('--- C-ECHO verification ---');
-        const echoResult = await echoscu({ host: '127.0.0.1', port, timeoutMs: 10_000 });
+        const echoResult = await echoscu({ host: '127.0.0.1', port, calledAETitle: 'DCMRECVDEMO', timeoutMs: 10_000 });
         if (echoResult.ok) {
             console.log('  C-ECHO succeeded — server is reachable.\n');
         } else {
@@ -99,8 +102,8 @@ async function main() {
         console.log('--- Concurrent file sends ---');
         console.log('  Sending 1 file via storescu and 1 via dcmsend concurrently...');
         const [storescuResult, dcmsendResult] = await Promise.all([
-            storescu({ host: '127.0.0.1', port, files: [SAMPLE], timeoutMs: 30_000 }),
-            dcmsend({ host: '127.0.0.1', port, files: [SAMPLE], timeoutMs: 30_000 }),
+            storescu({ host: '127.0.0.1', port, calledAETitle: 'DCMRECVDEMO', files: [SAMPLE], timeoutMs: 30_000 }),
+            dcmsend({ host: '127.0.0.1', port, calledAETitle: 'DCMRECVDEMO', files: [SAMPLE], timeoutMs: 30_000 }),
         ]);
         console.log(`  storescu: ${storescuResult.ok ? 'success' : storescuResult.error.message}`);
         console.log(`  dcmsend:  ${dcmsendResult.ok ? 'success' : dcmsendResult.error.message}`);

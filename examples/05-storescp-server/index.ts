@@ -49,7 +49,7 @@ async function main() {
     const createResult = StoreSCP.create({
         port,
         outputDirectory: tempDir,
-        aeTitle: 'STORESCP_DEMO',
+        aeTitle: 'STORESCPDEMO',
     });
     if (!createResult.ok) {
         console.error(`Failed to create StoreSCP: ${createResult.error.message}`);
