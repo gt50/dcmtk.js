@@ -12,12 +12,12 @@ import type { DicomFilePath, DicomTag, DicomTagPath, SOPClassUID } from '../bran
 import { createDicomFilePath } from '../brands';
 import { DEFAULT_TIMEOUT_MS } from '../constants';
 import type { Result } from '../types';
-import { ok, err } from '../types';
+import { err, ok } from '../types';
 import { ChangeSet } from './ChangeSet';
 import { DicomDataset } from './DicomDataset';
-import { dcm2json } from '../tools/dcm2json';
-import { applyModifications, copyFileSafe, statFileSize, unlinkFile } from './_fileHelpers';
+import { dcm2json } from '../tools';
 import type { FileIOOptions } from './_fileHelpers';
+import { applyModifications, copyFileSafe, statFileSize, unlinkFile } from './_fileHelpers';
 
 // ---------------------------------------------------------------------------
 // DicomInstance class
@@ -41,15 +41,15 @@ import type { FileIOOptions } from './_fileHelpers';
  * ```
  */
 class DicomInstance {
-    private readonly ds: DicomDataset;
-    private readonly cs: ChangeSet;
-    private readonly fp: DicomFilePath | undefined;
+    private readonly dicomDataset: DicomDataset;
+    private readonly changeSet: ChangeSet;
+    private readonly filepath: DicomFilePath | undefined;
     private readonly meta: ReadonlyMap<string, unknown>;
 
     private constructor(dataset: DicomDataset, changes: ChangeSet, filePath: DicomFilePath | undefined, metadata: ReadonlyMap<string, unknown>) {
-        this.ds = dataset;
-        this.cs = changes;
-        this.fp = filePath;
+        this.dicomDataset = dataset;
+        this.changeSet = changes;
+        this.filepath = filePath;
         this.meta = metadata;
     }
 
@@ -103,72 +103,72 @@ class DicomInstance {
 
     /** The underlying immutable DICOM dataset. */
     get dataset(): DicomDataset {
-        return this.ds;
+        return this.dicomDataset;
     }
 
     /** The pending change set. */
     get changes(): ChangeSet {
-        return this.cs;
+        return this.changeSet;
     }
 
     /** Whether there are unsaved changes. */
     get hasUnsavedChanges(): boolean {
-        return !this.cs.isEmpty;
+        return !this.changeSet.isEmpty;
     }
 
     /** The file path, or undefined if this instance has no associated file. */
     get filePath(): string | undefined {
-        return this.fp;
+        return this.filepath;
     }
 
     /** Patient's Name (0010,0010). */
     get patientName(): string {
-        return this.ds.patientName;
+        return this.dicomDataset.patientName;
     }
 
     /** Patient ID (0010,0020). */
     get patientID(): string {
-        return this.ds.patientID;
+        return this.dicomDataset.patientID;
     }
 
     /** Study Date (0008,0020). */
     get studyDate(): string {
-        return this.ds.studyDate;
+        return this.dicomDataset.studyDate;
     }
 
     /** Modality (0008,0060). */
     get modality(): string {
-        return this.ds.modality;
+        return this.dicomDataset.modality;
     }
 
     /** Accession Number (0008,0050). */
     get accession(): string {
-        return this.ds.accession;
+        return this.dicomDataset.accession;
     }
 
     /** SOP Class UID (0008,0016). */
     get sopClassUID(): SOPClassUID | undefined {
-        return this.ds.sopClassUID;
+        return this.dicomDataset.sopClassUID;
     }
 
     /** Study Instance UID (0020,000D). */
     get studyInstanceUID(): string {
-        return this.ds.studyInstanceUID;
+        return this.dicomDataset.studyInstanceUID;
     }
 
     /** Series Instance UID (0020,000E). */
     get seriesInstanceUID(): string {
-        return this.ds.seriesInstanceUID;
+        return this.dicomDataset.seriesInstanceUID;
     }
 
     /** SOP Instance UID (0008,0018). */
     get sopInstanceUID(): string {
-        return this.ds.sopInstanceUID;
+        return this.dicomDataset.sopInstanceUID;
     }
 
     /** Transfer Syntax UID (0002,0010). */
     get transferSyntaxUID(): string {
-        return this.ds.transferSyntaxUID;
+        return this.dicomDataset.transferSyntaxUID;
     }
 
     /**
@@ -178,7 +178,7 @@ class DicomInstance {
      * @param fallback - Value to return if tag is missing (default: `''`)
      */
     getString(tag: DicomTag | string, fallback = ''): string {
-        return this.ds.getString(tag, fallback);
+        return this.dicomDataset.getString(tag, fallback);
     }
 
     /**
@@ -187,12 +187,12 @@ class DicomInstance {
      * @param tag - A DICOM tag, e.g. `'(0020,0013)'`
      */
     getNumber(tag: DicomTag | string): Result<number> {
-        return this.ds.getNumber(tag);
+        return this.dicomDataset.getNumber(tag);
     }
 
     /** Checks whether a tag exists in the dataset. */
     hasTag(tag: DicomTag | string): boolean {
-        return this.ds.hasTag(tag);
+        return this.dicomDataset.hasTag(tag);
     }
 
     /**
@@ -201,7 +201,7 @@ class DicomInstance {
      * @param path - A DicomTagPath with optional wildcard indices
      */
     findValues(path: DicomTagPath): ReadonlyArray<unknown> {
-        return this.ds.findValues(path);
+        return this.dicomDataset.findValues(path);
     }
 
     // -----------------------------------------------------------------------
@@ -215,7 +215,7 @@ class DicomInstance {
      * @param value - The new value
      */
     setTag(path: string, value: string): DicomInstance {
-        return new DicomInstance(this.ds, this.cs.setTag(path, value), this.fp, this.meta);
+        return new DicomInstance(this.dicomDataset, this.changeSet.setTag(path, value), this.filepath, this.meta);
     }
 
     /**
@@ -224,12 +224,12 @@ class DicomInstance {
      * @param path - The DICOM tag path to erase
      */
     eraseTag(path: string): DicomInstance {
-        return new DicomInstance(this.ds, this.cs.eraseTag(path), this.fp, this.meta);
+        return new DicomInstance(this.dicomDataset, this.changeSet.eraseTag(path), this.filepath, this.meta);
     }
 
     /** Erases all private tags, returning a new DicomInstance. */
     erasePrivateTags(): DicomInstance {
-        return new DicomInstance(this.ds, this.cs.erasePrivateTags(), this.fp, this.meta);
+        return new DicomInstance(this.dicomDataset, this.changeSet.erasePrivateTags(), this.filepath, this.meta);
     }
 
     /** Sets Patient's Name (0010,0010). */
@@ -282,7 +282,7 @@ class DicomInstance {
      * @param fn - Transform function receiving the current value
      */
     transformTag(path: string, fn: (current: string | undefined) => string): DicomInstance {
-        const current = this.ds.getString(path);
+        const current = this.dicomDataset.getString(path);
         const newValue = fn(current.length > 0 ? current : undefined);
         return this.setTag(path, newValue);
     }
@@ -293,7 +293,7 @@ class DicomInstance {
      * @param entries - A record of tag path → value pairs
      */
     setBatch(entries: Readonly<Record<string, string>>): DicomInstance {
-        return new DicomInstance(this.ds, this.cs.setBatch(entries), this.fp, this.meta);
+        return new DicomInstance(this.dicomDataset, this.changeSet.setBatch(entries), this.filepath, this.meta);
     }
 
     /**
@@ -303,7 +303,7 @@ class DicomInstance {
      * @returns A new DicomInstance with accumulated changes
      */
     withChanges(changes: ChangeSet): DicomInstance {
-        return new DicomInstance(this.ds, this.cs.merge(changes), this.fp, this.meta);
+        return new DicomInstance(this.dicomDataset, this.changeSet.merge(changes), this.filepath, this.meta);
     }
 
     /**
@@ -318,7 +318,7 @@ class DicomInstance {
     withFilePath(newPath: string): DicomInstance {
         const result = createDicomFilePath(newPath);
         if (!result.ok) throw result.error;
-        return new DicomInstance(this.ds, this.cs, result.value, this.meta);
+        return new DicomInstance(this.dicomDataset, this.changeSet, result.value, this.meta);
     }
 
     // -----------------------------------------------------------------------
@@ -333,9 +333,9 @@ class DicomInstance {
      * @param options - Timeout and abort options
      */
     async applyChanges(options?: FileIOOptions): Promise<Result<void>> {
-        if (this.fp === undefined) return err(new Error('No file path associated with this instance'));
-        if (this.cs.isEmpty) return ok(undefined);
-        return applyModifications(this.fp, this.cs, options ?? {});
+        if (this.filepath === undefined) return err(new Error('No file path associated with this instance'));
+        if (this.changeSet.isEmpty) return ok(undefined);
+        return applyModifications(this.filepath, this.changeSet, options ?? {});
     }
 
     /**
@@ -347,23 +347,23 @@ class DicomInstance {
      * @param options - Timeout and abort options
      */
     async writeAs(outputPath: string, options?: FileIOOptions): Promise<Result<DicomInstance>> {
-        if (this.fp === undefined) return err(new Error('No file path associated with this instance'));
+        if (this.filepath === undefined) return err(new Error('No file path associated with this instance'));
 
         const outPathResult = createDicomFilePath(outputPath);
         if (!outPathResult.ok) return err(outPathResult.error);
 
-        const copyResult = await copyFileSafe(this.fp, outputPath);
+        const copyResult = await copyFileSafe(this.filepath, outputPath);
         if (!copyResult.ok) return err(copyResult.error);
 
-        if (!this.cs.isEmpty) {
-            const applyResult = await applyModifications(outPathResult.value, this.cs, options ?? {});
+        if (!this.changeSet.isEmpty) {
+            const applyResult = await applyModifications(outPathResult.value, this.changeSet, options ?? {});
             if (!applyResult.ok) {
                 await unlinkFile(outputPath);
                 return err(applyResult.error);
             }
         }
 
-        return ok(new DicomInstance(this.ds, ChangeSet.empty(), outPathResult.value, this.meta));
+        return ok(new DicomInstance(this.dicomDataset, ChangeSet.empty(), outPathResult.value, this.meta));
     }
 
     /**
@@ -372,8 +372,8 @@ class DicomInstance {
      * @returns A Result containing the size or an error
      */
     async fileSize(): Promise<Result<number>> {
-        if (this.fp === undefined) return err(new Error('No file path associated with this instance'));
-        return statFileSize(this.fp);
+        if (this.filepath === undefined) return err(new Error('No file path associated with this instance'));
+        return statFileSize(this.filepath);
     }
 
     /**
@@ -382,8 +382,8 @@ class DicomInstance {
      * @returns A Result indicating success or failure
      */
     async unlink(): Promise<Result<void>> {
-        if (this.fp === undefined) return err(new Error('No file path associated with this instance'));
-        return unlinkFile(this.fp);
+        if (this.filepath === undefined) return err(new Error('No file path associated with this instance'));
+        return unlinkFile(this.filepath);
     }
 
     // -----------------------------------------------------------------------
@@ -402,7 +402,7 @@ class DicomInstance {
     withMetadata(key: string, value: unknown): DicomInstance {
         const newMeta = new Map(this.meta);
         newMeta.set(key, value);
-        return new DicomInstance(this.ds, this.cs, this.fp, newMeta);
+        return new DicomInstance(this.dicomDataset, this.changeSet, this.filepath, newMeta);
     }
 
     /**
