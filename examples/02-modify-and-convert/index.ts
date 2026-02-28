@@ -69,7 +69,9 @@ async function main() {
         console.log(`  Opened: ${file.filePath}`);
         console.log(`  Current Patient Name: ${file.dataset.patientName}`);
 
-        const changes = ChangeSet.empty().setTag(createDicomTagPath('(0010,0010)'), 'CHANGESET^DEMO').setTag(createDicomTagPath('(0010,0020)'), 'CS-99999');
+        const nameTag = unwrap(createDicomTagPath('(0010,0010)'));
+        const idTag = unwrap(createDicomTagPath('(0010,0020)'));
+        const changes = ChangeSet.empty().setTag(nameTag, 'CHANGESET^DEMO').setTag(idTag, 'CS-99999');
 
         const updated = file.withChanges(changes);
         await updated.applyChanges();
