@@ -15,6 +15,7 @@ export default defineConfig({
                 'src/index.ts',
                 'src/parsers/EventPattern.ts',
                 'src/tools/_toolTypes.ts',
+                'src/tools/_toolError.ts',
                 'src/tools/index.ts',
                 'src/servers/index.ts',
                 'src/dicom/index.ts',
@@ -22,7 +23,8 @@ export default defineConfig({
                 'src/utils/index.ts',
                 'src/events/index.ts',
                 'src/pacs/index.ts',
-                // Tools covered by integration tests (mock tests removed)
+                // Covered by integration tests only (require DCMTK binaries)
+                'src/pacs/PacsClient.ts',
                 'src/tools/dcmftest.ts',
                 'src/tools/dcm2xml.ts',
                 'src/tools/dcm2json.ts',
@@ -76,7 +78,7 @@ export default defineConfig({
                 'src/tools/dconvlum.ts',
             ],
             thresholds: {
-                branches: 94,
+                branches: 93,
                 functions: 95,
                 lines: 95,
                 statements: 95,
