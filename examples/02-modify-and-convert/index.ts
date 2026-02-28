@@ -72,6 +72,7 @@ async function main() {
         const nameTag = unwrap(createDicomTagPath('(0010,0010)'));
         const idTag = unwrap(createDicomTagPath('(0010,0020)'));
         const changes = ChangeSet.empty().setTag(nameTag, 'CHANGESET^DEMO').setTag(idTag, 'CS-99999');
+        console.log('  Created ChangeSet to update Patient Name and ID.', changes);
 
         const updated = file.withChanges(changes);
         await updated.applyChanges();

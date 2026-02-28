@@ -1,28 +1,33 @@
 /**
  * Example 05: StoreSCP Server
  *
- * Demonstrates running a Storage SCP (StoreSCP) with typed event handling,
- * concurrent file sends, and termscu protocol-level shutdown.
+ * Demonstrates running a Storage SCP (StoreSCP) with association tracking,
+ * concurrent multi-file sends from different senders, and termscu shutdown.
  *
  * StoreSCP is the advanced storage SCP with configurable filename
  * generation, subdirectory sorting, and more options than Dcmrecv.
  *
  * Run: pnpm tsx examples/05-storescp-server/index.ts
  */
-import { resolve, join } from 'node:path';
+import { resolve, join, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mkdtemp, rm, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { createServer } from 'node:net';
-import { StoreSCP, echoscu, storescu, dcmsend, termscu, unwrap } from '@ubercode/dcmtk';
+import { StoreSCP, echoscu, dcmsend, termscu, unwrap } from '@ubercode/dcmtk';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
-const SAMPLE = resolve(__dirname, '../../dicomSamples/other/0002d.DCM');
+const SAMPLES = resolve(__dirname, '../../dicomSamples/1010_brain_mr_12_jpg');
+const CONFIG_FILE = resolve(__dirname, '../../src/data/storescp.cfg');
 
-const sleep = ms => new Promise(r => setTimeout(r, ms));
+// Each sender transmits these files within a single DICOM association.
+const MODALITY_FILES = [resolve(SAMPLES, 'IM-0001-0001.dcm'), resolve(SAMPLES, 'IM-0001-0002.dcm')];
+const GATEWAY_FILES = [resolve(SAMPLES, 'IM-0001-0003.dcm'), resolve(SAMPLES, 'IM-0001-0004.dcm')];
+
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 /** Find an available TCP port by binding to port 0. */
-async function getAvailablePort() {
+async function getAvailablePort(): Promise<number> {
     return new Promise((resolvePort, reject) => {
         const srv = createServer();
         srv.listen(0, '127.0.0.1', () => {
@@ -39,17 +44,25 @@ async function getAvailablePort() {
     });
 }
 
+/** Tracks files received within a single DICOM association. */
+interface AssociationRecord {
+    label: string;
+    files: string[];
+}
+
 async function main() {
     console.log('=== Example 05: StoreSCP Server ===\n');
 
     const tempDir = await mkdtemp(join(tmpdir(), 'dcmtk-ex05-'));
     const port = await getAvailablePort();
 
-    // 1. Create StoreSCP server
+    // 1. Create StoreSCP server with config for compressed transfer syntaxes
     const createResult = StoreSCP.create({
         port,
         outputDirectory: tempDir,
         aeTitle: 'STORESCPDEMO',
+        configFile: CONFIG_FILE,
+        configProfile: 'Default',
     });
     if (!createResult.ok) {
         console.error(`Failed to create StoreSCP: ${createResult.error.message}`);
@@ -59,16 +72,34 @@ async function main() {
 
     try {
         // -------------------------------------------------------------------
-        // 2. Wire up typed event handlers
+        // 2. Association tracking
+        //
+        //    storescp logs "Association Received" / "Association Release" for
+        //    each association. We parse raw line output for boundaries and
+        //    use the typed STORING_FILE event for file tracking.
         // -------------------------------------------------------------------
-        server.onEvent('ASSOCIATION_RECEIVED', data => {
-            console.log(`  [event] Association received from: ${data.callingAETitle}`);
+        const associations: AssociationRecord[] = [];
+        let current: AssociationRecord | null = null;
+        let associationCount = 0;
+
+        // Parse raw line output for association boundaries
+        server.on('line', ({ text }: { text: string }) => {
+            if (/Association Received/i.test(text) && !current) {
+                associationCount++;
+                current = { label: `Association #${associationCount}`, files: [] };
+                console.log(`  [assoc] << ${current.label} started`);
+            }
+            if (/Association Release/i.test(text) && current) {
+                associations.push(current);
+                console.log(`  [assoc] >> ${current.label} released (${current.files.length} file(s))\n`);
+                current = null;
+            }
         });
+
+        // Typed event for file tracking — correlate with current association
         server.onEvent('STORING_FILE', data => {
-            console.log(`  [event] Storing file: ${data.filePath}`);
-        });
-        server.onEvent('ASSOCIATION_RELEASE', () => {
-            console.log('  [event] Association released');
+            if (current) current.files.push(basename(data.filePath));
+            console.log(`  [file]  Storing: ${basename(data.filePath)}`);
         });
 
         // -------------------------------------------------------------------
@@ -84,54 +115,69 @@ async function main() {
         // -------------------------------------------------------------------
         console.log('--- C-ECHO verification ---');
         const echoResult = await echoscu({ host: '127.0.0.1', port, timeoutMs: 10_000 });
-        if (echoResult.ok) {
-            console.log('  C-ECHO succeeded.\n');
-        } else {
-            console.log(`  C-ECHO failed: ${echoResult.error.message}\n`);
-        }
+        console.log(`  ${echoResult.ok ? 'C-ECHO succeeded' : `Failed: ${echoResult.error.message}`}\n`);
 
         // -------------------------------------------------------------------
-        // 5. Concurrent sends — storescu and dcmsend simultaneously
+        // 5. Concurrent sends — two senders transmit simultaneously.
+        //    StoreSCP handles one association at a time, so they queue up.
+        //    From the caller's perspective both are in-flight concurrently.
         // -------------------------------------------------------------------
-        console.log('--- Concurrent file sends ---');
-        console.log('  Sending via storescu and dcmsend concurrently...');
-        const [storescuResult, dcmsendResult] = await Promise.all([
-            storescu({ host: '127.0.0.1', port, files: [SAMPLE], timeoutMs: 30_000 }),
-            dcmsend({ host: '127.0.0.1', port, files: [SAMPLE], timeoutMs: 30_000 }),
+        console.log('--- Concurrent sends: MODALITY + GATEWAY (2 files each) ---');
+        const [r1, r2] = await Promise.all([
+            dcmsend({
+                host: '127.0.0.1',
+                port,
+                callingAETitle: 'MODALITY',
+                files: MODALITY_FILES,
+                timeoutMs: 30_000,
+            }),
+            dcmsend({
+                host: '127.0.0.1',
+                port,
+                callingAETitle: 'GATEWAY',
+                files: GATEWAY_FILES,
+                timeoutMs: 30_000,
+            }),
         ]);
-        console.log(`  storescu: ${storescuResult.ok ? 'success' : storescuResult.error.message}`);
-        console.log(`  dcmsend:  ${dcmsendResult.ok ? 'success' : dcmsendResult.error.message}`);
+        console.log(`  dcmsend (MODALITY): ${r1.ok ? 'success' : r1.error.message}`);
+        console.log(`  dcmsend (GATEWAY):  ${r2.ok ? 'success' : r2.error.message}`);
+        await sleep(1000);
 
         // -------------------------------------------------------------------
-        // 6. List received files
+        // 6. Association summary
         // -------------------------------------------------------------------
-        await sleep(2000);
-        const files = await readdir(tempDir);
-        console.log(`\n--- Received files (${files.length}) ---`);
-        for (const f of files) {
-            console.log(`  ${f}`);
+        console.log('--- Association Summary ---');
+        for (const assoc of associations) {
+            if (assoc.files.length === 0) continue;
+            console.log(`  ${assoc.label}: ${assoc.files.length} file(s)`);
+            for (const f of assoc.files) {
+                console.log(`       ${f}`);
+            }
         }
 
+        const allFiles = await readdir(tempDir);
+        console.log(`\n  Total files on disk: ${allFiles.length}`);
+
         // -------------------------------------------------------------------
-        // 7. Compare with Dcmrecv
+        // 7. StoreSCP vs Dcmrecv
         // -------------------------------------------------------------------
         console.log('\n--- StoreSCP vs Dcmrecv ---');
-        console.log('  StoreSCP advantages over Dcmrecv:');
+        console.log('  StoreSCP advantages:');
         console.log('  - Configurable filename generation patterns');
         console.log('  - Subdirectory sorting by patient/study/series');
         console.log('  - Config file support for transfer syntax profiles');
         console.log('  - termscu protocol-level shutdown support');
 
         // -------------------------------------------------------------------
-        // 8. Attempt termscu — DICOM protocol-level shutdown
+        // 8. termscu — DICOM protocol-level shutdown
         // -------------------------------------------------------------------
         console.log('\n--- termscu: protocol-level shutdown ---');
         const termResult = await termscu({ host: '127.0.0.1', port, timeoutMs: 5_000 });
         if (termResult.ok) {
-            console.log('  Server terminated via termscu protocol message.');
+            console.log('  Server terminated via termscu.');
             await sleep(1000);
         } else {
-            console.log('  termscu not supported in this configuration, using server.stop().');
+            console.log('  termscu not supported in this config, using server.stop().');
             await server.stop();
         }
 

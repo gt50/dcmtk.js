@@ -25,10 +25,10 @@ const SAMPLE = resolve(__dirname, '../../dicomSamples/other/0002d.DCM');
 const QR_AE = 'EXAMPLEQR';
 const MOVE_AE = 'MOVEDEST';
 
-const sleep = ms => new Promise(r => setTimeout(r, ms));
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 /** Find an available TCP port by binding to port 0. */
-async function getAvailablePort() {
+async function getAvailablePort(): Promise<number> {
     return new Promise((resolvePort, reject) => {
         const srv = createServer();
         srv.listen(0, '127.0.0.1', () => {
@@ -46,7 +46,14 @@ async function getAvailablePort() {
 }
 
 /** Generate a minimal dcmqrscp.cfg configuration file. */
-function generateQRConfig(options) {
+interface QRConfigOptions {
+    port: number;
+    aeTitle: string;
+    storageArea: string;
+    moveDestinations?: Array<{ name: string; aeTitle: string; host: string; port: number }>;
+}
+
+function generateQRConfig(options: QRConfigOptions): string {
     const hostEntries = (options.moveDestinations ?? []).map(d => `${d.name} = (${d.aeTitle}, ${d.host}, ${d.port})`).join('\n');
 
     return [
@@ -86,8 +93,8 @@ async function main() {
     const qrPort = await getAvailablePort();
     const movePort = await getAvailablePort();
 
-    let qrServer;
-    let moveScp;
+    let qrServer: DcmQRSCP | undefined;
+    let moveScp: StoreSCP | undefined;
 
     try {
         console.log('--- Setting up mini PACS environment ---');

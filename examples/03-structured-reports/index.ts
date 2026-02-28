@@ -9,7 +9,7 @@
 import { join } from 'node:path';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { xml2dsr, dsrdump, dsr2xml, unwrap } from '@ubercode/dcmtk';
+import { xml2dsr, dsrdump, dsr2xml } from '@ubercode/dcmtk';
 
 // Minimal Comprehensive SR XML template (DCMTK dsr2xml/xml2dsr format).
 // Format follows the dsr2xml.xsd schema bundled with DCMTK:
