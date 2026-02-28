@@ -1,5 +1,7 @@
 # @ubercode/dcmtk
 
+> **ALPHA PREVIEW RELEASE** — This library has not been thoroughly tested by humans. Use in production at your own risk.
+
 [![npm version](https://img.shields.io/npm/v/@ubercode/dcmtk.svg)](https://www.npmjs.com/package/@ubercode/dcmtk)
 [![npm downloads](https://img.shields.io/npm/dm/@ubercode/dcmtk.svg)](https://www.npmjs.com/package/@ubercode/dcmtk)
 [![CI](https://github.com/MichaelLeeHobbs/dcmtk.js/actions/workflows/ci.yml/badge.svg)](https://github.com/MichaelLeeHobbs/dcmtk.js/actions/workflows/ci.yml)
