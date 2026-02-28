@@ -37,6 +37,8 @@ interface DcmodifyOptions extends ToolBaseOptions {
     readonly noBackup?: boolean | undefined;
     /** Insert tag if it doesn't exist (uses -i flag). Defaults to false. */
     readonly insertIfMissing?: boolean | undefined;
+    /** Treat 'tag not found' as success when erasing (uses -imt flag). Defaults to false. */
+    readonly ignoreMissingTags?: boolean | undefined;
 }
 
 /** Result of a successful dcmodify operation. */
@@ -62,6 +64,7 @@ const DcmodifyOptionsSchema = z
         erasePrivateTags: z.boolean().optional(),
         noBackup: z.boolean().optional(),
         insertIfMissing: z.boolean().optional(),
+        ignoreMissingTags: z.boolean().optional(),
     })
     .strict()
     .refine(data => data.modifications.length > 0 || (data.erasures !== undefined && data.erasures.length > 0) || data.erasePrivateTags === true, {
@@ -76,6 +79,10 @@ function buildArgs(inputPath: string, options: DcmodifyOptions): string[] {
 
     if (options.noBackup !== false) {
         args.push('-nb');
+    }
+
+    if (options.ignoreMissingTags === true) {
+        args.push('-imt');
     }
 
     const flag = options.insertIfMissing === true ? '-i' : '-m';

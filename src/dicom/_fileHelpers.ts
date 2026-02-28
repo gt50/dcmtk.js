@@ -28,11 +28,14 @@ async function applyModifications(filePath: DicomFilePath, changeset: ChangeSet,
     const modifications = changeset.toModifications();
     const erasures = changeset.toErasureArgs();
 
+    const hasErasures = erasures.length > 0 || changeset.erasePrivate;
+
     const result = await dcmodify(filePath, {
         modifications: modifications.length > 0 ? modifications : undefined,
         erasures: erasures.length > 0 ? erasures : undefined,
         erasePrivateTags: changeset.erasePrivate || undefined,
         insertIfMissing: true,
+        ignoreMissingTags: hasErasures || undefined,
         timeoutMs: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
         signal: options.signal,
     });
