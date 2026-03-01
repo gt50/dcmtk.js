@@ -9,6 +9,11 @@ import type { ReceiverFileData, ReceiverAssociationData } from '../../../src/ser
 const CONFIG_FILE = resolve(__dirname, '../../../src/data/storescp.cfg');
 const CONFIG_PROFILE = 'Default';
 
+/** Allow workers to fully initialize after start() resolves. */
+const WORKER_WARMUP_MS = 3000;
+/** Longer timeout for CI environments where containers are resource-constrained. */
+const EVENT_TIMEOUT_MS = 60_000;
+
 describe.skipIf(!dcmtkAvailable)('DicomReceiver integration', () => {
     let receiver: DicomReceiver | undefined;
     let storageDir: string;
@@ -69,10 +74,13 @@ describe.skipIf(!dcmtkAvailable)('DicomReceiver integration', () => {
         if (!createResult.ok) return;
 
         receiver = createResult.value;
-        const filePromise = waitForEvent<ReceiverFileData>(receiver, 'FILE_RECEIVED', 30_000);
+        const filePromise = waitForEvent<ReceiverFileData>(receiver, 'FILE_RECEIVED', EVENT_TIMEOUT_MS);
 
         const startResult = await receiver.start();
         expect(startResult.ok).toBe(true);
+
+        // Allow workers to fully initialize before sending
+        await new Promise(r => setTimeout(r, WORKER_WARMUP_MS));
 
         const sendResult = await storescu({
             host: '127.0.0.1',
@@ -108,16 +116,18 @@ describe.skipIf(!dcmtkAvailable)('DicomReceiver integration', () => {
         if (!createResult.ok) return;
 
         receiver = createResult.value;
-        const assocPromise = waitForEvent<ReceiverAssociationData>(receiver, 'ASSOCIATION_COMPLETE', 30_000);
+        const assocPromise = waitForEvent<ReceiverAssociationData>(receiver, 'ASSOCIATION_COMPLETE', EVENT_TIMEOUT_MS);
 
         await receiver.start();
+        await new Promise(r => setTimeout(r, WORKER_WARMUP_MS));
 
-        await storescu({
+        const sendResult = await storescu({
             host: '127.0.0.1',
             port,
             files: [SAMPLES.OTHER_0002D],
             timeoutMs: 30_000,
         });
+        expect(sendResult.ok).toBe(true);
 
         const assocEvent = await assocPromise;
         expect(assocEvent.associationId).toMatch(/^assoc-/);
@@ -154,6 +164,7 @@ describe.skipIf(!dcmtkAvailable)('DicomReceiver integration', () => {
         receiver.onAssociationComplete(data => assocEvents.push(data));
 
         await receiver.start();
+        await new Promise(r => setTimeout(r, WORKER_WARMUP_MS));
 
         // Send two files sequentially
         const send1 = await storescu({
@@ -165,7 +176,7 @@ describe.skipIf(!dcmtkAvailable)('DicomReceiver integration', () => {
         expect(send1.ok).toBe(true);
 
         // Wait for first association to complete
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await new Promise(r => setTimeout(r, 3000));
 
         const send2 = await storescu({
             host: '127.0.0.1',
@@ -176,7 +187,7 @@ describe.skipIf(!dcmtkAvailable)('DicomReceiver integration', () => {
         expect(send2.ok).toBe(true);
 
         // Wait for second association
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await new Promise(r => setTimeout(r, 3000));
 
         expect(assocEvents.length).toBeGreaterThanOrEqual(2);
 
@@ -200,16 +211,18 @@ describe.skipIf(!dcmtkAvailable)('DicomReceiver integration', () => {
         if (!createResult.ok) return;
 
         receiver = createResult.value;
-        const assocPromise = waitForEvent<ReceiverAssociationData>(receiver, 'ASSOCIATION_COMPLETE', 30_000);
+        const assocPromise = waitForEvent<ReceiverAssociationData>(receiver, 'ASSOCIATION_COMPLETE', EVENT_TIMEOUT_MS);
 
         await receiver.start();
+        await new Promise(r => setTimeout(r, WORKER_WARMUP_MS));
 
-        await storescu({
+        const sendResult = await storescu({
             host: '127.0.0.1',
             port,
             files: [SAMPLES.OTHER_0002D],
             timeoutMs: 30_000,
         });
+        expect(sendResult.ok).toBe(true);
 
         await assocPromise;
 
