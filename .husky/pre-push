@@ -1,2 +1,3 @@
+#!/bin/sh
 pnpm run typecheck
 pnpm run test
