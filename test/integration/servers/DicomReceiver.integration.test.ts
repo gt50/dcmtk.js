@@ -87,6 +87,10 @@ describe.skipIf(!dcmtkAvailable)('DicomReceiver integration', () => {
         expect(fileEvent.filePath.length).toBeGreaterThan(0);
         expect(fileEvent.associationId).toMatch(/^assoc-/);
         expect(fileEvent.associationDir).toContain(fileEvent.associationId);
+
+        // Verify DicomInstance is populated with valid DICOM data
+        expect(fileEvent.instance).toBeDefined();
+        expect(fileEvent.instance.sopInstanceUID.length).toBeGreaterThan(0);
     });
 
     it('receives files and emits ASSOCIATION_COMPLETE', async () => {
@@ -120,6 +124,11 @@ describe.skipIf(!dcmtkAvailable)('DicomReceiver integration', () => {
         expect(assocEvent.files.length).toBeGreaterThanOrEqual(1);
         expect(assocEvent.endReason).toBe('release');
         expect(assocEvent.durationMs).toBeGreaterThanOrEqual(0);
+
+        // Verify transfer stats
+        expect(assocEvent.totalBytes).toBeGreaterThan(0);
+        expect(assocEvent.bytesPerSecond).toBeGreaterThan(0);
+        expect(assocEvent.endAt).toBeGreaterThanOrEqual(assocEvent.startAt);
 
         // Verify association directory was created with files
         const dirEntries = await readdir(assocEvent.associationDir);

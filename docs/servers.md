@@ -111,10 +111,11 @@ Remote SCU ──TCP──► DicomReceiver (:4242)
 
 ### Events
 
-| Event                  | Data                                                                                           | Description                                     |
-| ---------------------- | ---------------------------------------------------------------------------------------------- | ----------------------------------------------- |
-| `FILE_RECEIVED`        | `{ filePath, associationId, associationDir, callingAE, calledAE, source }`                     | File moved to association dir                   |
-| `ASSOCIATION_COMPLETE` | `{ associationId, associationDir, callingAE, calledAE, source, files, durationMs, endReason }` | Association ended; worker returned to idle pool |
+| Event                  | Data                                                                                                                                       | Description                                                           |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------- |
+| `FILE_RECEIVED`        | `{ filePath, associationId, associationDir, callingAE, calledAE, source, instance }`                                                       | File moved to association dir; `instance` is a parsed `DicomInstance` |
+| `ASSOCIATION_COMPLETE` | `{ associationId, associationDir, callingAE, calledAE, source, files, durationMs, endReason, totalBytes, bytesPerSecond, startAt, endAt }` | Association ended; includes transfer stats                            |
+| `error`                | `{ error, filePath?, associationId?, associationDir?, callingAE?, calledAE?, source? }`                                                    | Error with optional file/association context                          |
 
 ### Worker Lifecycle
 
@@ -153,11 +154,12 @@ if (!result.ok) {
 const receiver = result.value;
 
 receiver.onFileReceived(data => {
-    console.log(`File: ${data.filePath} (assoc: ${data.associationId})`);
+    console.log(`File: ${data.filePath} (patient: ${data.instance.patientName})`);
 });
 
 receiver.onAssociationComplete(data => {
-    console.log(`Done: ${data.files.length} files in ${data.associationDir}`);
+    const mbPerSec = data.bytesPerSecond > 0 ? (data.bytesPerSecond / 1_048_576).toFixed(1) : '0';
+    console.log(`Done: ${data.files.length} files, ${data.totalBytes} bytes, ${mbPerSec} MB/s`);
 });
 
 await receiver.start();

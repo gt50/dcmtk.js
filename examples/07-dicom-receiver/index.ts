@@ -76,11 +76,12 @@ async function main() {
     try {
         // 2. Wire events
         receiver.onFileReceived(data => {
-            console.log(`  [file]  ${basename(data.filePath)} → ${data.associationDir} (from "${data.callingAE}")`);
+            console.log(`  [file]  ${basename(data.filePath)} → ${data.associationDir} (patient: "${data.instance.patientName}")`);
         });
 
         receiver.onAssociationComplete(data => {
-            console.log(`  [assoc] ${data.associationId} complete: ${data.files.length} file(s), ${data.durationMs}ms, reason=${data.endReason}`);
+            const mbPerSec = data.bytesPerSecond > 0 ? (data.bytesPerSecond / 1_048_576).toFixed(1) : '0';
+            console.log(`  [assoc] ${data.associationId}: ${data.files.length} file(s), ${data.totalBytes} bytes, ${mbPerSec} MB/s, ${data.durationMs}ms`);
         });
 
         // 3. Start

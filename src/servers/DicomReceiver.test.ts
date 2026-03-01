@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'node:events';
 import { DicomReceiver } from './DicomReceiver';
-import type { ReceiverFileData, ReceiverAssociationData } from './DicomReceiver';
+import type { ReceiverFileData, ReceiverAssociationData, ReceiverErrorData } from './DicomReceiver';
 
 // ---------------------------------------------------------------------------
 // Mock Dcmrecv — a fake that emits events like the real one
@@ -108,6 +108,20 @@ vi.mock('node:net', () => ({
     }),
 }));
 
+// Mock DicomInstance — vi.hoisted ensures the variable is available to the hoisted vi.mock factory
+const { mockDicomInstance, mockOpen } = vi.hoisted(() => {
+    const inst = { patientName: 'DOE^JOHN', sopInstanceUID: '1.2.3.4.5', filePath: '/data/file.dcm' };
+    type OpenResult = { ok: true; value: typeof inst } | { ok: false; error: Error };
+    return {
+        mockDicomInstance: inst,
+        mockOpen: vi.fn((): Promise<OpenResult> => Promise.resolve({ ok: true, value: inst })),
+    };
+});
+
+vi.mock('../dicom/DicomInstance', () => ({
+    DicomInstance: { open: mockOpen },
+}));
+
 // Mock fs/promises
 vi.mock('node:fs/promises', () => ({
     mkdir: vi.fn(() => Promise.resolve(undefined)),
@@ -115,6 +129,7 @@ vi.mock('node:fs/promises', () => ({
     copyFile: vi.fn(() => Promise.resolve(undefined)),
     unlink: vi.fn(() => Promise.resolve(undefined)),
     rm: vi.fn(() => Promise.resolve(undefined)),
+    stat: vi.fn(() => Promise.resolve({ size: 524288 })),
 }));
 
 // Mock os.tmpdir
@@ -430,6 +445,7 @@ describe('DicomReceiver', () => {
             expect(fileEvents).toHaveLength(1);
             expect(fileEvents[0]?.associationId).toBe('assoc-1');
             expect(fileEvents[0]?.callingAE).toBe('SCU1');
+            expect(fileEvents[0]?.instance).toBe(mockDicomInstance);
 
             await receiver.stop();
         });
@@ -473,8 +489,12 @@ describe('DicomReceiver', () => {
             await delay(50);
 
             expect(assocEvents).toHaveLength(1);
-            expect(assocEvents[0]?.endReason).toBe('release');
-            expect(assocEvents[0]?.durationMs).toBe(1234);
+            const evt = assocEvents[0];
+            expect(evt).toMatchObject({ endReason: 'release', durationMs: 1234 });
+            expect(evt?.totalBytes).toBeTypeOf('number');
+            expect(evt?.bytesPerSecond).toBeTypeOf('number');
+            expect(evt?.startAt).toBeTypeOf('number');
+            expect(evt?.endAt).toBeTypeOf('number');
             expect(receiver.poolStatus.idle).toBe(1);
             expect(receiver.poolStatus.busy).toBe(0);
 
@@ -517,6 +537,89 @@ describe('DicomReceiver', () => {
 
             expect(assocEvents).toHaveLength(1);
             expect(assocEvents[0]?.endReason).toBe('abort');
+
+            await receiver.stop();
+        });
+
+        it('emits error (not FILE_RECEIVED) when DicomInstance.open fails', async () => {
+            mockOpen.mockResolvedValueOnce({ ok: false, error: new Error('Failed to parse DICOM') });
+
+            const result = DicomReceiver.create({ port: 4242, storageDir: '/data', minPoolSize: 1, maxPoolSize: 1 });
+            if (!result.ok) return;
+
+            const receiver = result.value;
+            const fileEvents: ReceiverFileData[] = [];
+            const errorEvents: ReceiverErrorData[] = [];
+            receiver.onFileReceived(data => fileEvents.push(data));
+            receiver.onEvent('error', data => errorEvents.push(data));
+
+            await receiver.start();
+            const worker = createdFakes[0];
+            if (worker === undefined) return;
+
+            if (connectionHandler !== undefined) {
+                connectionHandler(createMockSocket());
+                await delay(50);
+            }
+
+            worker.emit('FILE_RECEIVED', {
+                filePath: '/tmp/dcmrecv-pool-50001-1234/bad.dcm',
+                associationId: 'assoc-1',
+                callingAE: 'SCU1',
+                calledAE: 'DCMRECV',
+                source: '192.168.1.1:5000',
+            });
+            await delay(50);
+
+            expect(fileEvents).toHaveLength(0);
+            const fileError = errorEvents.find(e => e.filePath !== undefined);
+            expect(fileError).toBeDefined();
+            expect(fileError?.error.message).toBe('Failed to parse DICOM');
+            expect(fileError?.associationId).toBe('assoc-1');
+
+            await receiver.stop();
+        });
+
+        it('emits zero totalBytes for zero-file association', async () => {
+            const result = DicomReceiver.create({
+                port: 4242,
+                storageDir: '/data',
+                minPoolSize: 1,
+                maxPoolSize: 1,
+            });
+            if (!result.ok) return;
+
+            const receiver = result.value;
+            const assocEvents: ReceiverAssociationData[] = [];
+            receiver.onAssociationComplete(data => assocEvents.push(data));
+
+            await receiver.start();
+            const worker = createdFakes[0];
+            if (worker === undefined) return;
+
+            if (connectionHandler !== undefined) {
+                connectionHandler(createMockSocket());
+                await delay(50);
+            }
+
+            // Complete association without sending any files
+            worker.emit('ASSOCIATION_COMPLETE', {
+                associationId: 'assoc-internal-1',
+                callingAE: 'SCU1',
+                calledAE: 'DCMRECV',
+                source: '192.168.1.1:5000',
+                files: [],
+                durationMs: 100,
+                endReason: 'release',
+            });
+
+            await delay(50);
+
+            expect(assocEvents).toHaveLength(1);
+            expect(assocEvents[0]?.totalBytes).toBe(0);
+            expect(assocEvents[0]?.bytesPerSecond).toBe(0);
+            expect(assocEvents[0]?.startAt).toBeTypeOf('number');
+            expect(assocEvents[0]?.endAt).toBeTypeOf('number');
 
             await receiver.stop();
         });

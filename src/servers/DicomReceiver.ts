@@ -21,6 +21,7 @@ import { isSafePath, isValidAETitle } from '../patterns';
 import { createValidationError } from '../tools/_toolError';
 import { Dcmrecv } from './Dcmrecv';
 import type { AssociationCompleteData } from '../events/dcmrecv';
+import { DicomInstance } from '../dicom/DicomInstance';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -44,6 +45,7 @@ interface ReceiverFileData {
     readonly callingAE: string;
     readonly calledAE: string;
     readonly source: string;
+    readonly instance: DicomInstance;
 }
 
 /** Data emitted with ASSOCIATION_COMPLETE events. */
@@ -56,13 +58,28 @@ interface ReceiverAssociationData {
     readonly files: readonly string[];
     readonly durationMs: number;
     readonly endReason: 'release' | 'abort';
+    readonly totalBytes: number;
+    readonly bytesPerSecond: number;
+    readonly startAt: number;
+    readonly endAt: number;
+}
+
+/** Data emitted with error events. */
+interface ReceiverErrorData {
+    readonly error: Error;
+    readonly filePath?: string;
+    readonly associationId?: string;
+    readonly associationDir?: string;
+    readonly callingAE?: string;
+    readonly calledAE?: string;
+    readonly source?: string;
 }
 
 /** Typed event map for DicomReceiver. */
 interface DicomReceiverEventMap {
     FILE_RECEIVED: [ReceiverFileData];
     ASSOCIATION_COMPLETE: [ReceiverAssociationData];
-    error: [{ error: Error }];
+    error: [ReceiverErrorData];
 }
 
 /** Options for creating a DicomReceiver instance. */
@@ -121,6 +138,10 @@ interface WorkerInfo {
     associationDir: string | undefined;
     /** Files moved to the association dir during the current association. */
     files: string[];
+    /** Byte sizes parallel to files[], for transfer stats. */
+    fileSizes: number[];
+    /** Timestamp when the TCP connection was routed to this worker. */
+    startAt: number | undefined;
     remoteSocket: net.Socket | undefined;
     workerSocket: net.Socket | undefined;
 }
@@ -377,6 +398,8 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
         worker.associationId = associationId;
         worker.associationDir = associationDir;
         worker.files = [];
+        worker.fileSizes = [];
+        worker.startAt = Date.now();
 
         this.pipeConnection(worker, remoteSocket);
         void this.replenishPool();
@@ -476,6 +499,8 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
             associationId: undefined,
             associationDir: undefined,
             files: [],
+            fileSizes: [],
+            startAt: undefined,
             remoteSocket: undefined,
             workerSocket: undefined,
         };
@@ -552,27 +577,48 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
         this.wireAssociationComplete(worker);
     }
 
-    /** Moves received files from temp dir to association dir and re-emits. */
+    /** Wires FILE_RECEIVED from dcmrecv worker to handleFileReceived. */
     private wireFileReceived(worker: WorkerInfo): void {
         worker.dcmrecv.onFileReceived(data => {
-            if (worker.associationDir === undefined || worker.associationId === undefined) return;
-            const srcPath = data.filePath;
-            const destPath = path.join(worker.associationDir, path.basename(srcPath));
-            const assocId = worker.associationId;
-            const assocDir = worker.associationDir;
+            void this.handleFileReceived(worker, data);
+        });
+    }
 
-            void moveFile(srcPath, destPath).then(moveResult => {
-                const finalPath = moveResult.ok ? destPath : srcPath;
-                worker.files.push(finalPath);
-                this.emit('FILE_RECEIVED', {
-                    filePath: finalPath,
-                    associationId: assocId,
-                    associationDir: assocDir,
-                    callingAE: data.callingAE,
-                    calledAE: data.calledAE,
-                    source: data.source,
-                });
+    /** Moves a received file, opens it as DicomInstance, and emits FILE_RECEIVED. */
+    private async handleFileReceived(worker: WorkerInfo, data: { filePath: string; callingAE: string; calledAE: string; source: string }): Promise<void> {
+        if (worker.associationDir === undefined || worker.associationId === undefined) return;
+        const srcPath = data.filePath;
+        const destPath = path.join(worker.associationDir, path.basename(srcPath));
+        const assocId = worker.associationId;
+        const assocDir = worker.associationDir;
+
+        const moveResult = await moveFile(srcPath, destPath);
+        const finalPath = moveResult.ok ? destPath : srcPath;
+        worker.files.push(finalPath);
+        worker.fileSizes.push(await statFileSafe(finalPath));
+
+        const openResult = await DicomInstance.open(finalPath);
+        if (!openResult.ok) {
+            this.emit('error', {
+                error: openResult.error,
+                filePath: finalPath,
+                associationId: assocId,
+                associationDir: assocDir,
+                callingAE: data.callingAE,
+                calledAE: data.calledAE,
+                source: data.source,
             });
+            return;
+        }
+
+        this.emit('FILE_RECEIVED', {
+            filePath: finalPath,
+            associationId: assocId,
+            associationDir: assocDir,
+            callingAE: data.callingAE,
+            calledAE: data.calledAE,
+            source: data.source,
+            instance: openResult.value,
         });
     }
 
@@ -583,6 +629,12 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
             const assocDir = worker.associationDir ?? '';
             const files = [...worker.files];
 
+            const endAt = Date.now();
+            const startAt = worker.startAt ?? endAt;
+            const totalBytes = sumArray(worker.fileSizes);
+            const elapsedMs = endAt - startAt;
+            const bytesPerSecond = elapsedMs > 0 ? Math.round((totalBytes / elapsedMs) * 1000) : 0;
+
             this.emit('ASSOCIATION_COMPLETE', {
                 associationId: assocId,
                 associationDir: assocDir,
@@ -592,12 +644,18 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
                 files,
                 durationMs: data.durationMs,
                 endReason: data.endReason,
+                totalBytes,
+                bytesPerSecond,
+                startAt,
+                endAt,
             });
 
             worker.state = 'idle';
             worker.associationId = undefined;
             worker.associationDir = undefined;
             worker.files = [];
+            worker.fileSizes = [];
+            worker.startAt = undefined;
             worker.remoteSocket = undefined;
             worker.workerSocket = undefined;
 
@@ -655,6 +713,26 @@ async function moveFile(src: string, dest: string): Promise<Result<void>> {
     }
 }
 
+/** Returns the file size in bytes, or 0 on error. */
+async function statFileSafe(filePath: string): Promise<number> {
+    try {
+        const stat = await fs.stat(filePath);
+        return stat.size;
+    } catch {
+        /* v8 ignore next */
+        return 0;
+    }
+}
+
+/** Sums an array of numbers iteratively. */
+function sumArray(arr: readonly number[]): number {
+    let total = 0;
+    for (let i = 0; i < arr.length; i++) {
+        total += arr[i] ?? 0;
+    }
+    return total;
+}
+
 /** Removes a directory recursively, ignoring errors. */
 async function removeDirSafe(dirPath: string): Promise<void> {
     try {
@@ -672,4 +750,4 @@ function delay(ms: number): Promise<void> {
 }
 
 export { DicomReceiver };
-export type { DicomReceiverOptions, DicomReceiverEventMap, ReceiverFileData, ReceiverAssociationData };
+export type { DicomReceiverOptions, DicomReceiverEventMap, ReceiverFileData, ReceiverAssociationData, ReceiverErrorData };

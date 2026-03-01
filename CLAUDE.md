@@ -297,8 +297,8 @@ if (!result.ok) {
 }
 const receiver = result.value;
 
-receiver.onFileReceived(data => console.log(data.filePath, data.associationDir));
-receiver.onAssociationComplete(data => console.log(data.files, data.durationMs));
+receiver.onFileReceived(data => console.log(data.filePath, data.instance.patientName));
+receiver.onAssociationComplete(data => console.log(data.files, data.totalBytes, data.bytesPerSecond));
 
 await receiver.start();
 // ... connections auto-routed to idle workers, files organized per-association
