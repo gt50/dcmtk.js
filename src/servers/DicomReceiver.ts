@@ -18,6 +18,7 @@ import { z } from 'zod';
 import type { Result } from '../types';
 import { ok, err } from '../types';
 import { isSafePath, isValidAETitle } from '../patterns';
+import { createValidationError } from '../tools/_toolError';
 import { Dcmrecv } from './Dcmrecv';
 import type { AssociationCompleteData } from '../events/dcmrecv';
 
@@ -160,12 +161,14 @@ function allocatePort(): Promise<Result<number>> {
  *
  * @example
  * ```ts
- * const receiver = unwrap(DicomReceiver.create({
+ * const result = DicomReceiver.create({
  *     port: 4242,
  *     storageDir: '/data/received',
  *     minPoolSize: 2,
  *     maxPoolSize: 8,
- * }));
+ * });
+ * if (!result.ok) { console.error(result.error.message); return; }
+ * const receiver = result.value;
  *
  * receiver.onFileReceived(data => console.log('File:', data.filePath));
  * receiver.onAssociationComplete(data => console.log('Done:', data.associationDir));
@@ -210,7 +213,7 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
     static create(options: DicomReceiverOptions): Result<DicomReceiver> {
         const validation = DicomReceiverOptionsSchema.safeParse(options);
         if (!validation.success) {
-            return err(new Error(`DicomReceiver: invalid options: ${validation.error.message}`));
+            return err(createValidationError('DicomReceiver', validation.error));
         }
         return ok(new DicomReceiver(options));
     }
@@ -244,12 +247,10 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
 
     /**
      * Stops the TCP proxy and all workers.
-     *
-     * @returns A Result indicating success or failure
      */
-    async stop(): Promise<Result<void>> {
+    async stop(): Promise<void> {
         if (!this.started || this.stopping) {
-            return ok(undefined);
+            return;
         }
         this.stopping = true;
 
@@ -268,7 +269,17 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
 
         this.started = false;
         this.stopping = false;
-        return ok(undefined);
+    }
+
+    /**
+     * Registers a typed listener for a DicomReceiver-specific event.
+     *
+     * @param event - The event name from DicomReceiverEventMap
+     * @param listener - Callback receiving typed event data
+     * @returns this for chaining
+     */
+    onEvent<K extends keyof DicomReceiverEventMap>(event: K, listener: (...args: DicomReceiverEventMap[K]) => void): this {
+        return this.on(event, listener as never);
     }
 
     /**
@@ -660,5 +671,5 @@ function delay(ms: number): Promise<void> {
     });
 }
 
-export { DicomReceiver, DEFAULT_MIN_POOL_SIZE, DEFAULT_MAX_POOL_SIZE, DEFAULT_CONNECTION_TIMEOUT_MS };
+export { DicomReceiver };
 export type { DicomReceiverOptions, DicomReceiverEventMap, ReceiverFileData, ReceiverAssociationData };

@@ -16,6 +16,7 @@ import { DcmtkProcess } from '../DcmtkProcess';
 import type { DcmtkProcessConfig } from '../DcmtkProcess';
 import { LineParser } from '../parsers/LineParser';
 import { resolveBinary } from '../tools/_resolveBinary';
+import { createValidationError } from '../tools/_toolError';
 import { isSafePath } from '../patterns';
 import { DCMQRSCP_PATTERNS, DCMQRSCP_FATAL_EVENTS } from '../events/dcmqrscp';
 import type {
@@ -182,13 +183,6 @@ class DcmQRSCP extends DcmtkProcess {
         }
     }
 
-    /**
-     * Registers a typed listener for a dcmqrscp-specific event.
-     *
-     * @param event - The event name from DcmQRSCPEventMap
-     * @param listener - Callback receiving typed event data
-     * @returns this for chaining
-     */
     /** Disposes the server and its parser, preventing listener leaks. */
     [Symbol.dispose](): void {
         if (this.abortSignal !== undefined && this.abortHandler !== undefined) {
@@ -198,6 +192,13 @@ class DcmQRSCP extends DcmtkProcess {
         super[Symbol.dispose]();
     }
 
+    /**
+     * Registers a typed listener for a dcmqrscp-specific event.
+     *
+     * @param event - The event name from DcmQRSCPEventMap
+     * @param listener - Callback receiving typed event data
+     * @returns this for chaining
+     */
     onEvent<K extends keyof DcmQRSCPEventMap>(event: K, listener: (...args: DcmQRSCPEventMap[K]) => void): this {
         return this.on(event as string, listener as never);
     }
@@ -231,7 +232,7 @@ class DcmQRSCP extends DcmtkProcess {
     static create(options: DcmQRSCPOptions): Result<DcmQRSCP> {
         const validation = DcmQRSCPOptionsSchema.safeParse(options);
         if (!validation.success) {
-            return err(new Error(`dcmqrscp: invalid options: ${validation.error.message}`));
+            return err(createValidationError('dcmqrscp', validation.error));
         }
 
         const binaryResult = resolveBinary('dcmqrscp');

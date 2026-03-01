@@ -10,7 +10,7 @@ import { ok, err } from '../types';
 import { execCommand } from '../exec';
 import { DEFAULT_TIMEOUT_MS } from '../constants';
 import { resolveBinary } from './_resolveBinary';
-import { createToolError } from './_toolError';
+import { createToolError, createValidationError } from './_toolError';
 import type { ToolBaseOptions } from './_toolTypes';
 
 /** Options for {@link dcmencap}. */
@@ -65,7 +65,7 @@ function buildArgs(inputPath: string, outputPath: string, options?: DcmencapOpti
 async function dcmencap(inputPath: string, outputPath: string, options?: DcmencapOptions): Promise<Result<DcmencapResult>> {
     const validation = DcmencapOptionsSchema.safeParse(options);
     if (!validation.success) {
-        return err(new Error(`dcmencap: invalid options: ${validation.error.message}`));
+        return err(createValidationError('dcmencap', validation.error));
     }
 
     const binaryResult = resolveBinary('dcmencap');

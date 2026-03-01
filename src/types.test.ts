@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ok, err, assertUnreachable, unwrap, mapResult } from './types';
+import { ok, err, assertUnreachable, mapResult } from './types';
 import type { Result } from './types';
 
 describe('Result type helpers', () => {
@@ -60,41 +60,6 @@ describe('Result type helpers', () => {
             expect(() => {
                 assertUnreachable('unexpected' as never);
             }).toThrow('Exhaustive check failed: "unexpected"');
-        });
-    });
-
-    describe('unwrap()', () => {
-        it('returns the value from a successful Result', () => {
-            const result = ok(42);
-            expect(unwrap(result)).toBe(42);
-        });
-
-        it('returns string value from a successful Result', () => {
-            const result = ok('hello');
-            expect(unwrap(result)).toBe('hello');
-        });
-
-        it('returns object value from a successful Result', () => {
-            const data = { name: 'test', count: 1 };
-            const result = ok(data);
-            expect(unwrap(result)).toEqual(data);
-        });
-
-        it('throws the error from a failed Result', () => {
-            const error = new Error('something went wrong');
-            const result = err(error);
-            expect(() => unwrap(result)).toThrow(error);
-        });
-
-        it('throws custom error objects from a failed Result', () => {
-            const error = new Error('not found');
-            const result: Result<number> = err(error);
-            expect(() => unwrap(result)).toThrow('not found');
-        });
-
-        it('works with Result<void>', () => {
-            const result: Result<void> = ok(undefined);
-            expect(unwrap(result)).toBeUndefined();
         });
     });
 

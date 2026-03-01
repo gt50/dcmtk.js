@@ -10,7 +10,7 @@ import { ok, err } from '../types';
 import { execCommand } from '../exec';
 import { DEFAULT_TIMEOUT_MS } from '../constants';
 import { resolveBinary } from './_resolveBinary';
-import { createToolError } from './_toolError';
+import { createToolError, createValidationError } from './_toolError';
 import type { ToolBaseOptions } from './_toolTypes';
 
 /** Options for {@link dcmpsprt}. */
@@ -69,7 +69,7 @@ function buildArgs(inputPath: string, options?: DcmpsprtOptions): string[] {
 async function dcmpsprt(inputPath: string, options?: DcmpsprtOptions): Promise<Result<DcmpsprtResult>> {
     const validation = DcmpsprtOptionsSchema.safeParse(options);
     if (!validation.success) {
-        return err(new Error(`dcmpsprt: invalid options: ${validation.error.message}`));
+        return err(createValidationError('dcmpsprt', validation.error));
     }
 
     const binaryResult = resolveBinary('dcmpsprt');

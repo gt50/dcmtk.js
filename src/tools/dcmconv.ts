@@ -10,7 +10,7 @@ import { ok, err } from '../types';
 import { execCommand } from '../exec';
 import { DEFAULT_TIMEOUT_MS } from '../constants';
 import { resolveBinary } from './_resolveBinary';
-import { createToolError } from './_toolError';
+import { createToolError, createValidationError } from './_toolError';
 import type { ToolBaseOptions } from './_toolTypes';
 
 /**
@@ -78,7 +78,7 @@ const DcmconvOptionsSchema = z
 async function dcmconv(inputPath: string, outputPath: string, options: DcmconvOptions): Promise<Result<DcmconvResult>> {
     const validation = DcmconvOptionsSchema.safeParse(options);
     if (!validation.success) {
-        return err(new Error(`dcmconv: invalid options: ${validation.error.message}`));
+        return err(createValidationError('dcmconv', validation.error));
     }
 
     const binaryResult = resolveBinary('dcmconv');

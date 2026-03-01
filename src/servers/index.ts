@@ -9,13 +9,13 @@
 export { Dcmrecv, SubdirectoryMode, FilenameMode, StorageMode } from './Dcmrecv';
 export type { DcmrecvOptions, DcmrecvEventMap, SubdirectoryModeValue, FilenameModeValue, StorageModeValue } from './Dcmrecv';
 
-export { StoreSCP, PreferredTransferSyntax } from './StoreSCP';
-export type { StoreSCPOptions, StoreSCPEventMap, PreferredTransferSyntaxValue } from './StoreSCP';
+export { StoreSCP, PreferredTransferSyntax, StoreSCPPreset } from './StoreSCP';
+export type { StoreSCPOptions, StoreSCPEventMap, PreferredTransferSyntaxValue, StoreSCPPresetName } from './StoreSCP';
 
 export { AssociationTracker } from './AssociationTracker';
 export type { AssociationContext, TrackedFile, AssociationSummary } from './AssociationTracker';
 
-export { DicomReceiver, DEFAULT_MIN_POOL_SIZE, DEFAULT_MAX_POOL_SIZE, DEFAULT_CONNECTION_TIMEOUT_MS } from './DicomReceiver';
+export { DicomReceiver } from './DicomReceiver';
 export type { DicomReceiverOptions, DicomReceiverEventMap, ReceiverFileData, ReceiverAssociationData } from './DicomReceiver';
 
 export { DcmprsCP } from './DcmprsCP';

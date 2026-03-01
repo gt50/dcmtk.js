@@ -10,7 +10,7 @@ import { ok, err } from '../types';
 import { execCommand } from '../exec';
 import { DEFAULT_TIMEOUT_MS } from '../constants';
 import { resolveBinary } from './_resolveBinary';
-import { createToolError } from './_toolError';
+import { createToolError, createValidationError } from './_toolError';
 import type { ToolBaseOptions } from './_toolTypes';
 
 /** Options for {@link dcmmkcrv}. */
@@ -50,7 +50,7 @@ const DcmmkcrvOptionsSchema = z
 async function dcmmkcrv(inputPath: string, outputPath: string, options?: DcmmkcrvOptions): Promise<Result<DcmmkcrvResult>> {
     const validation = DcmmkcrvOptionsSchema.safeParse(options);
     if (!validation.success) {
-        return err(new Error(`dcmmkcrv: invalid options: ${validation.error.message}`));
+        return err(createValidationError('dcmmkcrv', validation.error));
     }
 
     const binaryResult = resolveBinary('dcmmkcrv');

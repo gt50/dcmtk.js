@@ -13,7 +13,7 @@ import { ok, err } from '../types';
 import { execCommand } from '../exec';
 import { DEFAULT_TIMEOUT_MS } from '../constants';
 import { resolveBinary } from './_resolveBinary';
-import { createToolError } from './_toolError';
+import { createToolError, createValidationError } from './_toolError';
 import type { ToolBaseOptions } from './_toolTypes';
 import { isValidAETitle } from '../patterns';
 
@@ -84,7 +84,7 @@ function buildArgs(options: TermscuOptions): string[] {
 async function termscu(options: TermscuOptions): Promise<Result<TermscuResult>> {
     const validation = TermscuOptionsSchema.safeParse(options);
     if (!validation.success) {
-        return err(new Error(`termscu: invalid options: ${validation.error.message}`));
+        return err(createValidationError('termscu', validation.error));
     }
 
     const binaryResult = resolveBinary('termscu');

@@ -10,7 +10,7 @@ import { ok, err } from '../types';
 import { execCommand } from '../exec';
 import { DEFAULT_TIMEOUT_MS } from '../constants';
 import { resolveBinary } from './_resolveBinary';
-import { createToolError } from './_toolError';
+import { createToolError, createValidationError } from './_toolError';
 import type { ToolBaseOptions } from './_toolTypes';
 
 /** Options for {@link dump2dcm}. */
@@ -77,7 +77,7 @@ function buildArgs(inputPath: string, outputPath: string, options?: Dump2dcmOpti
 async function dump2dcm(inputPath: string, outputPath: string, options?: Dump2dcmOptions): Promise<Result<Dump2dcmResult>> {
     const validation = Dump2dcmOptionsSchema.safeParse(options);
     if (!validation.success) {
-        return err(new Error(`dump2dcm: invalid options: ${validation.error.message}`));
+        return err(createValidationError('dump2dcm', validation.error));
     }
 
     const binaryResult = resolveBinary('dump2dcm');

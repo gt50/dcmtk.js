@@ -10,7 +10,7 @@ import { ok, err } from '../types';
 import { execCommand } from '../exec';
 import { DEFAULT_TIMEOUT_MS } from '../constants';
 import { resolveBinary } from './_resolveBinary';
-import { createToolError } from './_toolError';
+import { createToolError, createValidationError } from './_toolError';
 import type { ToolBaseOptions } from './_toolTypes';
 
 /** Options for {@link stl2dcm}. */
@@ -50,7 +50,7 @@ const Stl2dcmOptionsSchema = z
 async function stl2dcm(inputPath: string, outputPath: string, options?: Stl2dcmOptions): Promise<Result<Stl2dcmResult>> {
     const validation = Stl2dcmOptionsSchema.safeParse(options);
     if (!validation.success) {
-        return err(new Error(`stl2dcm: invalid options: ${validation.error.message}`));
+        return err(createValidationError('stl2dcm', validation.error));
     }
 
     const binaryResult = resolveBinary('stl2dcm');

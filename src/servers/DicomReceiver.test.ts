@@ -293,8 +293,7 @@ describe('DicomReceiver', () => {
             const result = DicomReceiver.create({ port: 4242, storageDir: '/data' });
             if (!result.ok) return;
 
-            const stopResult = await result.value.stop();
-            expect(stopResult.ok).toBe(true);
+            await expect(result.value.stop()).resolves.toBeUndefined();
         });
 
         it('is safe to call twice', async () => {
@@ -304,8 +303,7 @@ describe('DicomReceiver', () => {
             const receiver = result.value;
             await receiver.start();
             await receiver.stop();
-            const secondStop = await receiver.stop();
-            expect(secondStop.ok).toBe(true);
+            await expect(receiver.stop()).resolves.toBeUndefined();
         });
     });
 
@@ -376,6 +374,15 @@ describe('DicomReceiver', () => {
 
             const receiver = result.value;
             const returnVal = receiver.onAssociationComplete(vi.fn());
+            expect(returnVal).toBe(receiver);
+        });
+
+        it('onEvent returns this for chaining', () => {
+            const result = DicomReceiver.create({ port: 4242, storageDir: '/data' });
+            if (!result.ok) return;
+
+            const receiver = result.value;
+            const returnVal = receiver.onEvent('FILE_RECEIVED', vi.fn());
             expect(returnVal).toBe(receiver);
         });
     });

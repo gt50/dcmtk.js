@@ -32,8 +32,9 @@ import { applyModifications, copyFileSafe, statFileSize, unlinkFile } from './_f
  *
  * @example
  * ```ts
- * const inst = unwrap(await DicomInstance.open('/path/to/file.dcm'));
- * const modified = inst
+ * const result = await DicomInstance.open('/path/to/file.dcm');
+ * if (!result.ok) { console.error(result.error.message); return; }
+ * const modified = result.value
  *     .setPatientName('DOE^JOHN')
  *     .setPatientID('PAT001')
  *     .erasePrivateTags();

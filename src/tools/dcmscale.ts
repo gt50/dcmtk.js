@@ -10,7 +10,7 @@ import { ok, err } from '../types';
 import { execCommand } from '../exec';
 import { DEFAULT_TIMEOUT_MS } from '../constants';
 import { resolveBinary } from './_resolveBinary';
-import { createToolError } from './_toolError';
+import { createToolError, createValidationError } from './_toolError';
 import type { ToolBaseOptions } from './_toolTypes';
 
 /** Options for {@link dcmscale}. */
@@ -92,7 +92,7 @@ function buildArgs(inputPath: string, outputPath: string, options?: DcmscaleOpti
 async function dcmscale(inputPath: string, outputPath: string, options?: DcmscaleOptions): Promise<Result<DcmscaleResult>> {
     const validation = DcmscaleOptionsSchema.safeParse(options);
     if (!validation.success) {
-        return err(new Error(`dcmscale: invalid options: ${validation.error.message}`));
+        return err(createValidationError('dcmscale', validation.error));
     }
 
     const binaryResult = resolveBinary('dcmscale');

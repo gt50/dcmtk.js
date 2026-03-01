@@ -155,7 +155,7 @@ All fallible operations return `Result<T>` — never throw for expected failures
 type Result<T, E = Error> = { ok: true; value: T } | { ok: false; error: E };
 ```
 
-Narrow with `if (result.ok)` before accessing `.value` or `.error`. Helpers: `ok(value)`, `err(error)`, `unwrap(result)`, `mapResult(result, fn)`.
+Narrow with `if (result.ok)` before accessing `.value` or `.error`. Helpers: `ok(value)`, `err(error)`, `mapResult(result, fn)`.
 
 ### Branded Types
 
@@ -285,14 +285,17 @@ All servers extend `DcmtkProcess` (EventEmitter + Disposable) and support `Abort
 Pooled DICOM receiver managing multiple `Dcmrecv` workers behind a TCP proxy.
 
 ```typescript
-const receiver = unwrap(
-    DicomReceiver.create({
-        port: 4242,
-        storageDir: '/data/received',
-        minPoolSize: 2,
-        maxPoolSize: 8,
-    })
-);
+const result = DicomReceiver.create({
+    port: 4242,
+    storageDir: '/data/received',
+    minPoolSize: 2,
+    maxPoolSize: 8,
+});
+if (!result.ok) {
+    console.error(result.error.message);
+    return;
+}
+const receiver = result.value;
 
 receiver.onFileReceived(data => console.log(data.filePath, data.associationDir));
 receiver.onAssociationComplete(data => console.log(data.files, data.durationMs));
@@ -307,7 +310,12 @@ await receiver.stop();
 High-level PACS client encapsulating connection config and DICOM network operations.
 
 ```typescript
-const client = unwrap(PacsClient.create({ host: '192.168.1.100', port: 104, calledAETitle: 'PACS' }));
+const clientResult = PacsClient.create({ host: '192.168.1.100', port: 104, calledAETitle: 'PACS' });
+if (!clientResult.ok) {
+    console.error(clientResult.error.message);
+    return;
+}
+const client = clientResult.value;
 
 await client.echo(); // C-ECHO
 await client.findStudies({ patientId: 'PAT001' }); // C-FIND → DicomDataset[]
@@ -326,7 +334,11 @@ await client.store(['/path/to/file.dcm']); // C-STORE
 Immutable wrapper around DICOM JSON Model.
 
 ```typescript
-const ds = unwrap(DicomDataset.fromJson(jsonObject));
+const dsResult = DicomDataset.fromJson(jsonObject);
+if (!dsResult.ok) {
+    /* handle error */
+}
+const ds = dsResult.value;
 ds.patientName; // string (convenience getter)
 ds.getString('00100020'); // string with optional fallback
 ds.getNumber('00200013'); // Result<number>
@@ -357,7 +369,11 @@ changes.merge(other); // ChangeSet
 Unified DICOM object with fluent API for reading, modifying, and writing.
 
 ```typescript
-const inst = unwrap(await DicomInstance.open('/path/to/file.dcm'));
+const openResult = await DicomInstance.open('/path/to/file.dcm');
+if (!openResult.ok) {
+    /* handle error */
+}
+const inst = openResult.value;
 inst.patientName; // string (convenience getter)
 inst.dataset; // DicomDataset
 inst.filePath; // string | undefined

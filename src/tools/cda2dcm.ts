@@ -10,7 +10,7 @@ import { ok, err } from '../types';
 import { execCommand } from '../exec';
 import { DEFAULT_TIMEOUT_MS } from '../constants';
 import { resolveBinary } from './_resolveBinary';
-import { createToolError } from './_toolError';
+import { createToolError, createValidationError } from './_toolError';
 import type { ToolBaseOptions } from './_toolTypes';
 
 /** Options for {@link cda2dcm}. */
@@ -41,7 +41,7 @@ const Cda2dcmOptionsSchema = z
 async function cda2dcm(inputPath: string, outputPath: string, options?: Cda2dcmOptions): Promise<Result<Cda2dcmResult>> {
     const validation = Cda2dcmOptionsSchema.safeParse(options);
     if (!validation.success) {
-        return err(new Error(`cda2dcm: invalid options: ${validation.error.message}`));
+        return err(createValidationError('cda2dcm', validation.error));
     }
 
     const binaryResult = resolveBinary('cda2dcm');

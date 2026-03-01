@@ -10,7 +10,7 @@ import { ok, err } from '../types';
 import { execCommand } from '../exec';
 import { DEFAULT_TIMEOUT_MS } from '../constants';
 import { resolveBinary } from './_resolveBinary';
-import { createToolError } from './_toolError';
+import { createToolError, createValidationError } from './_toolError';
 import type { ToolBaseOptions } from './_toolTypes';
 
 /** Options for {@link dcmdecap}. */
@@ -42,7 +42,7 @@ const DcmdecapOptionsSchema = z
 async function dcmdecap(inputPath: string, outputPath: string, options?: DcmdecapOptions): Promise<Result<DcmdecapResult>> {
     const validation = DcmdecapOptionsSchema.safeParse(options);
     if (!validation.success) {
-        return err(new Error(`dcmdecap: invalid options: ${validation.error.message}`));
+        return err(createValidationError('dcmdecap', validation.error));
     }
 
     const binaryResult = resolveBinary('dcmdecap');

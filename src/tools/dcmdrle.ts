@@ -10,7 +10,7 @@ import { ok, err } from '../types';
 import { execCommand } from '../exec';
 import { DEFAULT_TIMEOUT_MS } from '../constants';
 import { resolveBinary } from './_resolveBinary';
-import { createToolError } from './_toolError';
+import { createToolError, createValidationError } from './_toolError';
 import type { ToolBaseOptions } from './_toolTypes';
 
 /** Options for {@link dcmdrle}. */
@@ -70,7 +70,7 @@ function buildArgs(inputPath: string, outputPath: string, options?: DcmdrleOptio
 async function dcmdrle(inputPath: string, outputPath: string, options?: DcmdrleOptions): Promise<Result<DcmdrleResult>> {
     const validation = DcmdrleOptionsSchema.safeParse(options);
     if (!validation.success) {
-        return err(new Error(`dcmdrle: invalid options: ${validation.error.message}`));
+        return err(createValidationError('dcmdrle', validation.error));
     }
 
     const binaryResult = resolveBinary('dcmdrle');

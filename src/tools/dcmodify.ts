@@ -14,7 +14,7 @@ import { ok, err } from '../types';
 import { spawnCommand } from '../exec';
 import { DEFAULT_TIMEOUT_MS } from '../constants';
 import { resolveBinary } from './_resolveBinary';
-import { createToolError } from './_toolError';
+import { createToolError, createValidationError } from './_toolError';
 import type { ToolBaseOptions } from './_toolTypes';
 
 /** A single tag modification. */
@@ -129,7 +129,7 @@ function buildArgs(inputPath: string, options: DcmodifyOptions): string[] {
 async function dcmodify(inputPath: string, options: DcmodifyOptions): Promise<Result<DcmodifyResult>> {
     const validation = DcmodifyOptionsSchema.safeParse(options);
     if (!validation.success) {
-        return err(new Error(`dcmodify: invalid options: ${validation.error.message}`));
+        return err(createValidationError('dcmodify', validation.error));
     }
 
     const binaryResult = resolveBinary('dcmodify');

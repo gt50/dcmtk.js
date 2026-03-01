@@ -15,6 +15,7 @@ import { DcmtkProcess } from '../DcmtkProcess';
 import type { DcmtkProcessConfig } from '../DcmtkProcess';
 import { LineParser } from '../parsers/LineParser';
 import { resolveBinary } from '../tools/_resolveBinary';
+import { createValidationError } from '../tools/_toolError';
 import { isSafePath } from '../patterns';
 import { DCMPRSCP_PATTERNS, DCMPRSCP_FATAL_EVENTS } from '../events/dcmprscp';
 import type {
@@ -187,7 +188,7 @@ class DcmprsCP extends DcmtkProcess {
     static create(options: DcmprsCPOptions): Result<DcmprsCP> {
         const validation = DcmprsCPOptionsSchema.safeParse(options);
         if (!validation.success) {
-            return err(new Error(`dcmprscp: invalid options: ${validation.error.message}`));
+            return err(createValidationError('dcmprscp', validation.error));
         }
 
         const binaryResult = resolveBinary('dcmprscp');

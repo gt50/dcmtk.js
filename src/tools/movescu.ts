@@ -13,7 +13,7 @@ import { ok, err } from '../types';
 import { execCommand } from '../exec';
 import { DEFAULT_TIMEOUT_MS } from '../constants';
 import { resolveBinary } from './_resolveBinary';
-import { createToolError } from './_toolError';
+import { createToolError, createValidationError } from './_toolError';
 import type { ToolBaseOptions } from './_toolTypes';
 import { isSafePath, isValidDicomKey, isValidAETitle } from '../patterns';
 
@@ -135,7 +135,7 @@ function buildArgs(options: MovescuOptions): string[] {
 async function movescu(options: MovescuOptions): Promise<Result<MovescuResult>> {
     const validation = MovescuOptionsSchema.safeParse(options);
     if (!validation.success) {
-        return err(new Error(`movescu: invalid options: ${validation.error.message}`));
+        return err(createValidationError('movescu', validation.error));
     }
 
     const binaryResult = resolveBinary('movescu');

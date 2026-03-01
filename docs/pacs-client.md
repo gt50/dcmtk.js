@@ -5,17 +5,20 @@ High-level PACS client encapsulating DICOM network operations. Configure the con
 ## Creating a Client
 
 ```typescript
-import { PacsClient, unwrap } from '@ubercode/dcmtk';
+import { PacsClient } from '@ubercode/dcmtk';
 
-const client = unwrap(
-    PacsClient.create({
-        host: '192.168.1.100',
-        port: 104,
-        calledAETitle: 'PACS',
-        callingAETitle: 'MY_APP',
-        timeoutMs: 30_000,
-    })
-);
+const result = PacsClient.create({
+    host: '192.168.1.100',
+    port: 104,
+    calledAETitle: 'PACS',
+    callingAETitle: 'MY_APP',
+    timeoutMs: 30_000,
+});
+if (!result.ok) {
+    console.error(result.error.message);
+    return;
+}
+const client = result.value;
 ```
 
 ### PacsClientConfig
@@ -185,15 +188,15 @@ import { RetrieveMode } from '@ubercode/dcmtk';
 ## Full Workflow Example
 
 ```typescript
-import { PacsClient, RetrieveMode, unwrap } from '@ubercode/dcmtk';
+import { PacsClient, RetrieveMode } from '@ubercode/dcmtk';
 
-const client = unwrap(
-    PacsClient.create({
-        host: '192.168.1.100',
-        port: 104,
-        calledAETitle: 'PACS',
-    })
-);
+const createResult = PacsClient.create({
+    host: '192.168.1.100',
+    port: 104,
+    calledAETitle: 'PACS',
+});
+if (!createResult.ok) throw createResult.error;
+const client = createResult.value;
 
 // 1. Verify connectivity
 const echo = await client.echo();

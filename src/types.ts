@@ -145,35 +145,6 @@ interface ProcessLine {
 // ---------------------------------------------------------------------------
 
 /**
- * Extracts the value from a successful Result, or throws the error.
- *
- * Use this when you want to opt out of explicit Result handling and
- * let errors propagate as exceptions.
- *
- * @param result - The Result to unwrap
- * @returns The success value
- * @throws The error if the result is not ok
- *
- * @example
- * ```ts
- * // Instead of:
- * const result = await echoscu({ host: 'localhost', port: 104 });
- * if (!result.ok) throw result.error;
- * console.log(result.value);
- *
- * // You can write:
- * const value = unwrap(await echoscu({ host: 'localhost', port: 104 }));
- * console.log(value);
- * ```
- */
-function unwrap<T>(result: Result<T>): T {
-    if (result.ok) {
-        return result.value;
-    }
-    throw result.error;
-}
-
-/**
  * Transforms the success value of a Result, passing through errors unchanged.
  *
  * @param result - The Result to transform
@@ -205,5 +176,5 @@ function mapResult<T, U>(result: Result<T>, fn: (value: T) => U): Result<U> {
  */
 type ResultValue<R> = R extends Result<infer T> ? T : never;
 
-export { ok, err, assertUnreachable, unwrap, mapResult };
+export { ok, err, assertUnreachable, mapResult };
 export type { Result, ResultValue, DcmtkProcessResult, ExecOptions, SpawnOptions, LineSource, ProcessLine };

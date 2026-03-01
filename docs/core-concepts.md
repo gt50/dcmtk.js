@@ -28,12 +28,11 @@ if (result.ok) {
 
 ### Helper Functions
 
-| Function                | Signature                                                        | Description                      |
-| ----------------------- | ---------------------------------------------------------------- | -------------------------------- |
-| `ok(value)`             | `ok<T>(value: T): Result<T, never>`                              | Create a successful Result       |
-| `err(error)`            | `err<E>(error: E): Result<never, E>`                             | Create a failed Result           |
-| `unwrap(result)`        | `unwrap<T>(result: Result<T>): T`                                | Extract value or throw the error |
-| `mapResult(result, fn)` | `mapResult<T, U>(result: Result<T>, fn: (v: T) => U): Result<U>` | Transform the success value      |
+| Function                | Signature                                                        | Description                 |
+| ----------------------- | ---------------------------------------------------------------- | --------------------------- |
+| `ok(value)`             | `ok<T>(value: T): Result<T, never>`                              | Create a successful Result  |
+| `err(error)`            | `err<E>(error: E): Result<never, E>`                             | Create a failed Result      |
+| `mapResult(result, fn)` | `mapResult<T, U>(result: Result<T>, fn: (v: T) => U): Result<U>` | Transform the success value |
 
 ### Common Patterns
 
@@ -47,15 +46,6 @@ const dsResult = DicomDataset.fromJson(jsonResult.value.data);
 if (!dsResult.ok) return dsResult;
 
 console.log(dsResult.value.patientName);
-```
-
-**Unwrap for exception-style code:**
-
-```typescript
-import { unwrap } from '@ubercode/dcmtk';
-
-const { data } = unwrap(await dcm2json('/path/to/image.dcm'));
-// throws if dcm2json fails
 ```
 
 ## Branded Types

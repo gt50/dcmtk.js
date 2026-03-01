@@ -10,7 +10,7 @@ import { ok, err } from '../types';
 import { execCommand } from '../exec';
 import { DEFAULT_TIMEOUT_MS } from '../constants';
 import { resolveBinary } from './_resolveBinary';
-import { createToolError } from './_toolError';
+import { createToolError, createValidationError } from './_toolError';
 import type { ToolBaseOptions } from './_toolTypes';
 
 /** Default output filename when no outputFile is specified. */
@@ -103,7 +103,7 @@ function buildArgs(options: DcmgpdirOptions): string[] {
 async function dcmgpdir(options: DcmgpdirOptions): Promise<Result<DcmgpdirResult>> {
     const validation = DcmgpdirOptionsSchema.safeParse(options);
     if (!validation.success) {
-        return err(new Error(`dcmgpdir: invalid options: ${validation.error.message}`));
+        return err(createValidationError('dcmgpdir', validation.error));
     }
 
     const binaryResult = resolveBinary('dcmgpdir');

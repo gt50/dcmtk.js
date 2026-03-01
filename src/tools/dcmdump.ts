@@ -10,7 +10,7 @@ import { ok, err } from '../types';
 import { execCommand } from '../exec';
 import { DEFAULT_TIMEOUT_MS } from '../constants';
 import { resolveBinary } from './_resolveBinary';
-import { createToolError } from './_toolError';
+import { createToolError, createValidationError } from './_toolError';
 import type { ToolBaseOptions } from './_toolTypes';
 
 /**
@@ -105,7 +105,7 @@ function buildArgs(inputPath: string, options?: DcmdumpOptions): string[] {
 async function dcmdump(inputPath: string, options?: DcmdumpOptions): Promise<Result<DcmdumpResult>> {
     const validation = DcmdumpOptionsSchema.safeParse(options);
     if (!validation.success) {
-        return err(new Error(`dcmdump: invalid options: ${validation.error.message}`));
+        return err(createValidationError('dcmdump', validation.error));
     }
 
     const binaryResult = resolveBinary('dcmdump');

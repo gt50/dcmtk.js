@@ -10,7 +10,7 @@ import { ok, err } from '../types';
 import { execCommand } from '../exec';
 import { DEFAULT_TIMEOUT_MS } from '../constants';
 import { resolveBinary } from './_resolveBinary';
-import { createToolError } from './_toolError';
+import { createToolError, createValidationError } from './_toolError';
 import type { ToolBaseOptions } from './_toolTypes';
 import { isValidAETitle } from '../patterns';
 
@@ -93,7 +93,7 @@ function buildArgs(options: DcmprscuOptions): string[] {
 async function dcmprscu(options: DcmprscuOptions): Promise<Result<DcmprscuResult>> {
     const validation = DcmprscuOptionsSchema.safeParse(options);
     if (!validation.success) {
-        return err(new Error(`dcmprscu: invalid options: ${validation.error.message}`));
+        return err(createValidationError('dcmprscu', validation.error));
     }
 
     const binaryResult = resolveBinary('dcmprscu');

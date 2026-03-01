@@ -10,7 +10,7 @@ import { ok, err } from '../types';
 import { execCommand } from '../exec';
 import { DEFAULT_TIMEOUT_MS } from '../constants';
 import { resolveBinary } from './_resolveBinary';
-import { createToolError } from './_toolError';
+import { createToolError, createValidationError } from './_toolError';
 import type { ToolBaseOptions } from './_toolTypes';
 
 /**
@@ -103,7 +103,7 @@ function buildArgs(inputPath: string, outputPath: string, options?: Dcmj2pnmOpti
 async function dcmj2pnm(inputPath: string, outputPath: string, options?: Dcmj2pnmOptions): Promise<Result<Dcmj2pnmResult>> {
     const validation = Dcmj2pnmOptionsSchema.safeParse(options);
     if (!validation.success) {
-        return err(new Error(`dcmj2pnm: invalid options: ${validation.error.message}`));
+        return err(createValidationError('dcmj2pnm', validation.error));
     }
 
     const binaryResult = resolveBinary('dcmj2pnm');

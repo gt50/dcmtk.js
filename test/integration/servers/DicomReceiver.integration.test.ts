@@ -51,8 +51,7 @@ describe.skipIf(!dcmtkAvailable)('DicomReceiver integration', () => {
         expect(status.busy).toBe(0);
         expect(status.total).toBe(2);
 
-        const stopResult = await receiver.stop();
-        expect(stopResult.ok).toBe(true);
+        await expect(receiver.stop()).resolves.toBeUndefined();
     });
 
     it('receives a single file and emits FILE_RECEIVED', async () => {

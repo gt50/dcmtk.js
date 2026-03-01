@@ -10,7 +10,7 @@ import { resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { copyFile, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dcmodify, dcmconv, dcm2json, unwrap, DicomDataset, DicomInstance } from '@ubercode/dcmtk';
+import { dcmodify, dcmconv, dcm2json, DicomDataset, DicomInstance } from '@ubercode/dcmtk';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const SAMPLE = resolve(__dirname, '../../dicomSamples/other/0002d.DCM');
@@ -30,21 +30,32 @@ async function main() {
         // 2. dcmodify — modify PatientName and PatientID
         // -------------------------------------------------------------------
         console.log('\n--- dcmodify: changing PatientName and PatientID ---');
-        unwrap(
-            await dcmodify(workFile, {
-                modifications: [
-                    { tag: '(0010,0010)', value: 'EXAMPLE^PATIENT' },
-                    { tag: '(0010,0020)', value: 'EX-12345' },
-                ],
-                noBackup: true,
-            })
-        );
+        const modResult = await dcmodify(workFile, {
+            modifications: [
+                { tag: '(0010,0010)', value: 'EXAMPLE^PATIENT' },
+                { tag: '(0010,0020)', value: 'EX-12345' },
+            ],
+            noBackup: true,
+        });
+        if (!modResult.ok) {
+            console.error(modResult.error.message);
+            return;
+        }
         console.log('  Tags modified successfully.');
 
         // 3. Verify changes with dcm2json + DicomDataset
         console.log('\n--- Verifying modifications ---');
-        const jsonResult = unwrap(await dcm2json(workFile));
-        const ds = unwrap(DicomDataset.fromJson(jsonResult.data));
+        const jsonResult = await dcm2json(workFile);
+        if (!jsonResult.ok) {
+            console.error(jsonResult.error.message);
+            return;
+        }
+        const dsResult = DicomDataset.fromJson(jsonResult.value.data);
+        if (!dsResult.ok) {
+            console.error(dsResult.error.message);
+            return;
+        }
+        const ds = dsResult.value;
         console.log(`  Patient Name: ${ds.patientName}`);
         console.log(`  Patient ID:   ${ds.patientID}`);
 
@@ -53,19 +64,37 @@ async function main() {
         // -------------------------------------------------------------------
         console.log('\n--- dcmconv: converting to Explicit VR Little Endian ---');
         const convertedFile = join(tempDir, 'converted.dcm');
-        unwrap(await dcmconv(workFile, convertedFile, { transferSyntax: '+te' }));
+        const convResult = await dcmconv(workFile, convertedFile, { transferSyntax: '+te' });
+        if (!convResult.ok) {
+            console.error(convResult.error.message);
+            return;
+        }
         console.log(`  Converted file: ${convertedFile}`);
 
         // Verify the converted file
-        const convertedJson = unwrap(await dcm2json(convertedFile));
-        const convertedDs = unwrap(DicomDataset.fromJson(convertedJson.data));
+        const convertedJson = await dcm2json(convertedFile);
+        if (!convertedJson.ok) {
+            console.error(convertedJson.error.message);
+            return;
+        }
+        const convertedDsResult = DicomDataset.fromJson(convertedJson.value.data);
+        if (!convertedDsResult.ok) {
+            console.error(convertedDsResult.error.message);
+            return;
+        }
+        const convertedDs = convertedDsResult.value;
         console.log(`  Transfer Syntax UID: ${convertedDs.transferSyntaxUID ?? '(not set)'}`);
 
         // -------------------------------------------------------------------
         // 5. DicomInstance — fluent high-level modification API
         // -------------------------------------------------------------------
         console.log('\n--- DicomInstance fluent API ---');
-        const inst = unwrap(await DicomInstance.open(convertedFile));
+        const instResult = await DicomInstance.open(convertedFile);
+        if (!instResult.ok) {
+            console.error(instResult.error.message);
+            return;
+        }
+        const inst = instResult.value;
         console.log(`  Opened: ${inst.filePath}`);
         console.log(`  Current Patient Name: ${inst.patientName}`);
 
@@ -80,7 +109,12 @@ async function main() {
         console.log('  Changes applied.');
 
         // Re-read to verify
-        const verifyInst = unwrap(await DicomInstance.open(convertedFile));
+        const verifyResult = await DicomInstance.open(convertedFile);
+        if (!verifyResult.ok) {
+            console.error(verifyResult.error.message);
+            return;
+        }
+        const verifyInst = verifyResult.value;
         console.log(`  Patient Name:     ${verifyInst.patientName}`);
         console.log(`  Patient ID:       ${verifyInst.patientID}`);
         console.log(`  Institution Name: ${verifyInst.getString('00080080')}`);

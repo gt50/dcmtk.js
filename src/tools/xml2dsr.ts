@@ -10,7 +10,7 @@ import { ok, err } from '../types';
 import { execCommand } from '../exec';
 import { DEFAULT_TIMEOUT_MS } from '../constants';
 import { resolveBinary } from './_resolveBinary';
-import { createToolError } from './_toolError';
+import { createToolError, createValidationError } from './_toolError';
 import type { ToolBaseOptions } from './_toolTypes';
 
 /** Options for {@link xml2dsr}. */
@@ -77,7 +77,7 @@ function buildArgs(inputPath: string, outputPath: string, options?: Xml2dsrOptio
 async function xml2dsr(inputPath: string, outputPath: string, options?: Xml2dsrOptions): Promise<Result<Xml2dsrResult>> {
     const validation = Xml2dsrOptionsSchema.safeParse(options);
     if (!validation.success) {
-        return err(new Error(`xml2dsr: invalid options: ${validation.error.message}`));
+        return err(createValidationError('xml2dsr', validation.error));
     }
 
     const binaryResult = resolveBinary('xml2dsr');

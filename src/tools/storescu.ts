@@ -13,7 +13,7 @@ import { ok, err } from '../types';
 import { execCommand } from '../exec';
 import { DEFAULT_TIMEOUT_MS } from '../constants';
 import { resolveBinary } from './_resolveBinary';
-import { createToolError } from './_toolError';
+import { createToolError, createValidationError } from './_toolError';
 import type { ToolBaseOptions } from './_toolTypes';
 import { isSafePath, isValidAETitle } from '../patterns';
 
@@ -163,7 +163,7 @@ function buildArgs(options: StorescuOptions): string[] {
 async function storescu(options: StorescuOptions): Promise<Result<StorescuResult>> {
     const validation = StorescuOptionsSchema.safeParse(options);
     if (!validation.success) {
-        return err(new Error(`storescu: invalid options: ${validation.error.message}`));
+        return err(createValidationError('storescu', validation.error));
     }
 
     const binaryResult = resolveBinary('storescu');

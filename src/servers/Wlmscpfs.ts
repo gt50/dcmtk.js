@@ -16,6 +16,7 @@ import { DcmtkProcess } from '../DcmtkProcess';
 import type { DcmtkProcessConfig } from '../DcmtkProcess';
 import { LineParser } from '../parsers/LineParser';
 import { resolveBinary } from '../tools/_resolveBinary';
+import { createValidationError } from '../tools/_toolError';
 import { isSafePath } from '../patterns';
 import { WLMSCPFS_PATTERNS, WLMSCPFS_FATAL_EVENTS } from '../events/wlmscpfs';
 import type {
@@ -168,13 +169,6 @@ class Wlmscpfs extends DcmtkProcess {
         }
     }
 
-    /**
-     * Registers a typed listener for a wlmscpfs-specific event.
-     *
-     * @param event - The event name from WlmscpfsEventMap
-     * @param listener - Callback receiving typed event data
-     * @returns this for chaining
-     */
     /** Disposes the server and its parser, preventing listener leaks. */
     [Symbol.dispose](): void {
         if (this.abortSignal !== undefined && this.abortHandler !== undefined) {
@@ -184,6 +178,13 @@ class Wlmscpfs extends DcmtkProcess {
         super[Symbol.dispose]();
     }
 
+    /**
+     * Registers a typed listener for a wlmscpfs-specific event.
+     *
+     * @param event - The event name from WlmscpfsEventMap
+     * @param listener - Callback receiving typed event data
+     * @returns this for chaining
+     */
     onEvent<K extends keyof WlmscpfsEventMap>(event: K, listener: (...args: WlmscpfsEventMap[K]) => void): this {
         return this.on(event as string, listener as never);
     }
@@ -217,7 +218,7 @@ class Wlmscpfs extends DcmtkProcess {
     static create(options: WlmscpfsOptions): Result<Wlmscpfs> {
         const validation = WlmscpfsOptionsSchema.safeParse(options);
         if (!validation.success) {
-            return err(new Error(`wlmscpfs: invalid options: ${validation.error.message}`));
+            return err(createValidationError('wlmscpfs', validation.error));
         }
 
         const binaryResult = resolveBinary('wlmscpfs');

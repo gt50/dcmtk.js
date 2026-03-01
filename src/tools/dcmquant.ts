@@ -10,7 +10,7 @@ import { ok, err } from '../types';
 import { execCommand } from '../exec';
 import { DEFAULT_TIMEOUT_MS } from '../constants';
 import { resolveBinary } from './_resolveBinary';
-import { createToolError } from './_toolError';
+import { createToolError, createValidationError } from './_toolError';
 import type { ToolBaseOptions } from './_toolTypes';
 
 /** Options for {@link dcmquant}. */
@@ -77,7 +77,7 @@ function buildArgs(inputPath: string, outputPath: string, options?: DcmquantOpti
 async function dcmquant(inputPath: string, outputPath: string, options?: DcmquantOptions): Promise<Result<DcmquantResult>> {
     const validation = DcmquantOptionsSchema.safeParse(options);
     if (!validation.success) {
-        return err(new Error(`dcmquant: invalid options: ${validation.error.message}`));
+        return err(createValidationError('dcmquant', validation.error));
     }
 
     const binaryResult = resolveBinary('dcmquant');

@@ -138,20 +138,6 @@ if (result.ok) {
 }
 ```
 
-You can build helper functions to convert Results to exceptions when you prefer try/catch:
-
-```typescript
-function unwrap<T>(result: { ok: true; value: T } | { ok: false; error: Error }): T {
-    if (result.ok) {
-        return result.value;
-    }
-    throw result.error;
-}
-
-// Usage -- throws on failure instead of requiring narrowing
-const { data } = unwrap(await dcm2json('/path/to/image.dcm'));
-```
-
 ---
 
 ### Validating a DICOM File

@@ -10,7 +10,7 @@ import { ok, err } from '../types';
 import { execCommand } from '../exec';
 import { DEFAULT_TIMEOUT_MS } from '../constants';
 import { resolveBinary } from './_resolveBinary';
-import { createToolError } from './_toolError';
+import { createToolError, createValidationError } from './_toolError';
 import type { ToolBaseOptions } from './_toolTypes';
 
 /**
@@ -86,7 +86,7 @@ function buildArgs(inputPath: string, outputPath: string, options?: DcmdjplsOpti
 async function dcmdjpls(inputPath: string, outputPath: string, options?: DcmdjplsOptions): Promise<Result<DcmdjplsResult>> {
     const validation = DcmdjplsOptionsSchema.safeParse(options);
     if (!validation.success) {
-        return err(new Error(`dcmdjpls: invalid options: ${validation.error.message}`));
+        return err(createValidationError('dcmdjpls', validation.error));
     }
 
     const binaryResult = resolveBinary('dcmdjpls');

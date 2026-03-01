@@ -10,7 +10,7 @@ import { ok, err } from '../types';
 import { execCommand } from '../exec';
 import { DEFAULT_TIMEOUT_MS } from '../constants';
 import { resolveBinary } from './_resolveBinary';
-import { createToolError } from './_toolError';
+import { createToolError, createValidationError } from './_toolError';
 import type { ToolBaseOptions } from './_toolTypes';
 
 /** Options for {@link dsrdump}. */
@@ -81,7 +81,7 @@ function buildArgs(inputPath: string, options?: DsrdumpOptions): string[] {
 async function dsrdump(inputPath: string, options?: DsrdumpOptions): Promise<Result<DsrdumpResult>> {
     const validation = DsrdumpOptionsSchema.safeParse(options);
     if (!validation.success) {
-        return err(new Error(`dsrdump: invalid options: ${validation.error.message}`));
+        return err(createValidationError('dsrdump', validation.error));
     }
 
     const binaryResult = resolveBinary('dsrdump');

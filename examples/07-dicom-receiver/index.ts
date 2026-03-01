@@ -21,7 +21,7 @@ import { rm, readdir } from 'node:fs/promises';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { createServer } from 'node:net';
-import { DicomReceiver, dcmsend, unwrap } from '@ubercode/dcmtk';
+import { DicomReceiver, dcmsend } from '@ubercode/dcmtk';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const SAMPLES = resolve(__dirname, '../../dicomSamples/1010_brain_mr_12_jpg');
@@ -58,17 +58,20 @@ async function main() {
     const port = await getAvailablePort();
 
     // 1. Create the pooled receiver
-    const receiver = unwrap(
-        DicomReceiver.create({
-            port,
-            storageDir,
-            aeTitle: 'POOLRECV',
-            minPoolSize: 2,
-            maxPoolSize: 4,
-            configFile: CONFIG_FILE,
-            configProfile: 'Default',
-        })
-    );
+    const createResult = DicomReceiver.create({
+        port,
+        storageDir,
+        aeTitle: 'POOLRECV',
+        minPoolSize: 2,
+        maxPoolSize: 4,
+        configFile: CONFIG_FILE,
+        configProfile: 'Default',
+    });
+    if (!createResult.ok) {
+        console.error(createResult.error.message);
+        return;
+    }
+    const receiver = createResult.value;
 
     try {
         // 2. Wire events
@@ -82,7 +85,11 @@ async function main() {
 
         // 3. Start
         console.log(`Starting DicomReceiver on port ${port} (pool: 2–4 workers)...`);
-        unwrap(await receiver.start());
+        const startResult = await receiver.start();
+        if (!startResult.ok) {
+            console.error(startResult.error.message);
+            return;
+        }
         await sleep(2000);
         console.log(`Pool status: ${JSON.stringify(receiver.poolStatus)}\n`);
 

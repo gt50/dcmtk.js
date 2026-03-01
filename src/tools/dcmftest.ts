@@ -10,7 +10,7 @@ import { ok, err } from '../types';
 import { execCommand } from '../exec';
 import { DEFAULT_TIMEOUT_MS } from '../constants';
 import { resolveBinary } from './_resolveBinary';
-import { createToolError } from './_toolError';
+import { createToolError, createValidationError } from './_toolError';
 import type { ToolBaseOptions } from './_toolTypes';
 
 /** Options for {@link dcmftest}. */
@@ -52,7 +52,7 @@ const DcmftestOptionsSchema = z
 async function dcmftest(inputPath: string, options?: DcmftestOptions): Promise<Result<DcmftestResult>> {
     const validation = DcmftestOptionsSchema.safeParse(options);
     if (!validation.success) {
-        return err(new Error(`dcmftest: invalid options: ${validation.error.message}`));
+        return err(createValidationError('dcmftest', validation.error));
     }
 
     const binaryResult = resolveBinary('dcmftest');

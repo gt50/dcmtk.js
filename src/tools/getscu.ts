@@ -13,7 +13,7 @@ import { ok, err } from '../types';
 import { execCommand } from '../exec';
 import { DEFAULT_TIMEOUT_MS } from '../constants';
 import { resolveBinary } from './_resolveBinary';
-import { createToolError } from './_toolError';
+import { createToolError, createValidationError } from './_toolError';
 import type { ToolBaseOptions } from './_toolTypes';
 import { isSafePath, isValidDicomKey, isValidAETitle } from '../patterns';
 
@@ -128,7 +128,7 @@ function buildArgs(options: GetscuOptions): string[] {
 async function getscu(options: GetscuOptions): Promise<Result<GetscuResult>> {
     const validation = GetscuOptionsSchema.safeParse(options);
     if (!validation.success) {
-        return err(new Error(`getscu: invalid options: ${validation.error.message}`));
+        return err(createValidationError('getscu', validation.error));
     }
 
     const binaryResult = resolveBinary('getscu');

@@ -10,7 +10,7 @@ import { ok, err } from '../types';
 import { execCommand } from '../exec';
 import { DEFAULT_TIMEOUT_MS } from '../constants';
 import { resolveBinary } from './_resolveBinary';
-import { createToolError } from './_toolError';
+import { createToolError, createValidationError } from './_toolError';
 import type { ToolBaseOptions } from './_toolTypes';
 
 /** Options for {@link dcm2pdf}. */
@@ -41,7 +41,7 @@ const Dcm2pdfOptionsSchema = z
 async function dcm2pdf(inputPath: string, outputPath: string, options?: Dcm2pdfOptions): Promise<Result<Dcm2pdfResult>> {
     const validation = Dcm2pdfOptionsSchema.safeParse(options);
     if (!validation.success) {
-        return err(new Error(`dcm2pdf: invalid options: ${validation.error.message}`));
+        return err(createValidationError('dcm2pdf', validation.error));
     }
 
     const binaryResult = resolveBinary('dcm2pdf');

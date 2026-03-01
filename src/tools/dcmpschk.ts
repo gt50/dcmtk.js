@@ -13,7 +13,7 @@ import { ok, err } from '../types';
 import { execCommand } from '../exec';
 import { DEFAULT_TIMEOUT_MS } from '../constants';
 import { resolveBinary } from './_resolveBinary';
-import { createToolError } from './_toolError';
+import { createToolError, createValidationError } from './_toolError';
 import type { ToolBaseOptions } from './_toolTypes';
 
 /** Options for {@link dcmpschk}. */
@@ -51,7 +51,7 @@ const DcmpschkOptionsSchema = z
 async function dcmpschk(inputPath: string, options?: DcmpschkOptions): Promise<Result<DcmpschkResult>> {
     const validation = DcmpschkOptionsSchema.safeParse(options);
     if (!validation.success) {
-        return err(new Error(`dcmpschk: invalid options: ${validation.error.message}`));
+        return err(createValidationError('dcmpschk', validation.error));
     }
 
     const binaryResult = resolveBinary('dcmpschk');

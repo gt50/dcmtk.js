@@ -15,6 +15,7 @@ import { DcmtkProcess } from '../DcmtkProcess';
 import type { DcmtkProcessConfig } from '../DcmtkProcess';
 import { LineParser } from '../parsers/LineParser';
 import { resolveBinary } from '../tools/_resolveBinary';
+import { createValidationError } from '../tools/_toolError';
 import { isSafePath, isValidAETitle } from '../patterns';
 import { STORESCP_PATTERNS, STORESCP_FATAL_EVENTS } from '../events/storescp';
 import { DcmrecvEvent } from '../events/dcmrecv';
@@ -322,13 +323,6 @@ class StoreSCP extends DcmtkProcess {
         }
     }
 
-    /**
-     * Registers a typed listener for a storescp-specific event.
-     *
-     * @param event - The event name from StoreSCPEventMap
-     * @param listener - Callback receiving typed event data
-     * @returns this for chaining
-     */
     /** Disposes the server and its parser, preventing listener leaks. */
     [Symbol.dispose](): void {
         if (this.abortSignal !== undefined && this.abortHandler !== undefined) {
@@ -338,6 +332,13 @@ class StoreSCP extends DcmtkProcess {
         super[Symbol.dispose]();
     }
 
+    /**
+     * Registers a typed listener for a storescp-specific event.
+     *
+     * @param event - The event name from StoreSCPEventMap
+     * @param listener - Callback receiving typed event data
+     * @returns this for chaining
+     */
     onEvent<K extends keyof StoreSCPEventMap>(event: K, listener: (...args: StoreSCPEventMap[K]) => void): this {
         return this.on(event as string, listener as never);
     }
@@ -391,7 +392,7 @@ class StoreSCP extends DcmtkProcess {
     static create(options: StoreSCPOptions): Result<StoreSCP> {
         const validation = StoreSCPOptionsSchema.safeParse(options);
         if (!validation.success) {
-            return err(new Error(`storescp: invalid options: ${validation.error.message}`));
+            return err(createValidationError('storescp', validation.error));
         }
 
         const binaryResult = resolveBinary('storescp');

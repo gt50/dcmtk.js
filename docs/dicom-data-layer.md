@@ -9,15 +9,23 @@ Immutable wrapper around a DICOM JSON Model (PS3.18 F.2) with type-safe accessor
 ### Creating a Dataset
 
 ```typescript
-import { DicomDataset, dcm2json, unwrap } from '@ubercode/dcmtk';
+import { DicomDataset, dcm2json } from '@ubercode/dcmtk';
 
 // From a DICOM JSON Model object
-const ds = unwrap(DicomDataset.fromJson(jsonObject));
+const dsResult = DicomDataset.fromJson(jsonObject);
+if (!dsResult.ok) {
+    console.error(dsResult.error.message);
+    return;
+}
+const ds = dsResult.value;
 
 // From a file (via dcm2json)
 const result = await dcm2json('/path/to/image.dcm');
 if (result.ok) {
-    const dataset = unwrap(DicomDataset.fromJson(result.value.data));
+    const datasetResult = DicomDataset.fromJson(result.value.data);
+    if (datasetResult.ok) {
+        console.log(datasetResult.value.patientName);
+    }
 }
 ```
 
@@ -143,8 +151,17 @@ if (result.ok) {
 ### Creating from a Dataset
 
 ```typescript
-const ds = unwrap(DicomDataset.fromJson(jsonObject));
-const inst = unwrap(DicomInstance.fromDataset(ds, '/path/to/image.dcm'));
+const dsResult = DicomDataset.fromJson(jsonObject);
+if (!dsResult.ok) {
+    console.error(dsResult.error.message);
+    return;
+}
+const instResult = DicomInstance.fromDataset(dsResult.value, '/path/to/image.dcm');
+if (!instResult.ok) {
+    console.error(instResult.error.message);
+    return;
+}
+const inst = instResult.value;
 ```
 
 ### Properties
@@ -163,7 +180,12 @@ const inst = unwrap(DicomInstance.fromDataset(ds, '/path/to/image.dcm'));
 ### Modifying Tags (Fluent API)
 
 ```typescript
-const inst = unwrap(await DicomInstance.open('/path/to/image.dcm'));
+const openResult = await DicomInstance.open('/path/to/image.dcm');
+if (!openResult.ok) {
+    console.error(openResult.error.message);
+    return;
+}
+const inst = openResult.value;
 
 const modified = inst.setPatientName('ANONYMOUS').setPatientID('ANON-001').erasePrivateTags();
 
@@ -205,13 +227,19 @@ await updated.applyChanges();
 ### Full Example
 
 ```typescript
-import { DicomInstance, unwrap } from '@ubercode/dcmtk';
+import { DicomInstance } from '@ubercode/dcmtk';
 
 // Open and inspect
-const inst = unwrap(await DicomInstance.open('/path/to/image.dcm'));
+const openResult = await DicomInstance.open('/path/to/image.dcm');
+if (!openResult.ok) {
+    console.error(openResult.error.message);
+    return;
+}
+const inst = openResult.value;
 console.log('Patient:', inst.patientName);
 console.log('Study:', inst.studyDate);
-console.log('Size:', unwrap(await inst.fileSize()), 'bytes');
+const sizeResult = await inst.fileSize();
+if (sizeResult.ok) console.log('Size:', sizeResult.value, 'bytes');
 
 // Anonymize to a new file
 const anonymized = inst.setPatientName('ANONYMOUS').setPatientID('ANON-001').erasePrivateTags();

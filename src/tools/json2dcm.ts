@@ -10,7 +10,7 @@ import { ok, err } from '../types';
 import { execCommand } from '../exec';
 import { DEFAULT_TIMEOUT_MS } from '../constants';
 import { resolveBinary } from './_resolveBinary';
-import { createToolError } from './_toolError';
+import { createToolError, createValidationError } from './_toolError';
 import type { ToolBaseOptions } from './_toolTypes';
 
 /** Options for {@link json2dcm}. */
@@ -49,7 +49,7 @@ const Json2dcmOptionsSchema = z
 async function json2dcm(inputPath: string, outputPath: string, options?: Json2dcmOptions): Promise<Result<Json2dcmResult>> {
     const validation = Json2dcmOptionsSchema.safeParse(options);
     if (!validation.success) {
-        return err(new Error(`json2dcm: invalid options: ${validation.error.message}`));
+        return err(createValidationError('json2dcm', validation.error));
     }
 
     const binaryResult = resolveBinary('json2dcm');

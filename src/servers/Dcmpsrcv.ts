@@ -15,6 +15,7 @@ import { DcmtkProcess } from '../DcmtkProcess';
 import type { DcmtkProcessConfig } from '../DcmtkProcess';
 import { LineParser } from '../parsers/LineParser';
 import { resolveBinary } from '../tools/_resolveBinary';
+import { createValidationError } from '../tools/_toolError';
 import { isSafePath } from '../patterns';
 import { DCMPSRCV_PATTERNS, DCMPSRCV_FATAL_EVENTS } from '../events/dcmpsrcv';
 import type {
@@ -193,7 +194,7 @@ class Dcmpsrcv extends DcmtkProcess {
     static create(options: DcmpsrcvOptions): Result<Dcmpsrcv> {
         const validation = DcmpsrcvOptionsSchema.safeParse(options);
         if (!validation.success) {
-            return err(new Error(`dcmpsrcv: invalid options: ${validation.error.message}`));
+            return err(createValidationError('dcmpsrcv', validation.error));
         }
 
         const binaryResult = resolveBinary('dcmpsrcv');

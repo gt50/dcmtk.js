@@ -10,7 +10,7 @@ import { ok, err } from '../types';
 import { execCommand } from '../exec';
 import { DEFAULT_TIMEOUT_MS } from '../constants';
 import { resolveBinary } from './_resolveBinary';
-import { createToolError } from './_toolError';
+import { createToolError, createValidationError } from './_toolError';
 import type { ToolBaseOptions } from './_toolTypes';
 
 /**
@@ -113,7 +113,7 @@ function buildArgs(outputPath: string, options?: DcmmklutOptions): string[] {
 async function dcmmklut(outputPath: string, options?: DcmmklutOptions): Promise<Result<DcmmklutResult>> {
     const validation = DcmmklutOptionsSchema.safeParse(options);
     if (!validation.success) {
-        return err(new Error(`dcmmklut: invalid options: ${validation.error.message}`));
+        return err(createValidationError('dcmmklut', validation.error));
     }
 
     const binaryResult = resolveBinary('dcmmklut');

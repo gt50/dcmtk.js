@@ -10,7 +10,7 @@ import { ok, err } from '../types';
 import { execCommand } from '../exec';
 import { DEFAULT_TIMEOUT_MS } from '../constants';
 import { resolveBinary } from './_resolveBinary';
-import { createToolError } from './_toolError';
+import { createToolError, createValidationError } from './_toolError';
 import type { ToolBaseOptions } from './_toolTypes';
 
 /** Options for {@link dcmcjpeg}. */
@@ -72,7 +72,7 @@ function buildArgs(inputPath: string, outputPath: string, options?: DcmcjpegOpti
 async function dcmcjpeg(inputPath: string, outputPath: string, options?: DcmcjpegOptions): Promise<Result<DcmcjpegResult>> {
     const validation = DcmcjpegOptionsSchema.safeParse(options);
     if (!validation.success) {
-        return err(new Error(`dcmcjpeg: invalid options: ${validation.error.message}`));
+        return err(createValidationError('dcmcjpeg', validation.error));
     }
 
     const binaryResult = resolveBinary('dcmcjpeg');

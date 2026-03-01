@@ -138,16 +138,19 @@ storageDir/
 ### Example
 
 ```typescript
-import { DicomReceiver, unwrap } from '@ubercode/dcmtk';
+import { DicomReceiver } from '@ubercode/dcmtk';
 
-const receiver = unwrap(
-    DicomReceiver.create({
-        port: 4242,
-        storageDir: '/data/received',
-        minPoolSize: 2,
-        maxPoolSize: 8,
-    })
-);
+const result = DicomReceiver.create({
+    port: 4242,
+    storageDir: '/data/received',
+    minPoolSize: 2,
+    maxPoolSize: 8,
+});
+if (!result.ok) {
+    console.error(result.error.message);
+    return;
+}
+const receiver = result.value;
 
 receiver.onFileReceived(data => {
     console.log(`File: ${data.filePath} (assoc: ${data.associationId})`);

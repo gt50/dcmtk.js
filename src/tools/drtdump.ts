@@ -10,7 +10,7 @@ import { ok, err } from '../types';
 import { execCommand } from '../exec';
 import { DEFAULT_TIMEOUT_MS } from '../constants';
 import { resolveBinary } from './_resolveBinary';
-import { createToolError } from './_toolError';
+import { createToolError, createValidationError } from './_toolError';
 import type { ToolBaseOptions } from './_toolTypes';
 
 /** Options for {@link drtdump}. */
@@ -67,7 +67,7 @@ function buildArgs(inputPath: string, options?: DrtdumpOptions): string[] {
 async function drtdump(inputPath: string, options?: DrtdumpOptions): Promise<Result<DrtdumpResult>> {
     const validation = DrtdumpOptionsSchema.safeParse(options);
     if (!validation.success) {
-        return err(new Error(`drtdump: invalid options: ${validation.error.message}`));
+        return err(createValidationError('drtdump', validation.error));
     }
 
     const binaryResult = resolveBinary('drtdump');

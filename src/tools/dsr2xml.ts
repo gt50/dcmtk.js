@@ -10,7 +10,7 @@ import { ok, err } from '../types';
 import { execCommand } from '../exec';
 import { DEFAULT_TIMEOUT_MS } from '../constants';
 import { resolveBinary } from './_resolveBinary';
-import { createToolError } from './_toolError';
+import { createToolError, createValidationError } from './_toolError';
 import type { ToolBaseOptions } from './_toolTypes';
 
 /** Options for {@link dsr2xml}. */
@@ -74,7 +74,7 @@ function buildArgs(inputPath: string, options?: Dsr2xmlOptions): string[] {
 async function dsr2xml(inputPath: string, options?: Dsr2xmlOptions): Promise<Result<Dsr2xmlResult>> {
     const validation = Dsr2xmlOptionsSchema.safeParse(options);
     if (!validation.success) {
-        return err(new Error(`dsr2xml: invalid options: ${validation.error.message}`));
+        return err(createValidationError('dsr2xml', validation.error));
     }
 
     const binaryResult = resolveBinary('dsr2xml');

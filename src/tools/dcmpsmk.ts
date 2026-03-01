@@ -13,7 +13,7 @@ import { ok, err } from '../types';
 import { execCommand } from '../exec';
 import { DEFAULT_TIMEOUT_MS } from '../constants';
 import { resolveBinary } from './_resolveBinary';
-import { createToolError } from './_toolError';
+import { createToolError, createValidationError } from './_toolError';
 import type { ToolBaseOptions } from './_toolTypes';
 
 /** Options for {@link dcmpsmk}. */
@@ -52,7 +52,7 @@ const DcmpsmkOptionsSchema = z
 async function dcmpsmk(inputPath: string, outputPath: string, options?: DcmpsmkOptions): Promise<Result<DcmpsmkResult>> {
     const validation = DcmpsmkOptionsSchema.safeParse(options);
     if (!validation.success) {
-        return err(new Error(`dcmpsmk: invalid options: ${validation.error.message}`));
+        return err(createValidationError('dcmpsmk', validation.error));
     }
 
     const binaryResult = resolveBinary('dcmpsmk');

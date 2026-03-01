@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 
 // Result pattern
-export { ok, err, assertUnreachable, unwrap, mapResult } from './types';
+export { ok, err, assertUnreachable, mapResult } from './types';
 export type { Result, ResultValue, DcmtkProcessResult, ExecOptions, SpawnOptions, LineSource, ProcessLine } from './types';
 
 // Branded types + factories
@@ -354,7 +354,7 @@ export type { WlmscpfsOptions, WlmscpfsEventMap } from './servers/Wlmscpfs';
 export { AssociationTracker } from './servers/AssociationTracker';
 export type { AssociationContext, TrackedFile, AssociationSummary } from './servers/AssociationTracker';
 
-export { DicomReceiver, DEFAULT_MIN_POOL_SIZE, DEFAULT_MAX_POOL_SIZE, DEFAULT_CONNECTION_TIMEOUT_MS } from './servers/DicomReceiver';
+export { DicomReceiver } from './servers/DicomReceiver';
 export type { DicomReceiverOptions, DicomReceiverEventMap, ReceiverFileData, ReceiverAssociationData } from './servers/DicomReceiver';
 
 // ---------------------------------------------------------------------------

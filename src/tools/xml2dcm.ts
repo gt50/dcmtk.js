@@ -10,7 +10,7 @@ import { ok, err } from '../types';
 import { execCommand } from '../exec';
 import { DEFAULT_TIMEOUT_MS } from '../constants';
 import { resolveBinary } from './_resolveBinary';
-import { createToolError } from './_toolError';
+import { createToolError, createValidationError } from './_toolError';
 import type { ToolBaseOptions } from './_toolTypes';
 
 /** Options for {@link xml2dcm}. */
@@ -77,7 +77,7 @@ function buildArgs(inputPath: string, outputPath: string, options?: Xml2dcmOptio
 async function xml2dcm(inputPath: string, outputPath: string, options?: Xml2dcmOptions): Promise<Result<Xml2dcmResult>> {
     const validation = Xml2dcmOptionsSchema.safeParse(options);
     if (!validation.success) {
-        return err(new Error(`xml2dcm: invalid options: ${validation.error.message}`));
+        return err(createValidationError('xml2dcm', validation.error));
     }
 
     const binaryResult = resolveBinary('xml2dcm');

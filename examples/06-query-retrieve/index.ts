@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url';
 import { copyFile, mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { createServer } from 'node:net';
-import { DcmQRSCP, StoreSCP, dcmqridx, dcm2json, findscu, getscu, movescu, unwrap, DicomDataset, PacsClient } from '@ubercode/dcmtk';
+import { DcmQRSCP, StoreSCP, dcmqridx, dcm2json, findscu, getscu, movescu, DicomDataset, PacsClient } from '@ubercode/dcmtk';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const SAMPLE = resolve(__dirname, '../../dicomSamples/other/0002d.DCM');
@@ -104,12 +104,25 @@ async function main() {
         console.log('  Sample DICOM file copied to storage area.');
 
         // 2. Index with dcmqridx
-        unwrap(await dcmqridx({ indexDirectory: dbDir, inputFiles: [join(dbDir, 'sample.dcm')] }));
+        const idxResult = await dcmqridx({ indexDirectory: dbDir, inputFiles: [join(dbDir, 'sample.dcm')] });
+        if (!idxResult.ok) {
+            console.error(idxResult.error.message);
+            return;
+        }
         console.log('  DICOM file indexed in Q/R database.');
 
         // 3. Read StudyInstanceUID for queries
-        const jsonResult = unwrap(await dcm2json(join(dbDir, 'sample.dcm')));
-        const ds = unwrap(DicomDataset.fromJson(jsonResult.data));
+        const jsonResult = await dcm2json(join(dbDir, 'sample.dcm'));
+        if (!jsonResult.ok) {
+            console.error(jsonResult.error.message);
+            return;
+        }
+        const dsResult = DicomDataset.fromJson(jsonResult.value.data);
+        if (!dsResult.ok) {
+            console.error(dsResult.error.message);
+            return;
+        }
+        const ds = dsResult.value;
         const studyUID = ds.studyInstanceUID;
         if (!studyUID) throw new Error('Sample file has no StudyInstanceUID');
         console.log(`  Study Instance UID: ${studyUID}`);
@@ -125,14 +138,32 @@ async function main() {
         await writeFile(configFile, configContent, 'utf-8');
 
         // 5. Start StoreSCP as C-MOVE destination
-        moveScp = unwrap(StoreSCP.create({ port: movePort, outputDirectory: moveDestDir, aeTitle: MOVE_AE }));
-        unwrap(await moveScp.start());
+        const moveScpResult = StoreSCP.create({ port: movePort, outputDirectory: moveDestDir, aeTitle: MOVE_AE });
+        if (!moveScpResult.ok) {
+            console.error(moveScpResult.error.message);
+            return;
+        }
+        moveScp = moveScpResult.value;
+        const moveStartResult = await moveScp.start();
+        if (!moveStartResult.ok) {
+            console.error(moveStartResult.error.message);
+            return;
+        }
         await sleep(1000);
         console.log(`  StoreSCP (move destination) started on port ${movePort}.`);
 
         // 6. Start DcmQRSCP
-        qrServer = unwrap(DcmQRSCP.create({ configFile, port: qrPort, startTimeoutMs: 15_000 }));
-        unwrap(await qrServer.start());
+        const qrCreateResult = DcmQRSCP.create({ configFile, port: qrPort, startTimeoutMs: 15_000 });
+        if (!qrCreateResult.ok) {
+            console.error(qrCreateResult.error.message);
+            return;
+        }
+        qrServer = qrCreateResult.value;
+        const qrStartResult = await qrServer.start();
+        if (!qrStartResult.ok) {
+            console.error(qrStartResult.error.message);
+            return;
+        }
         await sleep(1000);
         console.log(`  DcmQRSCP started on port ${qrPort}.\n`);
 
@@ -202,13 +233,16 @@ async function main() {
         // PacsClient — high-level PACS API
         // -------------------------------------------------------------------
         console.log('\n--- PacsClient: high-level PACS API ---');
-        const client = unwrap(
-            PacsClient.create({
-                host: '127.0.0.1',
-                port: qrPort,
-                calledAETitle: QR_AE,
-            })
-        );
+        const clientResult = PacsClient.create({
+            host: '127.0.0.1',
+            port: qrPort,
+            calledAETitle: QR_AE,
+        });
+        if (!clientResult.ok) {
+            console.error(clientResult.error.message);
+            return;
+        }
+        const client = clientResult.value;
 
         // C-ECHO
         const echoResult = await client.echo({ timeoutMs: 10_000 });

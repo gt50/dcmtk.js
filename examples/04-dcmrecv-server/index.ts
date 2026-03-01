@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 import { mkdtemp, rm, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { createServer } from 'node:net';
-import { Dcmrecv, echoscu, dcmsend, unwrap } from '@ubercode/dcmtk';
+import { Dcmrecv, echoscu, dcmsend } from '@ubercode/dcmtk';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const SAMPLES = resolve(__dirname, '../../dicomSamples/1010_brain_mr_12_jpg');
@@ -108,7 +108,11 @@ async function main() {
         // 3. Start server
         // -------------------------------------------------------------------
         console.log(`Starting Dcmrecv on port ${port}...`);
-        unwrap(await server.start());
+        const startResult = await server.start();
+        if (!startResult.ok) {
+            console.error(startResult.error.message);
+            return;
+        }
         await sleep(1000);
         console.log('Dcmrecv is listening.\n');
 

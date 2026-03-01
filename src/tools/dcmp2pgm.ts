@@ -10,7 +10,7 @@ import { ok, err } from '../types';
 import { execCommand } from '../exec';
 import { DEFAULT_TIMEOUT_MS } from '../constants';
 import { resolveBinary } from './_resolveBinary';
-import { createToolError } from './_toolError';
+import { createToolError, createValidationError } from './_toolError';
 import type { ToolBaseOptions } from './_toolTypes';
 
 /** Options for {@link dcmp2pgm}. */
@@ -78,7 +78,7 @@ function buildArgs(inputPath: string, outputPath: string, options?: Dcmp2pgmOpti
 async function dcmp2pgm(inputPath: string, outputPath: string, options?: Dcmp2pgmOptions): Promise<Result<Dcmp2pgmResult>> {
     const validation = Dcmp2pgmOptionsSchema.safeParse(options);
     if (!validation.success) {
-        return err(new Error(`dcmp2pgm: invalid options: ${validation.error.message}`));
+        return err(createValidationError('dcmp2pgm', validation.error));
     }
 
     const binaryResult = resolveBinary('dcmp2pgm');

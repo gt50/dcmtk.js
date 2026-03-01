@@ -10,7 +10,7 @@ import { ok, err } from '../types';
 import { execCommand } from '../exec';
 import { DEFAULT_TIMEOUT_MS } from '../constants';
 import { resolveBinary } from './_resolveBinary';
-import { createToolError } from './_toolError';
+import { createToolError, createValidationError } from './_toolError';
 import type { ToolBaseOptions } from './_toolTypes';
 
 /** Options for {@link dcmqridx}. */
@@ -74,7 +74,7 @@ function buildArgs(options: DcmqridxOptions): string[] {
 async function dcmqridx(options: DcmqridxOptions): Promise<Result<DcmqridxResult>> {
     const validation = DcmqridxOptionsSchema.safeParse(options);
     if (!validation.success) {
-        return err(new Error(`dcmqridx: invalid options: ${validation.error.message}`));
+        return err(createValidationError('dcmqridx', validation.error));
     }
 
     const binaryResult = resolveBinary('dcmqridx');

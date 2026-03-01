@@ -12,7 +12,7 @@ import { ok, err } from '../types';
 import { execCommand } from '../exec';
 import { DEFAULT_TIMEOUT_MS } from '../constants';
 import { resolveBinary } from './_resolveBinary';
-import { createToolError } from './_toolError';
+import { createToolError, createValidationError } from './_toolError';
 import type { ToolBaseOptions } from './_toolTypes';
 
 /**
@@ -109,7 +109,7 @@ function buildArgs(inputPath: string, options?: Dcm2xmlOptions): string[] {
 async function dcm2xml(inputPath: string, options?: Dcm2xmlOptions): Promise<Result<Dcm2xmlResult>> {
     const validation = Dcm2xmlOptionsSchema.safeParse(options);
     if (!validation.success) {
-        return err(new Error(`dcm2xml: invalid options: ${validation.error.message}`));
+        return err(createValidationError('dcm2xml', validation.error));
     }
 
     const binaryResult = resolveBinary('dcm2xml');

@@ -10,7 +10,7 @@ import { ok, err } from '../types';
 import { execCommand } from '../exec';
 import { DEFAULT_TIMEOUT_MS } from '../constants';
 import { resolveBinary } from './_resolveBinary';
-import { createToolError } from './_toolError';
+import { createToolError, createValidationError } from './_toolError';
 import type { ToolBaseOptions } from './_toolTypes';
 
 /**
@@ -95,7 +95,7 @@ function buildArgs(inputPath: string, outputPath: string, options?: Img2dcmOptio
 async function img2dcm(inputPath: string, outputPath: string, options?: Img2dcmOptions): Promise<Result<Img2dcmResult>> {
     const validation = Img2dcmOptionsSchema.safeParse(options);
     if (!validation.success) {
-        return err(new Error(`img2dcm: invalid options: ${validation.error.message}`));
+        return err(createValidationError('img2dcm', validation.error));
     }
 
     const binaryResult = resolveBinary('img2dcm');
