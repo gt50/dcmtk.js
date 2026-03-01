@@ -431,7 +431,7 @@ class StoreSCP extends DcmtkProcess {
                 this.emit('error', { error: new Error(`Fatal: ${event}`), fatal: true });
                 void this.stop();
             }
-            this.emit(event, ...([data] as never));
+            this.emit(event, data);
         });
     }
 
@@ -446,25 +446,25 @@ class StoreSCP extends DcmtkProcess {
         // Listen to both so the tracker works regardless of which fires.
         this.onEvent('STORING_FILE', data => {
             const tracked = this.tracker.trackFile(data.filePath);
-            this.emit(DcmrecvEvent.FILE_RECEIVED, ...([tracked] as never));
+            this.emit(DcmrecvEvent.FILE_RECEIVED as string, tracked);
         });
 
         this.onEvent('STORED_FILE', data => {
             const tracked = this.tracker.trackFile(data.filePath);
-            this.emit(DcmrecvEvent.FILE_RECEIVED, ...([tracked] as never));
+            this.emit(DcmrecvEvent.FILE_RECEIVED as string, tracked);
         });
 
         this.onEvent('ASSOCIATION_RELEASE', () => {
             const summary = this.tracker.endAssociation('release');
             if (summary !== undefined) {
-                this.emit(DcmrecvEvent.ASSOCIATION_COMPLETE, ...([summary] as never));
+                this.emit(DcmrecvEvent.ASSOCIATION_COMPLETE as string, summary);
             }
         });
 
         this.onEvent('ASSOCIATION_ABORTED', () => {
             const summary = this.tracker.endAssociation('abort');
             if (summary !== undefined) {
-                this.emit(DcmrecvEvent.ASSOCIATION_COMPLETE, ...([summary] as never));
+                this.emit(DcmrecvEvent.ASSOCIATION_COMPLETE as string, summary);
             }
         });
     }

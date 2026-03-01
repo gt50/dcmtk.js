@@ -257,7 +257,7 @@ class Wlmscpfs extends DcmtkProcess {
                 this.emit('error', { error: new Error(`Fatal: ${event}`), fatal: true });
                 void this.stop();
             }
-            this.emit(event, ...([data] as never));
+            this.emit(event, data);
         });
     }
 

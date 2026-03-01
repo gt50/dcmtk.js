@@ -303,7 +303,12 @@ receiver.onAssociationComplete(data => console.log(data.files, data.totalBytes, 
 await receiver.start();
 // ... connections auto-routed to idle workers, files organized per-association
 await receiver.stop();
+
+// Pool monitoring
+receiver.poolStatus; // PoolStatus: { idle: number; busy: number; total: number }
 ```
+
+`PoolStatus` is exported as a named type.
 
 ### PacsClient
 

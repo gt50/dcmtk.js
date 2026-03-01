@@ -1,13 +1,97 @@
 # Changelog
 
-## [0.1.0] - Unreleased
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/),
+and this project adheres to [Semantic Versioning](https://semver.org/).
+
+## [0.1.5] - 2026-03-01
 
 ### Added
 
-- Core infrastructure: `Result<T, E>` pattern, branded types (`DicomTag`, `AETitle`, `Port`, etc.), Zod validation schemas
+- `DicomReceiver` — pooled DICOM receiver managing multiple `Dcmrecv` workers behind a TCP proxy with auto-scaling between configurable `minPoolSize` and `maxPoolSize`
+- `AssociationTracker` built into `Dcmrecv` and `StoreSCP` — automatically correlates received files to associations via `FILE_RECEIVED` and `ASSOCIATION_COMPLETE` events
+- `DicomInstance` on `FILE_RECEIVED` events — received files are now wrapped as `DicomInstance` objects for immediate fluent access
+- Transfer stats on `ASSOCIATION_COMPLETE` events — duration, file count, and byte totals
+
+### Changed
+
+- Removed `unwrap()` helper — all code now uses explicit `if (!result.ok)` narrowing for Result types
+- Standardized validation errors across all 51 tools and 7 servers using `createValidationError()`
+- Aligned `DicomReceiver` API with other server classes (`stop()` returns `Promise<void>`, typed `onEvent()` method)
+- Updated TSDoc across public APIs
+
+## [0.1.4] - 2026-02-28
+
+### Changed
+
+- Renamed `DicomFile` to `DicomInstance` — unified DICOM object with fluent API for reading, modifying, and writing
+- Refactored `DicomInstance` internals: renamed private fields for clarity, improved import structure using barrel imports
+- Updated all examples (01-06) to use `DicomInstance` fluent API and `AssociationTracker`
+
+### Fixed
+
+- `StoreSCP` file tracking now correctly correlates files to associations
+- Fixed examples 02-06: corrected SR XML format, AE titles, config references, and sample file paths
+- Fixed `ChangeSet` example: unwrap `createDicomTagPath` Result before use
+
+## [0.1.3] - 2026-02-25
+
+### Added
+
+- `PacsClient` — high-level PACS client with `echo()`, `findStudies()`, `findSeries()`, `findImages()`, `findWorklist()`, `find()`, `retrieveStudy()`, `retrieveSeries()`, and `store()` methods
+- 3 additional tool wrappers (48 to 51): `dcmqridx`, `dcmcjpls`, `dcmdjpls`
+- `DicomInstance` integration tests
+- 6 runnable example projects demonstrating common DCMTK workflows
+
+### Changed
+
+- Documentation overhaul: tiered docs structure with 12 new child documents
+- Integrated `stderr-lib` for error normalization (Phase 8.3)
+- Consolidated CI into a single Docker job running `test:all` (unit + integration + coverage)
+- Replaced PacsClient mock tests with real integration tests against DcmQRSCP/StoreSCP
+
+### Fixed
+
+- All 67 code review findings resolved (62 fixed, 5 accepted)
+- All integration test failures for DCMTK 3.7.0 compatibility
+- C-MOVE retrieval no longer passes `outputDirectory` to `movescu`
+- `dcmodify` now ignores missing tags on erase operations
+
+## [0.1.2] - 2026-02-15
+
+### Added
+
+- `.gitattributes` to enforce LF line endings
+
+### Changed
+
+- Used Node.js 24 in publish workflow for npm Trusted Publishers (OIDC)
+
+### Fixed
+
+- Coverage thresholds adjusted for expanded test suite
+
+## [0.1.1] - 2026-02-11
+
+### Added
+
+- Alpha preview warning to README
+
+### Changed
+
+- Prepared alpha release infrastructure for `@ubercode/dcmtk` on npm
+
+## [0.1.0] - 2026-02-10
+
+### Added
+
+- Core infrastructure: `Result<T, E>` pattern with `ok()`, `err()`, `mapResult()` helpers — never throw for expected failures
+- Branded types: `DicomTag`, `AETitle`, `Port`, `DicomTagPath`, `SOPClassUID`, `TransferSyntaxUID`, `DicomFilePath` with factory functions and Zod validation schemas
 - Platform-aware DCMTK binary discovery via `DCMTK_PATH` env var or known install locations
 - Process execution layer: `execCommand()` for short-lived tools, `spawnCommand()` for injection-safe modifications
-- 48 short-lived tool wrappers covering all DCMTK command-line binaries:
+- `DcmtkProcess` base class for long-lived processes (typed EventEmitter, Disposable pattern)
+- 48 short-lived tool wrappers covering DCMTK command-line binaries:
     - Data & Metadata: `dcm2xml`, `dcm2json`, `dcmdump`, `dcmconv`, `dcmodify`, `dcmftest`, `dcmgpdir`, `dcmmkdir`
     - File Conversion: `xml2dcm`, `json2dcm`, `dump2dcm`, `img2dcm`, `pdf2dcm`, `dcm2pdf`, `cda2dcm`, `dcm2cda`, `stl2dcm`
     - Compression: `dcmcrle`, `dcmdrle`, `dcmencap`, `dcmdecap`, `dcmcjpeg`, `dcmdjpeg`
@@ -15,21 +99,29 @@
     - Network: `echoscu`, `dcmsend`, `storescu`, `findscu`, `movescu`, `getscu`, `termscu`
     - Structured Reports: `dsrdump`, `dsr2xml`, `xml2dsr`, `drtdump`
     - Presentation State & Print: `dcmpsmk`, `dcmpschk`, `dcmprscu`, `dcmpsprt`, `dcmp2pgm`, `dcmmkcrv`, `dcmmklut`
-- 4 long-lived server classes with typed EventEmitter APIs:
+- 6 long-lived server classes with typed EventEmitter APIs:
     - `Dcmrecv` — DICOM receiver (C-STORE SCP)
     - `StoreSCP` — Storage SCP with advanced options
+    - `DcmQRSCP` — Query/Retrieve SCP (C-FIND/C-MOVE/C-GET)
+    - `Wlmscpfs` — Worklist Management SCP
     - `DcmprsCP` — Print Management SCP
     - `Dcmpsrcv` — Viewer network receiver
-- Event system with typed patterns for server output parsing (41 event patterns total)
+- Event system with typed patterns for server output parsing (41 event patterns across 4 server types)
 - DICOM data layer:
-    - `DicomDataset` — immutable dataset with typed accessors, path traversal, wildcard search
+    - `DicomDataset` — immutable dataset with typed accessors, path traversal, wildcard search, convenience getters
     - `ChangeSet` — immutable builder for tag modifications and erasures
-    - `DicomFile` — file I/O facade (open, apply changes, write copies)
+    - `DicomInstance` — unified DICOM object with fluent API (open, modify, write, metadata)
 - DICOM metadata infrastructure:
     - 34 standard Value Representations with category metadata
     - 4,902-entry tag dictionary generated from DCMTK sources
-    - SOP Class UID mappings
+    - SOP Class UID to name mappings
     - Tag path parsing and traversal utilities
-- Full TypeScript with strict configuration, dual CJS/ESM build, complete `.d.ts` declarations
+    - XML-to-JSON conversion for DCMTK output
+- Utility functions: `batch()` for parallel processing with concurrency control, `retry()` with exponential backoff
+- Full TypeScript with maximum strict configuration, dual CJS/ESM build, complete `.d.ts` declarations
 - AbortSignal support for cancellation across all async operations
-- 1056 tests across 77 files with 99.42% statement coverage
+- Configurable timeouts on all async operations
+- 1071 tests across 49 unit/fuzz/edge-case test files with 99%+ statement coverage
+- 44 integration test files covering real DCMTK binary interactions
+- CI/CD pipeline with lint, typecheck, test, build, and audit stages
+- npm publishing via Trusted Publishers (OIDC) under `@ubercode/dcmtk`

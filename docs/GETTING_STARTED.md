@@ -43,6 +43,19 @@ sudo apt-get install dcmtk
 sudo dnf install dcmtk
 ```
 
+**Docker:**
+
+Pre-built images with Node.js and DCMTK are available at [`michaelleehobbs/nodejs-dcmtk`](https://hub.docker.com/r/michaelleehobbs/nodejs-dcmtk). Multiple tags are published for different DCMTK and Node.js version combinations:
+
+```bash
+# Example: DCMTK 3.7.0 + Node.js 24 on Alpine
+docker run -it michaelleehobbs/nodejs-dcmtk:dcmtk-3.7.0-nodejs-24.12.0-alpine3.23
+
+# Browse all available tags for other DCMTK/Node.js combinations
+```
+
+These images are used by the project's CI pipeline and are a convenient way to get started without installing DCMTK manually.
+
 ### Installing the Library
 
 ```bash
@@ -52,13 +65,13 @@ npm install @ubercode/dcmtk
 or with pnpm:
 
 ```bash
-pnpm add dcmtk
+pnpm add @ubercode/dcmtk
 ```
 
 or with yarn:
 
 ```bash
-yarn add dcmtk
+yarn add @ubercode/dcmtk
 ```
 
 ---
@@ -683,7 +696,7 @@ When using network tools (`echoscu`, `storescu`, `findscu`):
 
 ## Import Reference
 
-All exports are available from the root `'dcmtk'` import:
+All exports are available from the root `'@ubercode/dcmtk'` import:
 
 ```typescript
 // Core utilities
@@ -721,10 +734,16 @@ import { TransferSyntax, QueryModel } from '@ubercode/dcmtk';
 import { DicomDataset, ChangeSet, DicomInstance } from '@ubercode/dcmtk';
 
 // Server classes
-import { Dcmrecv, StoreSCP, DcmprsCP, Dcmpsrcv } from '@ubercode/dcmtk';
+import { Dcmrecv, StoreSCP, DcmQRSCP, Wlmscpfs, DcmprsCP, Dcmpsrcv, DicomReceiver } from '@ubercode/dcmtk';
+
+// PACS client
+import { PacsClient, RetrieveMode } from '@ubercode/dcmtk';
 
 // DICOM dictionary and VR utilities
 import { lookupTag, lookupTagByKeyword, VR, sopClassNameFromUID } from '@ubercode/dcmtk';
+
+// Utility functions
+import { batch, retry } from '@ubercode/dcmtk';
 ```
 
 ---

@@ -16,7 +16,7 @@ export { AssociationTracker } from './AssociationTracker';
 export type { AssociationContext, TrackedFile, AssociationSummary } from './AssociationTracker';
 
 export { DicomReceiver } from './DicomReceiver';
-export type { DicomReceiverOptions, DicomReceiverEventMap, ReceiverFileData, ReceiverAssociationData, ReceiverErrorData } from './DicomReceiver';
+export type { DicomReceiverOptions, DicomReceiverEventMap, ReceiverFileData, ReceiverAssociationData, ReceiverErrorData, PoolStatus } from './DicomReceiver';
 
 export { DcmprsCP } from './DcmprsCP';
 export type { DcmprsCPOptions, DcmprsCPEventMap } from './DcmprsCP';

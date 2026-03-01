@@ -2,7 +2,7 @@
 
 **Date:** 2026-02-24
 **Reviewer:** Claude Opus 4.6 (8 parallel audit agents)
-**Scope:** Full codebase — core infrastructure, 48 tool wrappers, 4 server classes, DICOM data layer, PacsClient, test quality, build/config, security
+**Scope:** Full codebase — core infrastructure, 51 tool wrappers, 6 server classes, DICOM data layer, PacsClient, test quality, build/config, security
 **Methodology:** 8 specialized agents reviewed in parallel: core infra, tools, servers/events, DICOM data, PacsClient, tests, build/config, security
 
 ---
@@ -752,7 +752,7 @@ Add `MAX_STDOUT_BYTES` (e.g., 100MB) check in data handlers. Kill process on exc
 
 ### 3. Resource: Fix server disposal to clean up parser + AbortSignal listeners
 
-Override `[Symbol.dispose]()` in all 4 server classes to call `this.parser[Symbol.dispose]()` and remove AbortSignal listeners. Prevents memory leaks.
+Override `[Symbol.dispose]()` in all 6 server classes to call `this.parser[Symbol.dispose]()` and remove AbortSignal listeners. Prevents memory leaks.
 
 ### 4. Data: Add structural validation in `DicomDataset.fromJson()`
 

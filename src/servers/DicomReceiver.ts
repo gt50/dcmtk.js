@@ -37,6 +37,16 @@ const MAX_CONNECTION_RETRIES = 200;
 // Public interfaces
 // ---------------------------------------------------------------------------
 
+/** Snapshot of the worker pool state. */
+interface PoolStatus {
+    /** Number of idle workers ready for connections. */
+    readonly idle: number;
+    /** Number of workers currently handling associations. */
+    readonly busy: number;
+    /** Total number of workers (idle + busy). */
+    readonly total: number;
+}
+
 /** Data emitted with FILE_RECEIVED events. */
 interface ReceiverFileData {
     readonly filePath: string;
@@ -324,7 +334,7 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
     }
 
     /** Current pool status. */
-    get poolStatus(): { idle: number; busy: number; total: number } {
+    get poolStatus(): PoolStatus {
         let idle = 0;
         let busy = 0;
         for (const w of this.workers.values()) {
@@ -750,4 +760,4 @@ function delay(ms: number): Promise<void> {
 }
 
 export { DicomReceiver };
-export type { DicomReceiverOptions, DicomReceiverEventMap, ReceiverFileData, ReceiverAssociationData, ReceiverErrorData };
+export type { DicomReceiverOptions, DicomReceiverEventMap, ReceiverFileData, ReceiverAssociationData, ReceiverErrorData, PoolStatus };

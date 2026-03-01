@@ -355,7 +355,14 @@ export { AssociationTracker } from './servers/AssociationTracker';
 export type { AssociationContext, TrackedFile, AssociationSummary } from './servers/AssociationTracker';
 
 export { DicomReceiver } from './servers/DicomReceiver';
-export type { DicomReceiverOptions, DicomReceiverEventMap, ReceiverFileData, ReceiverAssociationData, ReceiverErrorData } from './servers/DicomReceiver';
+export type {
+    DicomReceiverOptions,
+    DicomReceiverEventMap,
+    ReceiverFileData,
+    ReceiverAssociationData,
+    ReceiverErrorData,
+    PoolStatus,
+} from './servers/DicomReceiver';
 
 // ---------------------------------------------------------------------------
 // High-level PACS client
