@@ -1,9 +1,10 @@
 /**
  * Example 04: Dcmrecv Server
  *
- * Demonstrates running a DICOM receiver (Dcmrecv) with association tracking.
- * Two senders each transmit multiple files in separate associations. Events
- * show how to correlate received files with their source.
+ * Demonstrates running a DICOM receiver (Dcmrecv) with built-in association
+ * tracking. Two senders each transmit multiple files in separate associations.
+ * The server's AssociationTracker automatically correlates received files
+ * with their source — no manual line parsing needed.
  *
  * Dcmrecv is the simpler DICOM receiver — good for basic C-STORE SCP
  * use cases. A config file is needed to define accepted transfer syntaxes.
@@ -46,10 +47,12 @@ async function getAvailablePort(): Promise<number> {
     });
 }
 
-/** Tracks files received within a single DICOM association. */
+/** Collected association summaries for final report. */
 interface AssociationRecord {
+    associationId: string;
     callingAE: string;
-    files: string[];
+    files: readonly string[];
+    durationMs: number;
 }
 
 async function main() {
@@ -74,33 +77,31 @@ async function main() {
 
     try {
         // -------------------------------------------------------------------
-        // 2. Association tracking — correlate received files with their source
+        // 2. Association tracking via built-in AssociationTracker
         //
-        //    dcmrecv logs association details to stderr. We parse raw line
-        //    output for boundaries and caller identity, and use the typed
-        //    STORED_FILE event for file tracking.
+        //    The server automatically correlates files to associations using
+        //    an internal state machine. Two high-level events provide all the
+        //    context you need — no manual line parsing required.
+        //
+        //    - FILE_RECEIVED: each file enriched with association context
+        //    - ASSOCIATION_COMPLETE: summary with all files when association ends
         // -------------------------------------------------------------------
         const associations: AssociationRecord[] = [];
-        let current: AssociationRecord | null = null;
 
-        // Parse raw line output for association start/end and calling AE title
-        server.on('line', ({ text }: { text: string }) => {
-            const assocMatch = /Association Received\s+\S+:\s+(\S+)\s+->/.exec(text);
-            if (assocMatch) {
-                current = { callingAE: assocMatch[1] ?? 'unknown', files: [] };
-                console.log(`  [assoc] << New association from "${current.callingAE}"`);
-            }
-            if (/Association Release/i.test(text) && current) {
-                associations.push(current);
-                console.log(`  [assoc] >> Released (${current.files.length} file(s))\n`);
-                current = null;
-            }
+        // Each file arrives enriched with its association context
+        server.onFileReceived(data => {
+            console.log(`  [file]  ${basename(data.filePath)} (${data.associationId} from "${data.callingAE}")`);
         });
 
-        // Typed event for file tracking — add each file to the current association
-        server.onEvent('STORED_FILE', data => {
-            if (current) current.files.push(basename(data.filePath));
-            console.log(`  [file]  Stored: ${basename(data.filePath)}`);
+        // Summary fires when each association ends — includes the full file list
+        server.onAssociationComplete(summary => {
+            associations.push({
+                associationId: summary.associationId,
+                callingAE: summary.callingAE,
+                files: summary.files,
+                durationMs: summary.durationMs,
+            });
+            console.log(`  [assoc] ${summary.associationId} complete: ${summary.files.length} file(s) in ${summary.durationMs}ms\n`);
         });
 
         // -------------------------------------------------------------------
@@ -155,11 +156,11 @@ async function main() {
         // 6. Association summary — which files came from which sender
         // -------------------------------------------------------------------
         console.log('--- Association Summary ---');
-        for (const [i, assoc] of associations.entries()) {
+        for (const assoc of associations) {
             if (assoc.files.length === 0) continue;
-            console.log(`  #${i + 1} from "${assoc.callingAE}": ${assoc.files.length} file(s)`);
+            console.log(`  ${assoc.associationId} from "${assoc.callingAE}": ${assoc.files.length} file(s)`);
             for (const f of assoc.files) {
-                console.log(`       ${f}`);
+                console.log(`       ${basename(f)}`);
             }
         }
 

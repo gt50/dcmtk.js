@@ -9,6 +9,11 @@
  * IDLE -> [beginAssociation] -> ACTIVE -> [trackFile]* -> [endAssociation] -> IDLE
  * ```
  *
+ * This single-slot design is safe because all DCMTK server binaries
+ * (dcmrecv, storescp, etc.) are single-threaded and handle one
+ * association at a time. Concurrent connections queue at the TCP level,
+ * so associations never interleave in the output stream.
+ *
  * @module servers/AssociationTracker
  */
 
@@ -54,7 +59,9 @@ interface AssociationSummary {
  * Tracks DICOM association lifecycle for file-to-source correlation.
  *
  * Maintains a simple IDLE/ACTIVE state machine. While active, all tracked
- * files are enriched with the current association context.
+ * files are enriched with the current association context. Only one
+ * association can be active at a time — this is safe because DCMTK
+ * servers are single-threaded and process associations sequentially.
  *
  * @example
  * ```ts

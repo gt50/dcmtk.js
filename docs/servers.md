@@ -35,6 +35,45 @@ All servers extend `DcmtkProcess`, which provides:
 - **AbortSignal** — pass `signal` in create options to externally abort
 - **Process state** — `ProcessState.IDLE | STARTING | RUNNING | STOPPING | STOPPED | ERRORED`
 
+### Single-Threaded Association Model
+
+**All DCMTK server binaries are single-threaded and handle one association at a time.** When multiple clients connect concurrently, connections queue at the TCP level — the server processes them strictly sequentially:
+
+```
+ASSOCIATION_RECEIVED   (sender 1)
+STORED_FILE            (sender 1)
+STORED_FILE            (sender 1)
+ASSOCIATION_RELEASE    (sender 1)
+ASSOCIATION_RECEIVED   (sender 2)   ← can't start until sender 1 completes
+STORED_FILE            (sender 2)
+ASSOCIATION_RELEASE    (sender 2)
+```
+
+Associations **never interleave** — there is no scenario where files from different associations are mixed together in the output stream. This is a property of the underlying DCMTK C++ binaries, not something enforced by this library.
+
+### Association Tracking
+
+`Dcmrecv` and `StoreSCP` include a built-in `AssociationTracker` that automatically correlates received files to their association. Two high-level events provide all the context you need:
+
+| Event                  | Data                                                                   | Description                                      |
+| ---------------------- | ---------------------------------------------------------------------- | ------------------------------------------------ |
+| `FILE_RECEIVED`        | `{ filePath, associationId, callingAE, calledAE, source }`             | Each file enriched with association context      |
+| `ASSOCIATION_COMPLETE` | `{ associationId, callingAE, calledAE, files, durationMs, endReason }` | Summary when association ends (release or abort) |
+
+```typescript
+server.onFileReceived(data => {
+    console.log(`${data.associationId}: ${data.filePath} from ${data.callingAE}`);
+});
+
+server.onAssociationComplete(summary => {
+    console.log(`${summary.associationId}: ${summary.files.length} files in ${summary.durationMs}ms`);
+});
+```
+
+The tracker assigns synthetic IDs (`assoc-1`, `assoc-2`, ...) since DCMTK's output does not include native association identifiers. These IDs are consistent within a server's lifetime.
+
+> **Note:** `storescp` does not include calling/called AE titles in its verbose output, so `callingAE` and `calledAE` will be empty strings. Use `dcmrecv` if you need sender identification by AE title.
+
 ---
 
 ## Dcmrecv

@@ -1,11 +1,17 @@
 /**
  * Example 05: StoreSCP Server
  *
- * Demonstrates running a Storage SCP (StoreSCP) with association tracking,
- * concurrent multi-file sends from different senders, and termscu shutdown.
+ * Demonstrates running a Storage SCP (StoreSCP) with built-in association
+ * tracking under realistic concurrent load. Four senders each transmit
+ * batches of files simultaneously — the server queues associations and
+ * the AssociationTracker reliably correlates every file to its association.
  *
  * StoreSCP is the advanced storage SCP with configurable filename
  * generation, subdirectory sorting, and more options than Dcmrecv.
+ *
+ * Note: storescp's verbose output does not include calling AE titles
+ * (unlike dcmrecv), so association summaries show empty callingAE fields.
+ * Use dcmrecv (Example 04) if you need to identify senders by AE title.
  *
  * Run: pnpm tsx examples/05-storescp-server/index.ts
  */
@@ -20,9 +26,21 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const SAMPLES = resolve(__dirname, '../../dicomSamples/1010_brain_mr_12_jpg');
 const CONFIG_FILE = resolve(__dirname, '../../src/data/storescp.cfg');
 
-// Each sender transmits these files within a single DICOM association.
-const MODALITY_FILES = [resolve(SAMPLES, 'IM-0001-0001.dcm'), resolve(SAMPLES, 'IM-0001-0002.dcm')];
-const GATEWAY_FILES = [resolve(SAMPLES, 'IM-0001-0003.dcm'), resolve(SAMPLES, 'IM-0001-0004.dcm')];
+/** Build file paths for IM-0001-NNNN.dcm in the given range. */
+function sampleRange(start: number, end: number): string[] {
+    const files: string[] = [];
+    for (let i = start; i <= end; i++) {
+        files.push(resolve(SAMPLES, `IM-0001-${String(i).padStart(4, '0')}.dcm`));
+    }
+    return files;
+}
+
+// Four senders, each with a distinct batch of files (no overlap).
+// Total: 40 files across 4 concurrent associations.
+const SENDER_A_FILES = sampleRange(1, 10); // 10 files
+const SENDER_B_FILES = sampleRange(11, 20); // 10 files
+const SENDER_C_FILES = sampleRange(21, 30); // 10 files
+const SENDER_D_FILES = sampleRange(31, 40); // 10 files
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
@@ -44,10 +62,11 @@ async function getAvailablePort(): Promise<number> {
     });
 }
 
-/** Tracks files received within a single DICOM association. */
+/** Collected association summaries for final report. */
 interface AssociationRecord {
-    label: string;
-    files: string[];
+    associationId: string;
+    files: readonly string[];
+    durationMs: number;
 }
 
 async function main() {
@@ -72,34 +91,36 @@ async function main() {
 
     try {
         // -------------------------------------------------------------------
-        // 2. Association tracking
+        // 2. Association tracking via built-in AssociationTracker
         //
-        //    storescp logs "Association Received" / "Association Release" for
-        //    each association. We parse raw line output for boundaries and
-        //    use the typed STORING_FILE event for file tracking.
+        //    The server automatically correlates files to associations using
+        //    an internal state machine. No manual line parsing needed.
+        //
+        //    - FILE_RECEIVED: each file enriched with association context
+        //    - ASSOCIATION_COMPLETE: summary with all files when association ends
+        //
+        //    Why is this safe? dcmrecv and storescp are single-threaded,
+        //    single-association servers. They handle one association at a
+        //    time — concurrent senders queue at the TCP level. Events are
+        //    always strictly sequential: RECEIVED → FILES → RELEASE.
         // -------------------------------------------------------------------
         const associations: AssociationRecord[] = [];
-        let current: AssociationRecord | null = null;
-        let associationCount = 0;
+        let totalFilesTracked = 0;
 
-        // Parse raw line output for association boundaries
-        server.on('line', ({ text }: { text: string }) => {
-            if (/Association Received/i.test(text) && !current) {
-                associationCount++;
-                current = { label: `Association #${associationCount}`, files: [] };
-                console.log(`  [assoc] << ${current.label} started`);
-            }
-            if (/Association Release/i.test(text) && current) {
-                associations.push(current);
-                console.log(`  [assoc] >> ${current.label} released (${current.files.length} file(s))\n`);
-                current = null;
-            }
+        // Each file arrives enriched with its association context
+        server.onFileReceived(data => {
+            totalFilesTracked++;
+            console.log(`  [file]  ${basename(data.filePath)} (${data.associationId})`);
         });
 
-        // Typed event for file tracking — correlate with current association
-        server.onEvent('STORING_FILE', data => {
-            if (current) current.files.push(basename(data.filePath));
-            console.log(`  [file]  Storing: ${basename(data.filePath)}`);
+        // Summary fires when each association ends — includes the full file list
+        server.onAssociationComplete(summary => {
+            associations.push({
+                associationId: summary.associationId,
+                files: summary.files,
+                durationMs: summary.durationMs,
+            });
+            console.log(`  [assoc] ${summary.associationId} complete: ${summary.files.length} file(s) in ${summary.durationMs}ms (${summary.endReason})\n`);
         });
 
         // -------------------------------------------------------------------
@@ -118,45 +139,60 @@ async function main() {
         console.log(`  ${echoResult.ok ? 'C-ECHO succeeded' : `Failed: ${echoResult.error.message}`}\n`);
 
         // -------------------------------------------------------------------
-        // 5. Concurrent sends — two senders transmit simultaneously.
+        // 5. Concurrent sends — four senders transmit simultaneously.
         //    StoreSCP handles one association at a time, so they queue up.
-        //    From the caller's perspective both are in-flight concurrently.
+        //    From the caller's perspective all four are in-flight concurrently.
+        //    This proves the tracker correctly serializes associations even
+        //    under heavy concurrent load.
         // -------------------------------------------------------------------
-        console.log('--- Concurrent sends: MODALITY + GATEWAY (2 files each) ---');
-        const [r1, r2] = await Promise.all([
-            dcmsend({
-                host: '127.0.0.1',
-                port,
-                callingAETitle: 'MODALITY',
-                files: MODALITY_FILES,
-                timeoutMs: 30_000,
-            }),
-            dcmsend({
-                host: '127.0.0.1',
-                port,
-                callingAETitle: 'GATEWAY',
-                files: GATEWAY_FILES,
-                timeoutMs: 30_000,
-            }),
+        console.log('--- Concurrent sends: 4 senders x 10 files = 40 files ---');
+        const [rA, rB, rC, rD] = await Promise.all([
+            dcmsend({ host: '127.0.0.1', port, callingAETitle: 'SENDERA', files: SENDER_A_FILES, timeoutMs: 60_000 }),
+            dcmsend({ host: '127.0.0.1', port, callingAETitle: 'SENDERB', files: SENDER_B_FILES, timeoutMs: 60_000 }),
+            dcmsend({ host: '127.0.0.1', port, callingAETitle: 'SENDERC', files: SENDER_C_FILES, timeoutMs: 60_000 }),
+            dcmsend({ host: '127.0.0.1', port, callingAETitle: 'SENDERD', files: SENDER_D_FILES, timeoutMs: 60_000 }),
         ]);
-        console.log(`  dcmsend (MODALITY): ${r1.ok ? 'success' : r1.error.message}`);
-        console.log(`  dcmsend (GATEWAY):  ${r2.ok ? 'success' : r2.error.message}`);
+        console.log(`  Sender A: ${rA.ok ? 'success' : rA.error.message}`);
+        console.log(`  Sender B: ${rB.ok ? 'success' : rB.error.message}`);
+        console.log(`  Sender C: ${rC.ok ? 'success' : rC.error.message}`);
+        console.log(`  Sender D: ${rD.ok ? 'success' : rD.error.message}`);
         await sleep(1000);
 
         // -------------------------------------------------------------------
-        // 6. Association summary
+        // 6. Association summary + correctness verification
         // -------------------------------------------------------------------
         console.log('--- Association Summary ---');
-        for (const assoc of associations) {
-            if (assoc.files.length === 0) continue;
-            console.log(`  ${assoc.label}: ${assoc.files.length} file(s)`);
+        const fileAssociations = associations.filter(a => a.files.length > 0);
+        for (const assoc of fileAssociations) {
+            console.log(`  ${assoc.associationId}: ${assoc.files.length} file(s) in ${assoc.durationMs}ms`);
             for (const f of assoc.files) {
-                console.log(`       ${f}`);
+                console.log(`       ${basename(f)}`);
             }
         }
 
         const allFiles = await readdir(tempDir);
-        console.log(`\n  Total files on disk: ${allFiles.length}`);
+        console.log(`\n  Total files on disk:    ${allFiles.length}`);
+        console.log(`  Total files tracked:    ${totalFilesTracked}`);
+
+        // Verify every file on disk was tracked exactly once
+        const trackedFilenames = new Set(fileAssociations.flatMap(a => a.files.map(f => basename(f))));
+        const diskFilenames = new Set(allFiles);
+        const untracked = [...diskFilenames].filter(f => !trackedFilenames.has(f));
+        if (untracked.length > 0) {
+            console.error(`\n  ERROR: ${untracked.length} file(s) on disk were NOT tracked by any association!`);
+            for (const f of untracked) console.error(`    - ${f}`);
+        } else {
+            console.log(`  Tracking verified:      every file on disk belongs to exactly one association`);
+        }
+
+        // Verify no association has duplicate files
+        const allTrackedFiles = fileAssociations.flatMap(a => [...a.files]);
+        const uniqueTracked = new Set(allTrackedFiles);
+        if (uniqueTracked.size !== allTrackedFiles.length) {
+            console.error(`\n  ERROR: ${allTrackedFiles.length - uniqueTracked.size} duplicate file(s) across associations!`);
+        } else {
+            console.log(`  No duplicate tracking:  ${uniqueTracked.size} unique files across ${fileAssociations.length} association(s)`);
+        }
 
         // -------------------------------------------------------------------
         // 7. StoreSCP vs Dcmrecv

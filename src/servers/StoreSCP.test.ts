@@ -256,7 +256,7 @@ describe('StoreSCP', () => {
             server[Symbol.dispose]();
         });
 
-        it('emits FILE_RECEIVED with association context', () => {
+        it('emits FILE_RECEIVED with association context via STORED_FILE', () => {
             const result = StoreSCP.create({ port: 11112 });
             expect(result.ok).toBe(true);
             if (!result.ok) return;
@@ -273,6 +273,49 @@ describe('StoreSCP', () => {
             const data = spy.mock.calls[0]?.[0] as { filePath: string; associationId: string };
             expect(data.filePath).toBe('/tmp/file.dcm');
             expect(data.associationId).toMatch(/^assoc-/);
+            server[Symbol.dispose]();
+        });
+
+        it('emits FILE_RECEIVED with association context via STORING_FILE', () => {
+            const result = StoreSCP.create({ port: 11112 });
+            expect(result.ok).toBe(true);
+            if (!result.ok) return;
+
+            const server = result.value;
+            const spy = vi.fn();
+            server.onFileReceived(spy);
+
+            // storescp outputs "storing DICOM file:" (not "Stored received object to file:")
+            server.emit('line', { source: 'stderr', text: 'I: Association Received' });
+            server.emit('line', { source: 'stderr', text: 'I: storing DICOM file: /tmp/stored.dcm' });
+
+            expect(spy).toHaveBeenCalledOnce();
+            const data = spy.mock.calls[0]?.[0] as { filePath: string; associationId: string };
+            expect(data.filePath).toBe('/tmp/stored.dcm');
+            expect(data.associationId).toMatch(/^assoc-/);
+            server[Symbol.dispose]();
+        });
+
+        it('emits ASSOCIATION_COMPLETE on release with STORING_FILE tracked files', () => {
+            const result = StoreSCP.create({ port: 11112 });
+            expect(result.ok).toBe(true);
+            if (!result.ok) return;
+
+            const server = result.value;
+            const spy = vi.fn();
+            server.onAssociationComplete(spy);
+
+            server.emit('line', { source: 'stderr', text: 'I: Association Received' });
+            server.emit('line', { source: 'stderr', text: 'I: storing DICOM file: /tmp/file1.dcm' });
+            server.emit('line', { source: 'stderr', text: 'I: storing DICOM file: /tmp/file2.dcm' });
+            server.emit('line', { source: 'stderr', text: 'I: Association Release' });
+
+            expect(spy).toHaveBeenCalledOnce();
+            const data = spy.mock.calls[0]?.[0] as { files: string[]; endReason: string };
+            expect(data.files).toHaveLength(2);
+            expect(data.files).toContain('/tmp/file1.dcm');
+            expect(data.files).toContain('/tmp/file2.dcm');
+            expect(data.endReason).toBe('release');
             server[Symbol.dispose]();
         });
 

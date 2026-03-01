@@ -440,6 +440,14 @@ class StoreSCP extends DcmtkProcess {
             this.tracker.beginAssociation(data);
         });
 
+        // storescp outputs "storing DICOM file:" (STORING_FILE), not
+        // "Stored received object to file:" (STORED_FILE) like dcmrecv.
+        // Listen to both so the tracker works regardless of which fires.
+        this.onEvent('STORING_FILE', data => {
+            const tracked = this.tracker.trackFile(data.filePath);
+            this.emit(DcmrecvEvent.FILE_RECEIVED, ...([tracked] as never));
+        });
+
         this.onEvent('STORED_FILE', data => {
             const tracked = this.tracker.trackFile(data.filePath);
             this.emit(DcmrecvEvent.FILE_RECEIVED, ...([tracked] as never));

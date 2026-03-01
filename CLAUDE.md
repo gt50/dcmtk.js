@@ -85,6 +85,8 @@ All code **shall** comply with `docs/TypeScript Coding Standard for Mission-Crit
 - `DcmprsCP` — Print Management SCP (dcmprscp)
 - `Dcmpsrcv` — Viewer network receiver (dcmpsrcv)
 
+All DCMTK server binaries are **single-threaded** and handle **one association at a time**. Concurrent connections queue at the TCP level — associations never interleave. `Dcmrecv` and `StoreSCP` include a built-in `AssociationTracker` that automatically correlates files to associations via `FILE_RECEIVED` and `ASSOCIATION_COMPLETE` events.
+
 ### High-Level PACS Client (`src/pacs/`)
 
 - `PacsClient` — Connection-config-once client with `echo()`, `findStudies()`/`findSeries()`/`findImages()`/`findWorklist()`, `find()`, `retrieveStudy()`/`retrieveSeries()`, `store()`
