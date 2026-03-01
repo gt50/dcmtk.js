@@ -10,7 +10,7 @@ import { resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { copyFile, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dcmodify, dcmconv, dcm2json, unwrap, DicomDataset, ChangeSet, DicomInstance, createDicomTagPath } from '@ubercode/dcmtk';
+import { dcmodify, dcmconv, dcm2json, unwrap, DicomDataset, DicomInstance } from '@ubercode/dcmtk';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const SAMPLE = resolve(__dirname, '../../dicomSamples/other/0002d.DCM');
@@ -62,26 +62,28 @@ async function main() {
         console.log(`  Transfer Syntax UID: ${convertedDs.transferSyntaxUID ?? '(not set)'}`);
 
         // -------------------------------------------------------------------
-        // 5. DicomInstance + ChangeSet — high-level modification API
+        // 5. DicomInstance — fluent high-level modification API
         // -------------------------------------------------------------------
-        console.log('\n--- DicomInstance + ChangeSet API ---');
-        const file = unwrap(await DicomInstance.open(convertedFile));
-        console.log(`  Opened: ${file.filePath}`);
-        console.log(`  Current Patient Name: ${file.dataset.patientName}`);
+        console.log('\n--- DicomInstance fluent API ---');
+        const inst = unwrap(await DicomInstance.open(convertedFile));
+        console.log(`  Opened: ${inst.filePath}`);
+        console.log(`  Current Patient Name: ${inst.patientName}`);
 
-        const nameTag = unwrap(createDicomTagPath('(0010,0010)'));
-        const idTag = unwrap(createDicomTagPath('(0010,0020)'));
-        const changes = ChangeSet.empty().setTag(nameTag, 'CHANGESET^DEMO').setTag(idTag, 'CS-99999');
-        console.log('  Created ChangeSet to update Patient Name and ID.', changes);
+        // Fluent chaining — every setter returns a new immutable instance
+        const modified = inst.setPatientName('FLUENT^DEMO').setPatientID('FL-99999').setInstitutionName('Example Hospital');
 
-        const updated = file.withChanges(changes);
-        await updated.applyChanges();
-        console.log('  Changes applied via ChangeSet.');
+        console.log(`  Pending changes: ${modified.changes.modifications.size} modification(s)`);
+        console.log(`  Has unsaved changes: ${modified.hasUnsavedChanges}`);
+
+        // Apply changes in-place
+        await modified.applyChanges();
+        console.log('  Changes applied.');
 
         // Re-read to verify
-        const verifyFile = unwrap(await DicomInstance.open(convertedFile));
-        console.log(`  Patient Name after ChangeSet: ${verifyFile.dataset.patientName}`);
-        console.log(`  Patient ID after ChangeSet:   ${verifyFile.dataset.patientID}`);
+        const verifyInst = unwrap(await DicomInstance.open(convertedFile));
+        console.log(`  Patient Name:     ${verifyInst.patientName}`);
+        console.log(`  Patient ID:       ${verifyInst.patientID}`);
+        console.log(`  Institution Name: ${verifyInst.getString('00080080')}`);
 
         console.log('\nDone.');
     } finally {
