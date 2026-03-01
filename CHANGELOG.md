@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.0] - 2026-03-01
+
+### Added
+
+- `PoolStatus` named interface exported from DicomReceiver with TSDoc
+- ADR-004 documenting DicomFile to DicomInstance rename decision
+- Docker image reference in Getting Started and README (`michaelleehobbs/nodejs-dcmtk`)
+
+### Changed
+
+- Updated all dev dependencies to latest majors: ESLint 10, Vitest 4, @types/node 25, lint-staged 16, globals 17
+- Fixed EventEmitter emit pattern across all 6 server classes for @types/node 25 compatibility
+- Adjusted coverage thresholds for Vitest 4 v8 provider counting changes
+- Rewrote CHANGELOG with accurate version history
+- Updated README: added DicomReceiver to server table, complete feature list
+- Updated GETTING_STARTED: fixed package names, added Docker section, accurate imports
+- Fixed CODE_REVIEW_2 stale tool/server counts
+- Updated CLAUDE.md with poolStatus documentation
+
 ## [0.1.5] - 2026-03-01
 
 ### Added
