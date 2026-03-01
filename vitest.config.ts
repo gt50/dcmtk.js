@@ -32,6 +32,7 @@ export default defineConfig({
                 'src/events/storescp.ts',
                 'src/events/wlmscpfs.ts',
                 'src/pacs/index.ts',
+                'src/senders/index.ts',
                 // Covered by integration tests only (require DCMTK binaries)
                 'src/pacs/PacsClient.ts',
                 'src/servers/DicomReceiver.ts',

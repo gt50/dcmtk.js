@@ -9,12 +9,12 @@
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D20-green.svg)](https://nodejs.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
-Type-safe Node.js bindings for the [DCMTK](https://dicom.offis.de/dcmtk.php.en) (DICOM Toolkit) command-line utilities. Wraps 51 DCMTK binaries, 6 long-lived server processes, and a pooled DicomReceiver with auto-scaling workers, all with a modern async/await API, branded types, and the Result pattern for safe error handling.
+Type-safe Node.js bindings for the [DCMTK](https://dicom.offis.de/dcmtk.php.en) (DICOM Toolkit) command-line utilities. Wraps 51 DCMTK binaries, 6 long-lived server processes, a pooled DicomReceiver with auto-scaling workers, and a high-throughput DicomSender with queuing and backpressure — all with a modern async/await API, branded types, and the Result pattern for safe error handling.
 
 ## Features
 
 - **51 tool wrappers** — async functions for every DCMTK command-line binary (data conversion, network, image processing, structured reports, presentation state)
-- **6 server classes + DicomReceiver** — long-lived DICOM listeners with typed EventEmitter APIs, plus a pooled receiver with auto-scaling workers
+- **6 server classes + DicomReceiver + DicomSender** — long-lived DICOM listeners with typed EventEmitter APIs, a pooled receiver with auto-scaling workers, and a high-throughput sender with queuing, bucketing, and backpressure
 - **PacsClient** — high-level PACS client with Echo, Query, Retrieve, and Store operations
 - **DICOM data layer** — immutable `DicomDataset`, explicit `ChangeSet` builder, and `DicomInstance` unified file I/O
 - **Result pattern** — all fallible operations return `Result<T>` instead of throwing
@@ -103,6 +103,7 @@ if (result.ok) {
 | [PACS Client](docs/pacs-client.md)           | High-level Echo, Query, Retrieve, Store API              |
 | [DICOM Data Layer](docs/dicom-data-layer.md) | DicomDataset, ChangeSet, DicomInstance                   |
 | [Servers](docs/servers.md)                   | 6 server classes + DicomReceiver pooled receiver         |
+| [Senders](docs/senders.md)                   | DicomSender high-throughput sender with backpressure     |
 | [Utilities](docs/utilities.md)               | batch processing, retry with backoff                     |
 
 ## Tool Reference
@@ -121,15 +122,16 @@ if (result.ok) {
 
 ## Server Reference
 
-| Class           | Binary         | Description                                | Docs                                        |
-| --------------- | -------------- | ------------------------------------------ | ------------------------------------------- |
-| `Dcmrecv`       | dcmrecv        | DICOM receiver (C-STORE SCP)               | [servers.md](docs/servers.md#dcmrecv)       |
-| `StoreSCP`      | storescp       | Storage SCP with advanced options          | [servers.md](docs/servers.md#storescp)      |
-| `DcmQRSCP`      | dcmqrscp       | Query/Retrieve SCP (C-FIND, C-MOVE, C-GET) | [servers.md](docs/servers.md#dcmqrscp)      |
-| `Wlmscpfs`      | wlmscpfs       | Worklist Management SCP                    | [servers.md](docs/servers.md#wlmscpfs)      |
-| `DcmprsCP`      | dcmprscp       | Print Management SCP                       | [servers.md](docs/servers.md#dcmprscp)      |
-| `Dcmpsrcv`      | dcmpsrcv       | Viewer network receiver                    | [servers.md](docs/servers.md#dcmpsrcv)      |
-| `DicomReceiver` | dcmrecv (pool) | Pooled receiver with auto-scaling workers  | [servers.md](docs/servers.md#dicomreceiver) |
+| Class           | Binary          | Description                                | Docs                                        |
+| --------------- | --------------- | ------------------------------------------ | ------------------------------------------- |
+| `Dcmrecv`       | dcmrecv         | DICOM receiver (C-STORE SCP)               | [servers.md](docs/servers.md#dcmrecv)       |
+| `StoreSCP`      | storescp        | Storage SCP with advanced options          | [servers.md](docs/servers.md#storescp)      |
+| `DcmQRSCP`      | dcmqrscp        | Query/Retrieve SCP (C-FIND, C-MOVE, C-GET) | [servers.md](docs/servers.md#dcmqrscp)      |
+| `Wlmscpfs`      | wlmscpfs        | Worklist Management SCP                    | [servers.md](docs/servers.md#wlmscpfs)      |
+| `DcmprsCP`      | dcmprscp        | Print Management SCP                       | [servers.md](docs/servers.md#dcmprscp)      |
+| `Dcmpsrcv`      | dcmpsrcv        | Viewer network receiver                    | [servers.md](docs/servers.md#dcmpsrcv)      |
+| `DicomReceiver` | dcmrecv (pool)  | Pooled receiver with auto-scaling workers  | [servers.md](docs/servers.md#dicomreceiver) |
+| `DicomSender`   | storescu (pool) | High-throughput sender with backpressure   | [senders.md](docs/senders.md)               |
 
 ## License
 

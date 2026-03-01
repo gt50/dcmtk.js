@@ -196,7 +196,7 @@ describe('DicomReceiver', () => {
         });
 
         it('rejects invalid aeTitle characters', () => {
-            const result = DicomReceiver.create({ port: 4242, storageDir: '/data', aeTitle: 'HAS SPACE!' });
+            const result = DicomReceiver.create({ port: 4242, storageDir: '/data', aeTitle: 'HAS\\SLASH' });
             expect(result.ok).toBe(false);
         });
 

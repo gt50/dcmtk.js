@@ -365,6 +365,26 @@ export type {
 } from './servers/DicomReceiver';
 
 // ---------------------------------------------------------------------------
+// High-throughput DICOM sender
+// ---------------------------------------------------------------------------
+
+export { DicomSender, SenderMode, SenderHealth } from './senders';
+export type {
+    SenderModeValue,
+    SenderHealthValue,
+    DicomSenderOptions,
+    SendOptions,
+    SendResult,
+    SenderStatus,
+    SenderSendCompleteData,
+    SenderSendFailedData,
+    SenderHealthChangedData,
+    SenderBucketFlushedData,
+    SenderErrorData,
+    DicomSenderEventMap,
+} from './senders';
+
+// ---------------------------------------------------------------------------
 // High-level PACS client
 // ---------------------------------------------------------------------------
 

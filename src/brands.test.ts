@@ -83,8 +83,8 @@ describe('Branded type factories', () => {
             expect(result.ok).toBe(false);
         });
 
-        it('rejects special characters', () => {
-            const result = createAETitle('PACS@01');
+        it('rejects backslash', () => {
+            const result = createAETitle('PACS\\01');
             expect(result.ok).toBe(false);
         });
     });

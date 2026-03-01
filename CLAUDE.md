@@ -88,6 +88,13 @@ All code **shall** comply with `docs/TypeScript Coding Standard for Mission-Crit
 
 All DCMTK server binaries are **single-threaded** and handle **one association at a time**. Concurrent connections queue at the TCP level — associations never interleave. `Dcmrecv` and `StoreSCP` include a built-in `AssociationTracker` that automatically correlates files to associations via `FILE_RECEIVED` and `ASSOCIATION_COMPLETE` events.
 
+### High-Throughput Sender (`src/senders/`)
+
+- `DicomSender` — Queued sender wrapping `storescu` with three modes (single, multiple, bucket), adaptive backpressure, retry, and typed events
+- `types.ts` — `DicomSenderOptions`, `SendOptions`, `SendResult`, `SenderStatus`, event data types, `SenderMode`/`SenderHealth` const objects, `DicomSenderEventMap`
+
+`DicomSender` extends `EventEmitter` directly (not DcmtkProcess) — it manages short-lived `storescu` calls, not a long-lived process. Private constructor + static `create()` with Zod `.strict()` validation. No `start()` needed — ready to send immediately after `create()`. `send()` returns `Promise<Result<SendResult>>` that resolves when the actual `storescu` call completes.
+
 ### High-Level PACS Client (`src/pacs/`)
 
 - `PacsClient` — Connection-config-once client with `echo()`, `findStudies()`/`findSeries()`/`findImages()`/`findWorklist()`, `find()`, `retrieveStudy()`/`retrieveSeries()`, `store()`
@@ -309,6 +316,35 @@ receiver.poolStatus; // PoolStatus: { idle: number; busy: number; total: number 
 ```
 
 `PoolStatus` is exported as a named type.
+
+### DicomSender
+
+High-throughput DICOM sender with queuing, bucketing, and adaptive backpressure.
+
+```typescript
+const result = DicomSender.create({
+    host: '192.168.1.100',
+    port: 104,
+    calledAETitle: 'PACS',
+    mode: 'multiple', // 'single' | 'multiple' | 'bucket'
+    maxAssociations: 4,
+});
+if (!result.ok) {
+    console.error(result.error.message);
+    return;
+}
+const sender = result.value;
+
+sender.onSendComplete(data => console.log(data.fileCount, 'files in', data.durationMs, 'ms'));
+sender.onSendFailed(data => console.error(data.error.message, 'after', data.attempts, 'attempts'));
+sender.onHealthChanged(data => console.log(data.previousHealth, '→', data.newHealth));
+
+await sender.send(['/path/to/file.dcm']); // resolves when actually sent
+sender.status; // { health, activeAssociations, effectiveMaxAssociations, queueLength, ... }
+await sender.stop(); // graceful shutdown
+```
+
+Three modes: **single** (serial FIFO), **multiple** (up to N concurrent storescu calls), **bucket** (accumulate files, flush on timeout or max size). Backpressure halves effective concurrency on consecutive failures, recovers on consecutive successes.
 
 ### PacsClient
 

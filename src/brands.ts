@@ -126,7 +126,7 @@ function createDicomTag(input: string): Result<DicomTag> {
 /**
  * Creates a validated AETitle from a raw string.
  *
- * @param input - A string expected to be 1-16 chars of letters, digits, spaces, or hyphens
+ * @param input - A string expected to be 1-16 printable ASCII chars (no backslash)
  * @returns A Result containing the branded AETitle or an error
  */
 function createAETitle(input: string): Result<AETitle> {
@@ -134,7 +134,7 @@ function createAETitle(input: string): Result<AETitle> {
         return err(new Error(`Invalid AE Title: "${input}". Must be ${AE_TITLE_MIN_LENGTH}-${AE_TITLE_MAX_LENGTH} characters`));
     }
     if (!AE_TITLE_PATTERN.test(input)) {
-        return err(new Error(`Invalid AE Title: "${input}". Only letters, digits, spaces, and hyphens are allowed`));
+        return err(new Error(`Invalid AE Title: "${input}". Only printable ASCII characters (no backslash) are allowed`));
     }
     return ok(input as AETitle);
 }

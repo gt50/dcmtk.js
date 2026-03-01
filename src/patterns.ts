@@ -15,8 +15,8 @@
 /** Matches a DICOM tag in `(XXXX,XXXX)` format where X is a hex digit. */
 const DICOM_TAG_PATTERN = /^\([0-9A-Fa-f]{4},[0-9A-Fa-f]{4}\)$/;
 
-/** Matches a DICOM AE Title: letters, digits, spaces, and hyphens. */
-const AE_TITLE_PATTERN = /^[A-Za-z0-9 -]+$/;
+/** Matches a DICOM AE Title: printable ASCII excluding backslash (DICOM PS3.5 default repertoire). */
+const AE_TITLE_PATTERN = /^[\x20-\x5b\x5d-\x7e]+$/;
 
 /**
  * Matches a dotted numeric OID (e.g. `1.2.840.10008`).

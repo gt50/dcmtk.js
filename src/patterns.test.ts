@@ -37,11 +37,18 @@ describe('patterns', () => {
             expect(AE_TITLE_PATTERN.test('MY-AE')).toBe(true);
             expect(AE_TITLE_PATTERN.test('AE TITLE')).toBe(true);
             expect(AE_TITLE_PATTERN.test('A')).toBe(true);
+            expect(AE_TITLE_PATTERN.test('DEST_PACS')).toBe(true);
+            expect(AE_TITLE_PATTERN.test('AE.TITLE')).toBe(true);
         });
 
-        it('rejects invalid AE titles', () => {
-            expect(AE_TITLE_PATTERN.test('AE@TITLE')).toBe(false);
+        it('rejects backslash', () => {
+            expect(AE_TITLE_PATTERN.test('AE\\TITLE')).toBe(false);
+        });
+
+        it('rejects control characters and empty strings', () => {
             expect(AE_TITLE_PATTERN.test('')).toBe(false);
+            expect(AE_TITLE_PATTERN.test('AE\x00TITLE')).toBe(false);
+            expect(AE_TITLE_PATTERN.test('AE\nTITLE')).toBe(false);
         });
     });
 

@@ -28,7 +28,7 @@ import {
 // Zod schemas
 // ---------------------------------------------------------------------------
 
-/** Schema for DICOM AE Titles: 1-16 chars, letters/digits/spaces/hyphens. */
+/** Schema for DICOM AE Titles: 1-16 printable ASCII chars, no backslash. */
 const AETitleSchema = z.string().min(AE_TITLE_MIN_LENGTH).max(AE_TITLE_MAX_LENGTH).regex(AE_TITLE_PATTERN);
 
 /** Schema for network port numbers: integer 1-65535. */

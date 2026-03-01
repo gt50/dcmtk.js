@@ -42,19 +42,23 @@ pnpm tsx examples/06-query-retrieve/index.ts
 
 # Pooled DICOM receiver with auto-scaling workers
 pnpm tsx examples/07-dicom-receiver/index.ts
+
+# Receive, modify, and forward DICOM files via modality-based routing
+pnpm tsx examples/08-receive-modify-send/index.ts
 ```
 
 ## Example Descriptions
 
-| Example                 | Tools / APIs                                             | Description                                     |
-| ----------------------- | -------------------------------------------------------- | ----------------------------------------------- |
-| `01-inspect-dicom`      | dcm2xml, dcm2json, dcmdump, DicomDataset                 | Read and inspect DICOM file metadata            |
-| `02-modify-and-convert` | dcmodify, dcmconv, ChangeSet, DicomInstance              | Modify tags and convert transfer syntax         |
-| `03-structured-reports` | xml2dsr, dsrdump, dsr2xml                                | Create, dump, and round-trip structured reports |
-| `04-dcmrecv-server`     | Dcmrecv, echoscu, storescu, dcmsend                      | Simple DICOM receiver with concurrent sends     |
-| `05-storescp-server`    | StoreSCP, echoscu, storescu, dcmsend, termscu            | Advanced storage SCP with protocol shutdown     |
-| `06-query-retrieve`     | DcmQRSCP, dcmqridx, findscu, getscu, movescu, PacsClient | Full PACS query/retrieve workflow               |
-| `07-dicom-receiver`     | DicomReceiver, dcmsend                                   | Pooled receiver with auto-scaling workers       |
+| Example                  | Tools / APIs                                                 | Description                                     |
+| ------------------------ | ------------------------------------------------------------ | ----------------------------------------------- |
+| `01-inspect-dicom`       | dcm2xml, dcm2json, dcmdump, DicomDataset                     | Read and inspect DICOM file metadata            |
+| `02-modify-and-convert`  | dcmodify, dcmconv, ChangeSet, DicomInstance                  | Modify tags and convert transfer syntax         |
+| `03-structured-reports`  | xml2dsr, dsrdump, dsr2xml                                    | Create, dump, and round-trip structured reports |
+| `04-dcmrecv-server`      | Dcmrecv, echoscu, storescu, dcmsend                          | Simple DICOM receiver with concurrent sends     |
+| `05-storescp-server`     | StoreSCP, echoscu, storescu, dcmsend, termscu                | Advanced storage SCP with protocol shutdown     |
+| `06-query-retrieve`      | DcmQRSCP, dcmqridx, findscu, getscu, movescu, PacsClient     | Full PACS query/retrieve workflow               |
+| `07-dicom-receiver`      | DicomReceiver, dcmsend                                       | Pooled receiver with auto-scaling workers       |
+| `08-receive-modify-send` | DicomReceiver, DicomSender, DicomInstance, StoreSCP, dcmsend | Receive, modify, and forward DICOM files        |
 
 ## Notes
 

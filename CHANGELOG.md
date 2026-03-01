@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] - 2026-03-01
+
+### Added
+
+- `DicomSender` — high-throughput DICOM sender with queuing, backpressure, and three sending modes:
+    - `single` — one association at a time, FIFO queue
+    - `multiple` — up to N concurrent `storescu` associations
+    - `bucket` — accumulates files into buckets, flushed on timeout or max size
+- Adaptive backpressure: HEALTHY → DEGRADED → DOWN state machine based on consecutive failures/successes, dynamically adjusts effective concurrency
+- Automatic retry with exponential backoff on send failures
+- Typed events: `SEND_COMPLETE`, `SEND_FAILED`, `HEALTH_CHANGED`, `BUCKET_FLUSHED`, `ERROR`
+- `docs/senders.md` — full DicomSender documentation with usage examples, configuration reference, and backpressure explanation
+- Example 08 (`examples/08-receive-modify-send/`) — receive, modify, and forward DICOM files via modality-based routing using DicomReceiver + DicomInstance + DicomSender
+
+### Fixed
+
+- AE Title validation now accepts all printable ASCII characters except backslash, per DICOM PS3.5 default character repertoire (previously only allowed letters, digits, spaces, and hyphens — rejected valid characters like underscore, dot, and special punctuation)
+
+### Changed
+
+- Updated CLAUDE.md with DicomSender architecture and API reference sections
+- Updated README.md with DicomSender in server reference table and senders documentation link
+- Updated examples/README.md with example 08 entry
+
 ## [0.2.0] - 2026-03-01
 
 ### Added
