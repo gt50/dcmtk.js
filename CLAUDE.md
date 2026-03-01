@@ -84,6 +84,7 @@ All code **shall** comply with `docs/TypeScript Coding Standard for Mission-Crit
 - `Wlmscpfs` — Worklist Management SCP (wlmscpfs)
 - `DcmprsCP` — Print Management SCP (dcmprscp)
 - `Dcmpsrcv` — Viewer network receiver (dcmpsrcv)
+- `DicomReceiver` — Pooled receiver managing multiple `Dcmrecv` workers behind a TCP proxy with auto-scaling
 
 All DCMTK server binaries are **single-threaded** and handle **one association at a time**. Concurrent connections queue at the TCP level — associations never interleave. `Dcmrecv` and `StoreSCP` include a built-in `AssociationTracker` that automatically correlates files to associations via `FILE_RECEIVED` and `ASSOCIATION_COMPLETE` events.
 
@@ -273,9 +274,33 @@ All servers: `static create(options) => Result<Server>`, then `server.start() =>
 | `DcmprsCP` | dcmprscp | `configFile`                         | `DATABASE_READY`, `ASSOCIATION_RECEIVED`, `CONFIG_ERROR`, ...      |
 | `Dcmpsrcv` | dcmpsrcv | `configFile`, `receiverId`           | `LISTENING`, `C_STORE_REQUEST`, `FILE_DELETED`, ...                |
 
+`DicomReceiver` is a **pooled receiver** (not a DcmtkProcess subclass) that manages multiple `Dcmrecv` workers behind a TCP proxy. It auto-scales between `minPoolSize` and `maxPoolSize` workers, routes connections to idle workers, and organizes received files into per-association directories. Workers are long-lived and reused across associations.
+
 Listen to typed events via `server.onEvent('EVENT_NAME', data => { ... })`.
 
 All servers extend `DcmtkProcess` (EventEmitter + Disposable) and support `AbortSignal`.
+
+### DicomReceiver
+
+Pooled DICOM receiver managing multiple `Dcmrecv` workers behind a TCP proxy.
+
+```typescript
+const receiver = unwrap(
+    DicomReceiver.create({
+        port: 4242,
+        storageDir: '/data/received',
+        minPoolSize: 2,
+        maxPoolSize: 8,
+    })
+);
+
+receiver.onFileReceived(data => console.log(data.filePath, data.associationDir));
+receiver.onAssociationComplete(data => console.log(data.files, data.durationMs));
+
+await receiver.start();
+// ... connections auto-routed to idle workers, files organized per-association
+await receiver.stop();
+```
 
 ### PacsClient
 

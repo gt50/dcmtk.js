@@ -25,6 +25,7 @@ export default defineConfig({
                 'src/pacs/index.ts',
                 // Covered by integration tests only (require DCMTK binaries)
                 'src/pacs/PacsClient.ts',
+                'src/servers/DicomReceiver.ts',
                 'src/tools/dcmftest.ts',
                 'src/tools/dcm2xml.ts',
                 'src/tools/dcm2json.ts',

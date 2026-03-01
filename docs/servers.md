@@ -1,6 +1,6 @@
 # Server Classes
 
-The library provides 6 long-lived server classes that wrap DCMTK server binaries. Each manages a child process with typed event listeners, graceful shutdown, and AbortSignal support.
+The library provides 6 long-lived server classes that wrap DCMTK server binaries, plus `DicomReceiver` — a pooled receiver that manages multiple `Dcmrecv` workers behind a single TCP port. Each server manages a child process with typed event listeners, graceful shutdown, and AbortSignal support.
 
 ## Common Pattern
 
@@ -73,6 +73,94 @@ server.onAssociationComplete(summary => {
 The tracker assigns synthetic IDs (`assoc-1`, `assoc-2`, ...) since DCMTK's output does not include native association identifiers. These IDs are consistent within a server's lifetime.
 
 > **Note:** `storescp` does not include calling/called AE titles in its verbose output, so `callingAE` and `calledAE` will be empty strings. Use `dcmrecv` if you need sender identification by AE title.
+
+---
+
+## DicomReceiver
+
+Pooled DICOM receiver with auto-scaling. Manages multiple long-lived `Dcmrecv` workers behind a single TCP proxy port. Incoming connections are routed to idle workers automatically, and workers are reused across associations without restart.
+
+**DicomReceiver does NOT extend DcmtkProcess** — it extends `EventEmitter` directly because it manages multiple processes plus a TCP server.
+
+### Architecture
+
+```
+Remote SCU ──TCP──► DicomReceiver (:4242)
+                    ┌─ TCP Proxy ─────────────┐
+                    │  route to idle worker    │
+                    └───┬─────────┬────────────┘
+                        │         │
+                     Dcmrecv   Dcmrecv
+                     :50001    :50002 ...
+                     (busy)    (idle)
+```
+
+### Options
+
+| Option                | Type          | Default     | Description                                 |
+| --------------------- | ------------- | ----------- | ------------------------------------------- |
+| `port`                | `number`      | —           | **Required.** External listening port       |
+| `storageDir`          | `string`      | —           | **Required.** Root dir for association dirs |
+| `aeTitle`             | `string`      | `'DCMRECV'` | AE Title for workers                        |
+| `minPoolSize`         | `number`      | `2`         | Minimum idle workers to maintain            |
+| `maxPoolSize`         | `number`      | `10`        | Maximum total workers                       |
+| `connectionTimeoutMs` | `number`      | `10000`     | Timeout waiting for idle worker             |
+| `configFile`          | `string`      | —           | Config file passed to dcmrecv workers       |
+| `configProfile`       | `string`      | —           | Config profile name                         |
+| `signal`              | `AbortSignal` | —           | External cancellation                       |
+
+### Events
+
+| Event                  | Data                                                                                           | Description                                     |
+| ---------------------- | ---------------------------------------------------------------------------------------------- | ----------------------------------------------- |
+| `FILE_RECEIVED`        | `{ filePath, associationId, associationDir, callingAE, calledAE, source }`                     | File moved to association dir                   |
+| `ASSOCIATION_COMPLETE` | `{ associationId, associationDir, callingAE, calledAE, source, files, durationMs, endReason }` | Association ended; worker returned to idle pool |
+
+### Worker Lifecycle
+
+- Workers are **started once** and **reused across many associations**
+- After an association completes, the worker returns to the idle pool — no restart needed
+- Scale-up: after routing a connection, if idle < `minPoolSize` and total < `maxPoolSize`, new workers are spawned
+- Scale-down: after a worker becomes idle, if idle > `minPoolSize + 2`, excess workers are stopped
+
+### File Storage
+
+```
+storageDir/
+├── assoc-1/           ← created when connection is routed
+│   ├── file1.dcm      ← moved from worker temp dir
+│   └── file2.dcm
+├── assoc-2/
+│   └── file1.dcm
+└── ...                ← user responsible for cleanup
+```
+
+### Example
+
+```typescript
+import { DicomReceiver, unwrap } from '@ubercode/dcmtk';
+
+const receiver = unwrap(
+    DicomReceiver.create({
+        port: 4242,
+        storageDir: '/data/received',
+        minPoolSize: 2,
+        maxPoolSize: 8,
+    })
+);
+
+receiver.onFileReceived(data => {
+    console.log(`File: ${data.filePath} (assoc: ${data.associationId})`);
+});
+
+receiver.onAssociationComplete(data => {
+    console.log(`Done: ${data.files.length} files in ${data.associationDir}`);
+});
+
+await receiver.start();
+// ... connections are automatically load-balanced across workers
+await receiver.stop();
+```
 
 ---
 

@@ -15,6 +15,9 @@ export type { StoreSCPOptions, StoreSCPEventMap, PreferredTransferSyntaxValue } 
 export { AssociationTracker } from './AssociationTracker';
 export type { AssociationContext, TrackedFile, AssociationSummary } from './AssociationTracker';
 
+export { DicomReceiver, DEFAULT_MIN_POOL_SIZE, DEFAULT_MAX_POOL_SIZE, DEFAULT_CONNECTION_TIMEOUT_MS } from './DicomReceiver';
+export type { DicomReceiverOptions, DicomReceiverEventMap, ReceiverFileData, ReceiverAssociationData } from './DicomReceiver';
+
 export { DcmprsCP } from './DcmprsCP';
 export type { DcmprsCPOptions, DcmprsCPEventMap } from './DcmprsCP';
 

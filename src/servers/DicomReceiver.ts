@@ -1,0 +1,664 @@
+/**
+ * Pooled DICOM receiver with auto-scaling.
+ *
+ * Manages a pool of long-lived `Dcmrecv` workers behind a TCP proxy,
+ * routing incoming connections to idle workers. Workers are reused
+ * across associations — they are only stopped during scale-down or
+ * shutdown.
+ *
+ * @module servers/DicomReceiver
+ */
+
+import * as net from 'node:net';
+import * as path from 'node:path';
+import * as fs from 'node:fs/promises';
+import * as os from 'node:os';
+import { EventEmitter } from 'node:events';
+import { z } from 'zod';
+import type { Result } from '../types';
+import { ok, err } from '../types';
+import { isSafePath, isValidAETitle } from '../patterns';
+import { Dcmrecv } from './Dcmrecv';
+import type { AssociationCompleteData } from '../events/dcmrecv';
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const DEFAULT_MIN_POOL_SIZE = 2;
+const DEFAULT_MAX_POOL_SIZE = 10;
+const DEFAULT_CONNECTION_TIMEOUT_MS = 10_000;
+const CONNECTION_RETRY_INTERVAL_MS = 500;
+const MAX_CONNECTION_RETRIES = 200;
+
+// ---------------------------------------------------------------------------
+// Public interfaces
+// ---------------------------------------------------------------------------
+
+/** Data emitted with FILE_RECEIVED events. */
+interface ReceiverFileData {
+    readonly filePath: string;
+    readonly associationId: string;
+    readonly associationDir: string;
+    readonly callingAE: string;
+    readonly calledAE: string;
+    readonly source: string;
+}
+
+/** Data emitted with ASSOCIATION_COMPLETE events. */
+interface ReceiverAssociationData {
+    readonly associationId: string;
+    readonly associationDir: string;
+    readonly callingAE: string;
+    readonly calledAE: string;
+    readonly source: string;
+    readonly files: readonly string[];
+    readonly durationMs: number;
+    readonly endReason: 'release' | 'abort';
+}
+
+/** Typed event map for DicomReceiver. */
+interface DicomReceiverEventMap {
+    FILE_RECEIVED: [ReceiverFileData];
+    ASSOCIATION_COMPLETE: [ReceiverAssociationData];
+    error: [{ error: Error }];
+}
+
+/** Options for creating a DicomReceiver instance. */
+interface DicomReceiverOptions {
+    /** External port to listen on (required). */
+    readonly port: number;
+    /** Root directory for association subdirectories (required). */
+    readonly storageDir: string;
+    /** Application Entity Title for workers. */
+    readonly aeTitle?: string | undefined;
+    /** Minimum number of idle workers to maintain. */
+    readonly minPoolSize?: number | undefined;
+    /** Maximum total workers allowed. */
+    readonly maxPoolSize?: number | undefined;
+    /** Timeout for waiting for an idle worker (milliseconds). */
+    readonly connectionTimeoutMs?: number | undefined;
+    /** Path to a dcmrecv association negotiation configuration file. */
+    readonly configFile?: string | undefined;
+    /** Profile name within the configuration file. */
+    readonly configProfile?: string | undefined;
+    /** AbortSignal for external cancellation. */
+    readonly signal?: AbortSignal | undefined;
+}
+
+// ---------------------------------------------------------------------------
+// Zod validation schema
+// ---------------------------------------------------------------------------
+
+const DicomReceiverOptionsSchema = z
+    .object({
+        port: z.number().int().min(1).max(65535),
+        storageDir: z.string().min(1).refine(isSafePath, { message: 'path traversal detected in storageDir' }),
+        aeTitle: z.string().min(1).max(16).refine(isValidAETitle, { message: 'AE Title contains invalid characters' }).optional(),
+        minPoolSize: z.number().int().min(1).max(100).optional(),
+        maxPoolSize: z.number().int().min(1).max(100).optional(),
+        connectionTimeoutMs: z.number().int().positive().optional(),
+        configFile: z.string().min(1).refine(isSafePath, { message: 'path traversal detected in configFile' }).optional(),
+        configProfile: z.string().min(1).optional(),
+        signal: z.instanceof(AbortSignal).optional(),
+    })
+    .strict()
+    .refine(data => (data.minPoolSize ?? DEFAULT_MIN_POOL_SIZE) <= (data.maxPoolSize ?? DEFAULT_MAX_POOL_SIZE), {
+        message: 'minPoolSize must be <= maxPoolSize',
+    });
+
+// ---------------------------------------------------------------------------
+// Internal worker type
+// ---------------------------------------------------------------------------
+
+interface WorkerInfo {
+    readonly dcmrecv: Dcmrecv;
+    readonly port: number;
+    readonly tempDir: string;
+    state: 'idle' | 'busy';
+    associationId: string | undefined;
+    associationDir: string | undefined;
+    /** Files moved to the association dir during the current association. */
+    files: string[];
+    remoteSocket: net.Socket | undefined;
+    workerSocket: net.Socket | undefined;
+}
+
+// ---------------------------------------------------------------------------
+// Port allocation helper
+// ---------------------------------------------------------------------------
+
+/** Allocates a free ephemeral port by binding to port 0. */
+function allocatePort(): Promise<Result<number>> {
+    return new Promise(resolve => {
+        const server = net.createServer();
+        server.listen(0, '127.0.0.1', () => {
+            const addr = server.address();
+            if (addr === null || typeof addr === 'string') {
+                server.close(() => resolve(err(new Error('Failed to allocate port'))));
+                return;
+            }
+            const port = addr.port;
+            server.close(() => resolve(ok(port)));
+        });
+        server.on('error', e => {
+            resolve(err(new Error(`Port allocation failed: ${e.message}`)));
+        });
+    });
+}
+
+// ---------------------------------------------------------------------------
+// DicomReceiver class
+// ---------------------------------------------------------------------------
+
+/**
+ * Pooled DICOM receiver with auto-scaling.
+ *
+ * Manages a pool of long-lived `Dcmrecv` workers behind a TCP proxy.
+ * Incoming connections are routed to idle workers. Workers are reused
+ * across associations and only stopped during scale-down or shutdown.
+ *
+ * @example
+ * ```ts
+ * const receiver = unwrap(DicomReceiver.create({
+ *     port: 4242,
+ *     storageDir: '/data/received',
+ *     minPoolSize: 2,
+ *     maxPoolSize: 8,
+ * }));
+ *
+ * receiver.onFileReceived(data => console.log('File:', data.filePath));
+ * receiver.onAssociationComplete(data => console.log('Done:', data.associationDir));
+ *
+ * await receiver.start();
+ * ```
+ */
+class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
+    private readonly options: DicomReceiverOptions;
+    private readonly minPoolSize: number;
+    private readonly maxPoolSize: number;
+    private readonly connectionTimeoutMs: number;
+    private readonly workers: Map<number, WorkerInfo> = new Map();
+    private tcpServer: net.Server | undefined;
+    private associationCounter = 0;
+    private started = false;
+    private stopping = false;
+    private abortHandler: (() => void) | undefined;
+
+    private constructor(options: DicomReceiverOptions) {
+        super();
+        this.setMaxListeners(20);
+        this.on('error', () => {
+            /* prevent Node.js uncaught exception on unhandled 'error' */
+        });
+        this.options = options;
+        this.minPoolSize = options.minPoolSize ?? DEFAULT_MIN_POOL_SIZE;
+        this.maxPoolSize = options.maxPoolSize ?? DEFAULT_MAX_POOL_SIZE;
+        this.connectionTimeoutMs = options.connectionTimeoutMs ?? DEFAULT_CONNECTION_TIMEOUT_MS;
+    }
+
+    // -----------------------------------------------------------------------
+    // Public API
+    // -----------------------------------------------------------------------
+
+    /**
+     * Creates a new DicomReceiver instance.
+     *
+     * @param options - Configuration options
+     * @returns A Result containing the instance or a validation error
+     */
+    static create(options: DicomReceiverOptions): Result<DicomReceiver> {
+        const validation = DicomReceiverOptionsSchema.safeParse(options);
+        if (!validation.success) {
+            return err(new Error(`DicomReceiver: invalid options: ${validation.error.message}`));
+        }
+        return ok(new DicomReceiver(options));
+    }
+
+    /**
+     * Starts the TCP proxy and spawns the initial worker pool.
+     *
+     * @returns A Result indicating success or failure
+     */
+    async start(): Promise<Result<void>> {
+        if (this.started) {
+            return err(new Error('DicomReceiver: already started'));
+        }
+        this.started = true;
+
+        const storageDirResult = await ensureDirectory(this.options.storageDir);
+        if (!storageDirResult.ok) return storageDirResult;
+
+        const spawnResults = await this.spawnWorkers(this.minPoolSize);
+        if (!spawnResults.ok) return spawnResults;
+
+        const listenResult = await this.startTcpProxy();
+        if (!listenResult.ok) return listenResult;
+
+        if (this.options.signal !== undefined) {
+            this.wireAbortSignal(this.options.signal);
+        }
+
+        return ok(undefined);
+    }
+
+    /**
+     * Stops the TCP proxy and all workers.
+     *
+     * @returns A Result indicating success or failure
+     */
+    async stop(): Promise<Result<void>> {
+        if (!this.started || this.stopping) {
+            return ok(undefined);
+        }
+        this.stopping = true;
+
+        if (this.options.signal !== undefined && this.abortHandler !== undefined) {
+            this.options.signal.removeEventListener('abort', this.abortHandler);
+        }
+
+        await this.closeTcpProxy();
+
+        const stopPromises: Promise<void>[] = [];
+        for (const worker of this.workers.values()) {
+            stopPromises.push(this.stopWorker(worker));
+        }
+        await Promise.all(stopPromises);
+        this.workers.clear();
+
+        this.started = false;
+        this.stopping = false;
+        return ok(undefined);
+    }
+
+    /**
+     * Registers a listener for received files.
+     *
+     * @param listener - Callback receiving file data
+     * @returns this for chaining
+     */
+    onFileReceived(listener: (data: ReceiverFileData) => void): this {
+        return this.on('FILE_RECEIVED', listener);
+    }
+
+    /**
+     * Registers a listener for completed associations.
+     *
+     * @param listener - Callback receiving association data
+     * @returns this for chaining
+     */
+    onAssociationComplete(listener: (data: ReceiverAssociationData) => void): this {
+        return this.on('ASSOCIATION_COMPLETE', listener);
+    }
+
+    /** Current pool status. */
+    get poolStatus(): { idle: number; busy: number; total: number } {
+        let idle = 0;
+        let busy = 0;
+        for (const w of this.workers.values()) {
+            if (w.state === 'idle') idle++;
+            else busy++;
+        }
+        return { idle, busy, total: this.workers.size };
+    }
+
+    // -----------------------------------------------------------------------
+    // TCP proxy
+    // -----------------------------------------------------------------------
+
+    /** Starts the TCP proxy on the configured port. */
+    private startTcpProxy(): Promise<Result<void>> {
+        return new Promise(resolve => {
+            this.tcpServer = net.createServer(socket => {
+                void this.handleConnection(socket);
+            });
+            this.tcpServer.on('error', e => {
+                if (!this.started) {
+                    resolve(err(new Error(`DicomReceiver: TCP proxy failed: ${e.message}`)));
+                } else {
+                    this.emit('error', { error: e instanceof Error ? e : new Error(String(e)) });
+                }
+            });
+            this.tcpServer.listen(this.options.port, () => {
+                resolve(ok(undefined));
+            });
+        });
+    }
+
+    /** Closes the TCP proxy server. */
+    private closeTcpProxy(): Promise<void> {
+        return new Promise(resolve => {
+            if (this.tcpServer === undefined) {
+                resolve();
+                return;
+            }
+            this.tcpServer.close(() => resolve());
+        });
+    }
+
+    // -----------------------------------------------------------------------
+    // Connection routing
+    // -----------------------------------------------------------------------
+
+    /** Routes an incoming connection to an idle worker. */
+    private async handleConnection(remoteSocket: net.Socket): Promise<void> {
+        remoteSocket.pause();
+
+        const worker = await this.findIdleWorker();
+        if (worker === undefined) {
+            remoteSocket.destroy(new Error('DicomReceiver: no idle worker available'));
+            this.emit('error', { error: new Error('DicomReceiver: connection rejected — pool exhausted') });
+            return;
+        }
+
+        this.associationCounter++;
+        const associationId = `assoc-${String(this.associationCounter)}`;
+        const associationDir = path.join(this.options.storageDir, associationId);
+
+        const mkdirResult = await ensureDirectory(associationDir);
+        if (!mkdirResult.ok) {
+            remoteSocket.destroy();
+            this.emit('error', { error: mkdirResult.error });
+            return;
+        }
+
+        worker.state = 'busy';
+        worker.associationId = associationId;
+        worker.associationDir = associationDir;
+        worker.files = [];
+
+        this.pipeConnection(worker, remoteSocket);
+        void this.replenishPool();
+    }
+
+    /** Finds an idle worker, retrying up to connectionTimeoutMs. */
+    private async findIdleWorker(): Promise<WorkerInfo | undefined> {
+        const idle = this.getIdleWorker();
+        if (idle !== undefined) return idle;
+
+        const maxRetries = Math.min(Math.ceil(this.connectionTimeoutMs / CONNECTION_RETRY_INTERVAL_MS), MAX_CONNECTION_RETRIES);
+
+        for (let i = 0; i < maxRetries; i++) {
+            await delay(CONNECTION_RETRY_INTERVAL_MS);
+            const found = this.getIdleWorker();
+            if (found !== undefined) return found;
+            if (this.stopping) return undefined;
+        }
+        return undefined;
+    }
+
+    /** Returns the first idle worker, or undefined. */
+    private getIdleWorker(): WorkerInfo | undefined {
+        for (const w of this.workers.values()) {
+            if (w.state === 'idle') return w;
+        }
+        return undefined;
+    }
+
+    /** Pipes remote socket bidirectionally to the worker's port. */
+    private pipeConnection(worker: WorkerInfo, remoteSocket: net.Socket): void {
+        const workerSocket = net.createConnection({ port: worker.port, host: '127.0.0.1' });
+
+        worker.remoteSocket = remoteSocket;
+        worker.workerSocket = workerSocket;
+
+        remoteSocket.pipe(workerSocket);
+        workerSocket.pipe(remoteSocket);
+
+        remoteSocket.resume();
+
+        const cleanup = (): void => {
+            remoteSocket.unpipe(workerSocket);
+            workerSocket.unpipe(remoteSocket);
+            if (!remoteSocket.destroyed) remoteSocket.destroy();
+            if (!workerSocket.destroyed) workerSocket.destroy();
+        };
+
+        remoteSocket.on('error', cleanup);
+        workerSocket.on('error', cleanup);
+        remoteSocket.on('close', cleanup);
+        workerSocket.on('close', cleanup);
+    }
+
+    // -----------------------------------------------------------------------
+    // Worker pool management
+    // -----------------------------------------------------------------------
+
+    /** Spawns `count` new workers and adds them to the pool. */
+    private async spawnWorkers(count: number): Promise<Result<void>> {
+        const promises: Promise<Result<WorkerInfo>>[] = [];
+        for (let i = 0; i < count; i++) {
+            promises.push(this.spawnWorker());
+        }
+        const results = await Promise.all(promises);
+        for (const result of results) {
+            if (!result.ok) return err(result.error);
+        }
+        return ok(undefined);
+    }
+
+    /** Spawns a single Dcmrecv worker with an ephemeral port. */
+    private async spawnWorker(): Promise<Result<WorkerInfo>> {
+        const portResult = await allocatePort();
+        if (!portResult.ok) return portResult;
+        const port = portResult.value;
+
+        const tempDir = path.join(os.tmpdir(), `dcmrecv-pool-${String(port)}-${String(Date.now())}`);
+        const mkdirResult = await ensureDirectory(tempDir);
+        if (!mkdirResult.ok) return mkdirResult;
+
+        const createResult = Dcmrecv.create({
+            port,
+            aeTitle: this.options.aeTitle ?? 'DCMRECV',
+            outputDirectory: tempDir,
+            configFile: this.options.configFile,
+            configProfile: this.options.configProfile,
+        });
+        if (!createResult.ok) return createResult;
+
+        const dcmrecv = createResult.value;
+        const worker: WorkerInfo = {
+            dcmrecv,
+            port,
+            tempDir,
+            state: 'idle',
+            associationId: undefined,
+            associationDir: undefined,
+            files: [],
+            remoteSocket: undefined,
+            workerSocket: undefined,
+        };
+
+        this.wireWorkerEvents(worker);
+        const startResult = await dcmrecv.start();
+        if (!startResult.ok) {
+            return err(new Error(`DicomReceiver: worker start failed on port ${String(port)}: ${startResult.error.message}`));
+        }
+
+        this.workers.set(port, worker);
+        return ok(worker);
+    }
+
+    /** Stops a single worker: stop process, clean temp dir, remove from pool. */
+    private async stopWorker(worker: WorkerInfo): Promise<void> {
+        if (worker.remoteSocket !== undefined && !worker.remoteSocket.destroyed) {
+            worker.remoteSocket.destroy();
+        }
+        if (worker.workerSocket !== undefined && !worker.workerSocket.destroyed) {
+            worker.workerSocket.destroy();
+        }
+        await worker.dcmrecv.stop();
+        worker.dcmrecv[Symbol.dispose]();
+        await removeDirSafe(worker.tempDir);
+        this.workers.delete(worker.port);
+    }
+
+    /** Pre-emptively spawns workers to keep idle count >= minPoolSize. */
+    private async replenishPool(): Promise<void> {
+        const status = this.poolStatus;
+        const needed = this.minPoolSize - status.idle;
+        const capacity = this.maxPoolSize - status.total;
+        const toSpawn = Math.min(needed, capacity);
+
+        if (toSpawn <= 0) return;
+
+        const promises: Promise<Result<WorkerInfo>>[] = [];
+        for (let i = 0; i < toSpawn; i++) {
+            promises.push(this.spawnWorker());
+        }
+        const results = await Promise.all(promises);
+        for (const result of results) {
+            if (!result.ok) {
+                this.emit('error', { error: result.error });
+            }
+        }
+    }
+
+    /** Stops excess idle workers when idle count > minPoolSize + 2. */
+    private async scaleDown(): Promise<void> {
+        const idleWorkers: WorkerInfo[] = [];
+        for (const w of this.workers.values()) {
+            if (w.state === 'idle') idleWorkers.push(w);
+        }
+        const excess = idleWorkers.length - (this.minPoolSize + 2);
+        if (excess <= 0) return;
+
+        const toStop = idleWorkers.slice(0, excess);
+        const promises: Promise<void>[] = [];
+        for (const w of toStop) {
+            promises.push(this.stopWorker(w));
+        }
+        await Promise.all(promises);
+    }
+
+    // -----------------------------------------------------------------------
+    // Worker event wiring
+    // -----------------------------------------------------------------------
+
+    /** Wires FILE_RECEIVED and ASSOCIATION_COMPLETE events on a worker. */
+    private wireWorkerEvents(worker: WorkerInfo): void {
+        this.wireFileReceived(worker);
+        this.wireAssociationComplete(worker);
+    }
+
+    /** Moves received files from temp dir to association dir and re-emits. */
+    private wireFileReceived(worker: WorkerInfo): void {
+        worker.dcmrecv.onFileReceived(data => {
+            if (worker.associationDir === undefined || worker.associationId === undefined) return;
+            const srcPath = data.filePath;
+            const destPath = path.join(worker.associationDir, path.basename(srcPath));
+            const assocId = worker.associationId;
+            const assocDir = worker.associationDir;
+
+            void moveFile(srcPath, destPath).then(moveResult => {
+                const finalPath = moveResult.ok ? destPath : srcPath;
+                worker.files.push(finalPath);
+                this.emit('FILE_RECEIVED', {
+                    filePath: finalPath,
+                    associationId: assocId,
+                    associationDir: assocDir,
+                    callingAE: data.callingAE,
+                    calledAE: data.calledAE,
+                    source: data.source,
+                });
+            });
+        });
+    }
+
+    /** Returns worker to idle pool on association complete, emits summary. */
+    private wireAssociationComplete(worker: WorkerInfo): void {
+        worker.dcmrecv.onAssociationComplete((data: AssociationCompleteData) => {
+            const assocId = worker.associationId ?? data.associationId;
+            const assocDir = worker.associationDir ?? '';
+            const files = [...worker.files];
+
+            this.emit('ASSOCIATION_COMPLETE', {
+                associationId: assocId,
+                associationDir: assocDir,
+                callingAE: data.callingAE,
+                calledAE: data.calledAE,
+                source: data.source,
+                files,
+                durationMs: data.durationMs,
+                endReason: data.endReason,
+            });
+
+            worker.state = 'idle';
+            worker.associationId = undefined;
+            worker.associationDir = undefined;
+            worker.files = [];
+            worker.remoteSocket = undefined;
+            worker.workerSocket = undefined;
+
+            void this.scaleDown();
+        });
+    }
+
+    // -----------------------------------------------------------------------
+    // Abort signal
+    // -----------------------------------------------------------------------
+
+    /** Wires an AbortSignal to stop the receiver. */
+    private wireAbortSignal(signal: AbortSignal): void {
+        /* v8 ignore next 4 */
+        if (signal.aborted) {
+            void this.stop();
+            return;
+        }
+        this.abortHandler = (): void => {
+            void this.stop();
+        };
+        signal.addEventListener('abort', this.abortHandler, { once: true });
+    }
+}
+
+// ---------------------------------------------------------------------------
+// File system helpers
+// ---------------------------------------------------------------------------
+
+/** Ensures a directory exists, creating it recursively if needed. */
+async function ensureDirectory(dirPath: string): Promise<Result<void>> {
+    try {
+        await fs.mkdir(dirPath, { recursive: true });
+        return ok(undefined);
+    } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return err(new Error(`Failed to create directory ${dirPath}: ${msg}`));
+    }
+}
+
+/** Moves a file from src to dest, falling back to copy+delete on cross-device. */
+async function moveFile(src: string, dest: string): Promise<Result<void>> {
+    try {
+        await fs.rename(src, dest);
+        return ok(undefined);
+    } catch {
+        try {
+            await fs.copyFile(src, dest);
+            await fs.unlink(src);
+            return ok(undefined);
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            return err(new Error(`Failed to move file ${src} → ${dest}: ${msg}`));
+        }
+    }
+}
+
+/** Removes a directory recursively, ignoring errors. */
+async function removeDirSafe(dirPath: string): Promise<void> {
+    try {
+        await fs.rm(dirPath, { recursive: true, force: true });
+    } catch {
+        /* best-effort cleanup */
+    }
+}
+
+/** Promise-based delay. */
+function delay(ms: number): Promise<void> {
+    return new Promise(resolve => {
+        setTimeout(resolve, ms);
+    });
+}
+
+export { DicomReceiver, DEFAULT_MIN_POOL_SIZE, DEFAULT_MAX_POOL_SIZE, DEFAULT_CONNECTION_TIMEOUT_MS };
+export type { DicomReceiverOptions, DicomReceiverEventMap, ReceiverFileData, ReceiverAssociationData };
