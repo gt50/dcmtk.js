@@ -14,7 +14,10 @@ import { createToolError, createValidationError } from './_toolError';
 import type { ToolBaseOptions } from './_toolTypes';
 
 /** Options for {@link dcm2pdf}. */
-type Dcm2pdfOptions = ToolBaseOptions;
+interface Dcm2pdfOptions extends ToolBaseOptions {
+    /** Verbosity level for diagnostic output. `'verbose'` maps to `-v`, `'debug'` maps to `-d`. */
+    readonly verbosity?: 'verbose' | 'debug' | undefined;
+}
 
 /** Result of a successful dcm2pdf operation. */
 interface Dcm2pdfResult {
@@ -26,9 +29,28 @@ const Dcm2pdfOptionsSchema = z
     .object({
         timeoutMs: z.number().int().positive().optional(),
         signal: z.instanceof(AbortSignal).optional(),
+        verbosity: z.enum(['verbose', 'debug']).optional(),
     })
     .strict()
     .optional();
+
+/** Maps verbosity level to command-line flag. */
+const VERBOSITY_FLAGS: Record<'verbose' | 'debug', string> = { verbose: '-v', debug: '-d' };
+
+/**
+ * Builds dcm2pdf command-line arguments from validated options.
+ */
+function buildArgs(inputPath: string, outputPath: string, options?: Dcm2pdfOptions): string[] {
+    const args: string[] = [];
+
+    if (options?.verbosity !== undefined) {
+        args.push(VERBOSITY_FLAGS[options.verbosity]);
+    }
+
+    args.push(inputPath, outputPath);
+
+    return args;
+}
 
 /**
  * Extract an encapsulated PDF from a DICOM file using the dcm2pdf binary.
@@ -49,7 +71,7 @@ async function dcm2pdf(inputPath: string, outputPath: string, options?: Dcm2pdfO
         return err(binaryResult.error);
     }
 
-    const args = [inputPath, outputPath];
+    const args = buildArgs(inputPath, outputPath, options);
     const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
     const result = await execCommand(binaryResult.value, args, {

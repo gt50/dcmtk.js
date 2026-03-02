@@ -66,6 +66,16 @@ describe('dcmsend', () => {
             expect(result.ok).toBe(false);
         });
 
+        it('rejects acseTimeout less than 1', async () => {
+            const result = await dcmsend({ host: 'localhost', port: 104, files: ['/test.dcm'], acseTimeout: 0 });
+            expect(result.ok).toBe(false);
+        });
+
+        it('rejects dimseTimeout less than 1', async () => {
+            const result = await dcmsend({ host: 'localhost', port: 104, files: ['/test.dcm'], dimseTimeout: 0 });
+            expect(result.ok).toBe(false);
+        });
+
         it('accepts valid maxPduReceive', async () => {
             const result = await dcmsend({ host: 'localhost', port: 104, files: ['/test.dcm'], maxPduReceive: 16384 });
             expect(result.ok).toBe(true);
@@ -83,10 +93,23 @@ describe('dcmsend', () => {
     });
 
     describe('argument building', () => {
-        it('passes -v for verbose', async () => {
-            await dcmsend({ host: 'localhost', port: 104, files: ['/test.dcm'], verbose: true });
+        it('passes -v for verbose verbosity', async () => {
+            await dcmsend({ host: 'localhost', port: 104, files: ['/test.dcm'], verbosity: 'verbose' });
             const args = mockedExecCommand.mock.calls[0]?.[1] as string[];
             expect(args).toContain('-v');
+        });
+
+        it('passes -d for debug verbosity', async () => {
+            await dcmsend({ host: 'localhost', port: 104, files: ['/test.dcm'], verbosity: 'debug' });
+            const args = mockedExecCommand.mock.calls[0]?.[1] as string[];
+            expect(args).toContain('-d');
+        });
+
+        it('omits verbosity flag when not specified', async () => {
+            await dcmsend({ host: 'localhost', port: 104, files: ['/test.dcm'] });
+            const args = mockedExecCommand.mock.calls[0]?.[1] as string[];
+            expect(args).not.toContain('-v');
+            expect(args).not.toContain('-d');
         });
 
         it('passes --no-uid-checks for noUidChecks', async () => {
@@ -125,6 +148,22 @@ describe('dcmsend', () => {
             expect(args[idx + 1]).toBe('30');
         });
 
+        it('passes -ta with value for acseTimeout', async () => {
+            await dcmsend({ host: 'localhost', port: 104, files: ['/test.dcm'], acseTimeout: 15 });
+            const args = mockedExecCommand.mock.calls[0]?.[1] as string[];
+            const idx = args.indexOf('-ta');
+            expect(idx).toBeGreaterThanOrEqual(0);
+            expect(args[idx + 1]).toBe('15');
+        });
+
+        it('passes -td with value for dimseTimeout', async () => {
+            await dcmsend({ host: 'localhost', port: 104, files: ['/test.dcm'], dimseTimeout: 60 });
+            const args = mockedExecCommand.mock.calls[0]?.[1] as string[];
+            const idx = args.indexOf('-td');
+            expect(idx).toBeGreaterThanOrEqual(0);
+            expect(args[idx + 1]).toBe('60');
+        });
+
         it('includes AE title flags', async () => {
             await dcmsend({
                 host: 'localhost',
@@ -150,11 +189,14 @@ describe('dcmsend', () => {
             await dcmsend({ host: 'localhost', port: 104, files: ['/test.dcm'] });
             const args = mockedExecCommand.mock.calls[0]?.[1] as string[];
             expect(args).not.toContain('-v');
+            expect(args).not.toContain('-d');
             expect(args).not.toContain('--no-uid-checks');
             expect(args).not.toContain('--max-pdu');
             expect(args).not.toContain('--max-send-pdu');
             expect(args).not.toContain('-nh');
             expect(args).not.toContain('-to');
+            expect(args).not.toContain('-ta');
+            expect(args).not.toContain('-td');
         });
     });
 

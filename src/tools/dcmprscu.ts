@@ -26,6 +26,8 @@ interface DcmprscuOptions extends ToolBaseOptions {
     readonly calledAETitle?: string | undefined;
     /** Path to a configuration file. Maps to -c flag. */
     readonly configFile?: string | undefined;
+    /** Verbosity level for diagnostic output. `'verbose'` maps to `-v`, `'debug'` maps to `-d`. */
+    readonly verbosity?: 'verbose' | 'debug' | undefined;
 }
 
 /** Result of a successful dcmprscu operation. */
@@ -45,6 +47,7 @@ const DcmprscuOptionsSchema = z
         callingAETitle: z.string().min(1).max(16).refine(isValidAETitle, { message: 'AE Title contains invalid characters' }).optional(),
         calledAETitle: z.string().min(1).max(16).refine(isValidAETitle, { message: 'AE Title contains invalid characters' }).optional(),
         configFile: z.string().min(1).optional(),
+        verbosity: z.enum(['verbose', 'debug']).optional(),
     })
     .strict();
 
@@ -53,6 +56,12 @@ const DcmprscuOptionsSchema = z
  */
 function buildArgs(options: DcmprscuOptions): string[] {
     const args: string[] = [];
+
+    if (options.verbosity === 'verbose') {
+        args.push('-v');
+    } else if (options.verbosity === 'debug') {
+        args.push('-d');
+    }
 
     if (options.callingAETitle !== undefined) {
         args.push('-aet', options.callingAETitle);

@@ -19,6 +19,8 @@ interface DcmcjplsOptions extends ToolBaseOptions {
     readonly lossless?: boolean | undefined;
     /** Maximum pixel deviation for near-lossless mode. Maps to +md. */
     readonly maxDeviation?: number | undefined;
+    /** Verbosity level for diagnostic output. `'verbose'` maps to `-v`, `'debug'` maps to `-d`. */
+    readonly verbosity?: 'verbose' | 'debug' | undefined;
 }
 
 /** Result of a successful dcmcjpls operation. */
@@ -33,9 +35,13 @@ const DcmcjplsOptionsSchema = z
         signal: z.instanceof(AbortSignal).optional(),
         lossless: z.boolean().optional(),
         maxDeviation: z.number().int().min(0).optional(),
+        verbosity: z.enum(['verbose', 'debug']).optional(),
     })
     .strict()
     .optional();
+
+/** Maps verbosity level to command-line flag. */
+const VERBOSITY_FLAGS: Record<'verbose' | 'debug', string> = { verbose: '-v', debug: '-d' };
 
 /**
  * Builds dcmcjpls command-line arguments from validated options.
@@ -47,6 +53,10 @@ const DcmcjplsOptionsSchema = z
  */
 function buildArgs(inputPath: string, outputPath: string, options?: DcmcjplsOptions): string[] {
     const args: string[] = [];
+
+    if (options?.verbosity !== undefined) {
+        args.push(VERBOSITY_FLAGS[options.verbosity]);
+    }
 
     if (options?.lossless === false) {
         args.push('+en');

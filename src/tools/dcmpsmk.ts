@@ -17,7 +17,10 @@ import { createToolError, createValidationError } from './_toolError';
 import type { ToolBaseOptions } from './_toolTypes';
 
 /** Options for {@link dcmpsmk}. */
-type DcmpsmkOptions = ToolBaseOptions;
+interface DcmpsmkOptions extends ToolBaseOptions {
+    /** Verbosity level for diagnostic output. `'verbose'` maps to `-v`, `'debug'` maps to `-d`. */
+    readonly verbosity?: 'verbose' | 'debug' | undefined;
+}
 
 /** Result of a successful dcmpsmk operation. */
 interface DcmpsmkResult {
@@ -29,9 +32,28 @@ const DcmpsmkOptionsSchema = z
     .object({
         timeoutMs: z.number().int().positive().optional(),
         signal: z.instanceof(AbortSignal).optional(),
+        verbosity: z.enum(['verbose', 'debug']).optional(),
     })
     .strict()
     .optional();
+
+/** Maps verbosity level to command-line flag. */
+const VERBOSITY_FLAGS: Record<'verbose' | 'debug', string> = { verbose: '-v', debug: '-d' };
+
+/**
+ * Builds dcmpsmk command-line arguments from validated options.
+ */
+function buildArgs(inputPath: string, outputPath: string, options?: DcmpsmkOptions): string[] {
+    const args: string[] = [];
+
+    if (options?.verbosity !== undefined) {
+        args.push(VERBOSITY_FLAGS[options.verbosity]);
+    }
+
+    args.push(inputPath, outputPath);
+
+    return args;
+}
 
 /**
  * Creates a DICOM presentation state from an image using the dcmpsmk binary.
@@ -60,7 +82,7 @@ async function dcmpsmk(inputPath: string, outputPath: string, options?: DcmpsmkO
         return err(binaryResult.error);
     }
 
-    const args = [inputPath, outputPath];
+    const args = buildArgs(inputPath, outputPath, options);
     const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
     const result = await execCommand(binaryResult.value, args, {

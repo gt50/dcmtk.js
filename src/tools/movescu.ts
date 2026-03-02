@@ -50,6 +50,20 @@ interface MovescuOptions extends ToolBaseOptions {
     readonly moveDestination?: string | undefined;
     /** Output directory for retrieved files (maps to -od). */
     readonly outputDirectory?: string | undefined;
+    /** Verbosity level for diagnostic output. `'verbose'` maps to `-v`, `'debug'` maps to `-d`. */
+    readonly verbosity?: 'verbose' | 'debug' | undefined;
+    /** Maximum receive PDU size in bytes (4096–131072). Maps to `--max-pdu`. */
+    readonly maxPduReceive?: number | undefined;
+    /** Maximum send PDU size in bytes (4096–131072). Maps to `--max-send-pdu`. */
+    readonly maxPduSend?: number | undefined;
+    /** Association/TCP connection timeout in seconds. Maps to `-to`. */
+    readonly associationTimeout?: number | undefined;
+    /** ACSE timeout in seconds. Maps to `-ta`. */
+    readonly acseTimeout?: number | undefined;
+    /** DIMSE timeout in seconds. Maps to `-td`. */
+    readonly dimseTimeout?: number | undefined;
+    /** Disable hostname lookup for incoming associations. Maps to `-nh`. */
+    readonly noHostnameLookup?: boolean | undefined;
 }
 
 /** Result of a successful C-MOVE retrieval. */
@@ -72,14 +86,50 @@ const MovescuOptionsSchema = z
         keys: z.array(z.string().min(1).refine(isValidDicomKey, { message: 'invalid DICOM query key format (expected XXXX,XXXX[=value])' })).optional(),
         moveDestination: z.string().min(1).max(16).refine(isValidAETitle, { message: 'AE Title contains invalid characters' }).optional(),
         outputDirectory: z.string().min(1).refine(isSafePath, { message: 'path traversal detected in outputDirectory' }).optional(),
+        verbosity: z.enum(['verbose', 'debug']).optional(),
+        maxPduReceive: z.number().int().min(4096).max(131072).optional(),
+        maxPduSend: z.number().int().min(4096).max(131072).optional(),
+        associationTimeout: z.number().int().positive().optional(),
+        acseTimeout: z.number().int().positive().optional(),
+        dimseTimeout: z.number().int().positive().optional(),
+        noHostnameLookup: z.boolean().optional(),
     })
     .strict();
+
+/** Maps verbosity level to command-line flag. */
+const VERBOSITY_FLAGS: Record<'verbose' | 'debug', string> = { verbose: '-v', debug: '-d' };
+
+/** Appends common network flags to the argument list. */
+function pushNetworkArgs(args: string[], options: MovescuOptions): void {
+    if (options.verbosity !== undefined) {
+        args.push(VERBOSITY_FLAGS[options.verbosity]);
+    }
+    if (options.maxPduReceive !== undefined) {
+        args.push('--max-pdu', String(options.maxPduReceive));
+    }
+    if (options.maxPduSend !== undefined) {
+        args.push('--max-send-pdu', String(options.maxPduSend));
+    }
+    if (options.associationTimeout !== undefined) {
+        args.push('-to', String(options.associationTimeout));
+    }
+    if (options.acseTimeout !== undefined) {
+        args.push('-ta', String(options.acseTimeout));
+    }
+    if (options.dimseTimeout !== undefined) {
+        args.push('-td', String(options.dimseTimeout));
+    }
+    if (options.noHostnameLookup === true) {
+        args.push('-nh');
+    }
+}
 
 /**
  * Builds movescu command-line arguments from validated options.
  */
 function buildArgs(options: MovescuOptions): string[] {
     const args: string[] = [];
+    pushNetworkArgs(args, options);
 
     if (options.callingAETitle !== undefined) {
         args.push('-aet', options.callingAETitle);

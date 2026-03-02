@@ -70,6 +70,22 @@ interface StorescuOptions extends ToolBaseOptions {
     readonly recurse?: boolean | undefined;
     /** Proposed transfer syntax for the association. */
     readonly proposedTransferSyntax?: ProposedTransferSyntaxValue | undefined;
+    /** Verbosity level for diagnostic output. `'verbose'` maps to `-v`, `'debug'` maps to `-d`. */
+    readonly verbosity?: 'verbose' | 'debug' | undefined;
+    /** Maximum receive PDU size in bytes (4096–131072). Maps to `--max-pdu`. */
+    readonly maxPduReceive?: number | undefined;
+    /** Maximum send PDU size in bytes (4096–131072). Maps to `--max-send-pdu`. */
+    readonly maxPduSend?: number | undefined;
+    /** Association/TCP connection timeout in seconds. Maps to `-to`. */
+    readonly associationTimeout?: number | undefined;
+    /** ACSE timeout in seconds. Maps to `-ta`. */
+    readonly acseTimeout?: number | undefined;
+    /** DIMSE timeout in seconds. Maps to `-td`. */
+    readonly dimseTimeout?: number | undefined;
+    /** Disable hostname lookup for incoming associations. Maps to `-nh`. */
+    readonly noHostnameLookup?: boolean | undefined;
+    /** Disable UID validity checking. Maps to `--no-uid-checks`. */
+    readonly noUidChecks?: boolean | undefined;
 }
 
 /** Result of a successful C-STORE send. */
@@ -91,6 +107,14 @@ const StorescuOptionsSchema = z
         calledAETitle: z.string().min(1).max(16).refine(isValidAETitle, { message: 'AE Title contains invalid characters' }).optional(),
         scanDirectories: z.boolean().optional(),
         recurse: z.boolean().optional(),
+        verbosity: z.enum(['verbose', 'debug']).optional(),
+        maxPduReceive: z.number().int().min(4096).max(131072).optional(),
+        maxPduSend: z.number().int().min(4096).max(131072).optional(),
+        associationTimeout: z.number().int().positive().optional(),
+        acseTimeout: z.number().int().positive().optional(),
+        dimseTimeout: z.number().int().positive().optional(),
+        noHostnameLookup: z.boolean().optional(),
+        noUidChecks: z.boolean().optional(),
         proposedTransferSyntax: z
             .enum([
                 'uncompressed',
@@ -109,11 +133,44 @@ const StorescuOptionsSchema = z
     })
     .strict();
 
+/** Maps verbosity level to command-line flag. */
+const VERBOSITY_FLAGS: Record<'verbose' | 'debug', string> = { verbose: '-v', debug: '-d' };
+
+/** Appends common network flags to the argument list. */
+function pushNetworkArgs(args: string[], options: StorescuOptions): void {
+    if (options.verbosity !== undefined) {
+        args.push(VERBOSITY_FLAGS[options.verbosity]);
+    }
+    if (options.maxPduReceive !== undefined) {
+        args.push('--max-pdu', String(options.maxPduReceive));
+    }
+    if (options.maxPduSend !== undefined) {
+        args.push('--max-send-pdu', String(options.maxPduSend));
+    }
+    if (options.associationTimeout !== undefined) {
+        args.push('-to', String(options.associationTimeout));
+    }
+    if (options.acseTimeout !== undefined) {
+        args.push('-ta', String(options.acseTimeout));
+    }
+    if (options.dimseTimeout !== undefined) {
+        args.push('-td', String(options.dimseTimeout));
+    }
+    if (options.noHostnameLookup === true) {
+        args.push('-nh');
+    }
+}
+
 /**
  * Builds storescu command-line arguments from validated options.
  */
 function buildArgs(options: StorescuOptions): string[] {
     const args: string[] = [];
+    pushNetworkArgs(args, options);
+
+    if (options.noUidChecks === true) {
+        args.push('--no-uid-checks');
+    }
 
     if (options.callingAETitle !== undefined) {
         args.push('-aet', options.callingAETitle);

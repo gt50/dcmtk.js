@@ -19,6 +19,10 @@ interface DcmcjpegOptions extends ToolBaseOptions {
     readonly quality?: number | undefined;
     /** Use lossless JPEG compression (SV1). Maps to +e1. */
     readonly lossless?: boolean | undefined;
+    /** Use progressive JPEG compression. Maps to `+p`. */
+    readonly progressive?: boolean | undefined;
+    /** Verbosity level for diagnostic output. `'verbose'` maps to `-v`, `'debug'` maps to `-d`. */
+    readonly verbosity?: 'verbose' | 'debug' | undefined;
 }
 
 /** Result of a successful dcmcjpeg operation. */
@@ -33,9 +37,14 @@ const DcmcjpegOptionsSchema = z
         signal: z.instanceof(AbortSignal).optional(),
         quality: z.number().int().min(1).max(100).optional(),
         lossless: z.boolean().optional(),
+        progressive: z.boolean().optional(),
+        verbosity: z.enum(['verbose', 'debug']).optional(),
     })
     .strict()
     .optional();
+
+/** Maps verbosity level to command-line flag. */
+const VERBOSITY_FLAGS: Record<'verbose' | 'debug', string> = { verbose: '-v', debug: '-d' };
 
 /**
  * Builds dcmcjpeg command-line arguments from validated options.
@@ -47,6 +56,14 @@ const DcmcjpegOptionsSchema = z
  */
 function buildArgs(inputPath: string, outputPath: string, options?: DcmcjpegOptions): string[] {
     const args: string[] = [];
+
+    if (options?.verbosity !== undefined) {
+        args.push(VERBOSITY_FLAGS[options.verbosity]);
+    }
+
+    if (options?.progressive === true) {
+        args.push('+p');
+    }
 
     if (options?.lossless === true) {
         args.push('+e1');

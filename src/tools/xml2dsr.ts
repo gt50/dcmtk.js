@@ -19,6 +19,8 @@ interface Xml2dsrOptions extends ToolBaseOptions {
     readonly generateNewUIDs?: boolean | undefined;
     /** Validate the SR document. Maps to +Vd. Defaults to false. */
     readonly validateDocument?: boolean | undefined;
+    /** Verbosity level for diagnostic output. `'verbose'` maps to `-v`, `'debug'` maps to `-d`. */
+    readonly verbosity?: 'verbose' | 'debug' | undefined;
 }
 
 /** Result of a successful xml2dsr conversion. */
@@ -33,6 +35,7 @@ const Xml2dsrOptionsSchema = z
         signal: z.instanceof(AbortSignal).optional(),
         generateNewUIDs: z.boolean().optional(),
         validateDocument: z.boolean().optional(),
+        verbosity: z.enum(['verbose', 'debug']).optional(),
     })
     .strict()
     .optional();
@@ -42,6 +45,12 @@ const Xml2dsrOptionsSchema = z
  */
 function buildArgs(inputPath: string, outputPath: string, options?: Xml2dsrOptions): string[] {
     const args: string[] = [];
+
+    if (options?.verbosity === 'verbose') {
+        args.push('-v');
+    } else if (options?.verbosity === 'debug') {
+        args.push('-d');
+    }
 
     if (options?.generateNewUIDs === true) {
         args.push('+Ug');

@@ -30,8 +30,8 @@ interface DcmsendOptions extends ToolBaseOptions {
     readonly calledAETitle?: string | undefined;
     /** Scan input directory recursively for DICOM files. Defaults to false. */
     readonly scanDirectory?: boolean | undefined;
-    /** Enable verbose output. Maps to `-v`. */
-    readonly verbose?: boolean | undefined;
+    /** Verbosity level for diagnostic output. `'verbose'` maps to `-v`, `'debug'` maps to `-d`. */
+    readonly verbosity?: 'verbose' | 'debug' | undefined;
     /** Disable UID validity checking. Maps to `--no-uid-checks`. */
     readonly noUidChecks?: boolean | undefined;
     /** Maximum receive PDU size in bytes (4096–131072). Maps to `--max-pdu`. */
@@ -42,6 +42,10 @@ interface DcmsendOptions extends ToolBaseOptions {
     readonly noHostnameLookup?: boolean | undefined;
     /** Association timeout in seconds (positive integer). Maps to `-to`. */
     readonly associationTimeout?: number | undefined;
+    /** ACSE timeout in seconds. Maps to `-ta`. */
+    readonly acseTimeout?: number | undefined;
+    /** DIMSE timeout in seconds. Maps to `-td`. */
+    readonly dimseTimeout?: number | undefined;
 }
 
 /** Result of a successful C-STORE send. */
@@ -54,6 +58,9 @@ interface DcmsendResult {
     readonly stderr: string;
 }
 
+/** Maps verbosity level to command-line flag. */
+const VERBOSITY_FLAGS: Record<'verbose' | 'debug', string> = { verbose: '-v', debug: '-d' };
+
 const DcmsendOptionsSchema = z
     .object({
         timeoutMs: z.number().int().positive().optional(),
@@ -64,25 +71,19 @@ const DcmsendOptionsSchema = z
         callingAETitle: z.string().min(1).max(16).refine(isValidAETitle, { message: 'AE Title contains invalid characters' }).optional(),
         calledAETitle: z.string().min(1).max(16).refine(isValidAETitle, { message: 'AE Title contains invalid characters' }).optional(),
         scanDirectory: z.boolean().optional(),
-        verbose: z.boolean().optional(),
+        verbosity: z.enum(['verbose', 'debug']).optional(),
         noUidChecks: z.boolean().optional(),
         maxPduReceive: z.number().int().min(4096).max(131072).optional(),
         maxPduSend: z.number().int().min(4096).max(131072).optional(),
         noHostnameLookup: z.boolean().optional(),
         associationTimeout: z.number().int().positive().optional(),
+        acseTimeout: z.number().int().positive().optional(),
+        dimseTimeout: z.number().int().positive().optional(),
     })
     .strict();
 
-/**
- * Builds dcmsend command-line arguments from validated options.
- */
-function buildArgs(options: DcmsendOptions): string[] {
-    const args: string[] = [];
-
-    if (options.verbose === true) {
-        args.push('-v');
-    }
-
+/** Appends network and protocol arguments (AE titles, PDU, timeouts). */
+function pushNetworkArgs(args: string[], options: DcmsendOptions): void {
     if (options.callingAETitle !== undefined) {
         args.push('-aet', options.callingAETitle);
     }
@@ -110,6 +111,27 @@ function buildArgs(options: DcmsendOptions): string[] {
     if (options.associationTimeout !== undefined) {
         args.push('-to', String(options.associationTimeout));
     }
+
+    if (options.acseTimeout !== undefined) {
+        args.push('-ta', String(options.acseTimeout));
+    }
+
+    if (options.dimseTimeout !== undefined) {
+        args.push('-td', String(options.dimseTimeout));
+    }
+}
+
+/**
+ * Builds dcmsend command-line arguments from validated options.
+ */
+function buildArgs(options: DcmsendOptions): string[] {
+    const args: string[] = [];
+
+    if (options.verbosity !== undefined) {
+        args.push(VERBOSITY_FLAGS[options.verbosity]);
+    }
+
+    pushNetworkArgs(args, options);
 
     if (options.scanDirectory === true) {
         args.push('--scan-directories');

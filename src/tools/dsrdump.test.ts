@@ -69,6 +69,25 @@ describe('dsrdump', () => {
             expect(args).toContain('+Pc');
         });
 
+        it('passes -v for verbose verbosity', async () => {
+            await dsrdump('/report.dcm', { verbosity: 'verbose' });
+            const args = mockedExecCommand.mock.calls[0]?.[1] as string[];
+            expect(args).toContain('-v');
+        });
+
+        it('passes -d for debug verbosity', async () => {
+            await dsrdump('/report.dcm', { verbosity: 'debug' });
+            const args = mockedExecCommand.mock.calls[0]?.[1] as string[];
+            expect(args).toContain('-d');
+        });
+
+        it('omits verbosity flag when not specified', async () => {
+            await dsrdump('/report.dcm');
+            const args = mockedExecCommand.mock.calls[0]?.[1] as string[];
+            expect(args).not.toContain('-v');
+            expect(args).not.toContain('-d');
+        });
+
         it('includes input path at the end', async () => {
             await dsrdump('/report.dcm', { charsetAssume: 'UTF-8' });
             const args = mockedExecCommand.mock.calls[0]?.[1] as string[];

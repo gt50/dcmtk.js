@@ -15,6 +15,8 @@ import type { ToolBaseOptions } from './_toolTypes';
 
 /** Options for {@link dump2dcm}. */
 interface Dump2dcmOptions extends ToolBaseOptions {
+    /** Verbosity level for diagnostic output. `'verbose'` maps to `-v`, `'debug'` maps to `-d`. */
+    readonly verbosity?: 'verbose' | 'debug' | undefined;
     /** Generate new Study/Series/SOP Instance UIDs. Defaults to false. */
     readonly generateNewUIDs?: boolean | undefined;
     /** Write output as DICOM file format (with preamble + meta header). Defaults to false. */
@@ -31,6 +33,7 @@ const Dump2dcmOptionsSchema = z
     .object({
         timeoutMs: z.number().int().positive().optional(),
         signal: z.instanceof(AbortSignal).optional(),
+        verbosity: z.enum(['verbose', 'debug']).optional(),
         generateNewUIDs: z.boolean().optional(),
         writeFileFormat: z.boolean().optional(),
     })
@@ -42,6 +45,12 @@ const Dump2dcmOptionsSchema = z
  */
 function buildArgs(inputPath: string, outputPath: string, options?: Dump2dcmOptions): string[] {
     const args: string[] = [];
+
+    if (options?.verbosity === 'verbose') {
+        args.push('-v');
+    } else if (options?.verbosity === 'debug') {
+        args.push('-d');
+    }
 
     if (options?.generateNewUIDs === true) {
         args.push('+Ug');

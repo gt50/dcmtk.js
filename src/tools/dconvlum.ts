@@ -20,6 +20,8 @@ import type { ToolBaseOptions } from './_toolTypes';
 interface DconvlumOptions extends ToolBaseOptions {
     /** Ambient light value in cd/m2. Maps to `+Ca`. */
     readonly ambientLight?: number | undefined;
+    /** Verbosity level for diagnostic output. `'verbose'` maps to `-v`, `'debug'` maps to `-d`. */
+    readonly verbosity?: 'verbose' | 'debug' | undefined;
 }
 
 /** Result of a successful dconvlum operation. */
@@ -33,6 +35,7 @@ const DconvlumOptionsSchema = z
         timeoutMs: z.number().int().positive().optional(),
         signal: z.instanceof(AbortSignal).optional(),
         ambientLight: z.number().positive().optional(),
+        verbosity: z.enum(['verbose', 'debug']).optional(),
     })
     .strict()
     .optional();
@@ -42,6 +45,12 @@ const DconvlumOptionsSchema = z
  */
 function buildArgs(inputPath: string, outputPath: string, options?: DconvlumOptions): string[] {
     const args: string[] = [];
+
+    if (options?.verbosity === 'verbose') {
+        args.push('-v');
+    } else if (options?.verbosity === 'debug') {
+        args.push('-d');
+    }
 
     if (options?.ambientLight !== undefined) {
         args.push('+Ca', String(options.ambientLight));

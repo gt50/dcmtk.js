@@ -32,6 +32,8 @@ interface DcmmkdirOptions extends ToolBaseOptions {
     readonly mapFilenames?: boolean | undefined;
     /** Invent missing DICOMDIR type 1 attributes. Maps to +I flag. */
     readonly inventAttributes?: boolean | undefined;
+    /** Verbosity level for diagnostic output. `'verbose'` maps to `-v`, `'debug'` maps to `-d`. */
+    readonly verbosity?: 'verbose' | 'debug' | undefined;
 }
 
 /** Result of a successful dcmmkdir operation. */
@@ -51,6 +53,7 @@ const DcmmkdirOptionsSchema = z
         inputDirectory: z.string().min(1).optional(),
         mapFilenames: z.boolean().optional(),
         inventAttributes: z.boolean().optional(),
+        verbosity: z.enum(['verbose', 'debug']).optional(),
     })
     .strict();
 
@@ -59,6 +62,12 @@ const DcmmkdirOptionsSchema = z
  */
 function buildArgs(options: DcmmkdirOptions): string[] {
     const args: string[] = [];
+
+    if (options.verbosity === 'verbose') {
+        args.push('-v');
+    } else if (options.verbosity === 'debug') {
+        args.push('-d');
+    }
 
     if (options.outputFile !== undefined) {
         args.push('+D', options.outputFile);

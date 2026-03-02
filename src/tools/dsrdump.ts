@@ -23,6 +23,8 @@ interface DsrdumpOptions extends ToolBaseOptions {
     readonly printCodes?: boolean | undefined;
     /** Assume the specified character set for the input file. Maps to `+Ca`. */
     readonly charsetAssume?: string | undefined;
+    /** Verbosity level for diagnostic output. `'verbose'` maps to `-v`, `'debug'` maps to `-d`. */
+    readonly verbosity?: 'verbose' | 'debug' | undefined;
 }
 
 /** Result of a successful dsrdump operation. */
@@ -30,6 +32,9 @@ interface DsrdumpResult {
     /** The text output from dsrdump. */
     readonly text: string;
 }
+
+/** Maps verbosity level to command-line flag. */
+const VERBOSITY_FLAGS: Record<'verbose' | 'debug', string> = { verbose: '-v', debug: '-d' };
 
 const DsrdumpOptionsSchema = z
     .object({
@@ -39,16 +44,13 @@ const DsrdumpOptionsSchema = z
         printLong: z.boolean().optional(),
         printCodes: z.boolean().optional(),
         charsetAssume: z.string().min(1).optional(),
+        verbosity: z.enum(['verbose', 'debug']).optional(),
     })
     .strict()
     .optional();
 
-/**
- * Builds dsrdump command-line arguments from validated options.
- */
-function buildArgs(inputPath: string, options?: DsrdumpOptions): string[] {
-    const args: string[] = [];
-
+/** Appends display-related arguments (filename, format, codes, charset). */
+function pushDisplayArgs(args: string[], options?: DsrdumpOptions): void {
     if (options?.printFilename === true) {
         args.push('+Pf');
     }
@@ -64,6 +66,19 @@ function buildArgs(inputPath: string, options?: DsrdumpOptions): string[] {
     if (options?.charsetAssume !== undefined) {
         args.push('+Ca', options.charsetAssume);
     }
+}
+
+/**
+ * Builds dsrdump command-line arguments from validated options.
+ */
+function buildArgs(inputPath: string, options?: DsrdumpOptions): string[] {
+    const args: string[] = [];
+
+    if (options?.verbosity !== undefined) {
+        args.push(VERBOSITY_FLAGS[options.verbosity]);
+    }
+
+    pushDisplayArgs(args, options);
 
     args.push(inputPath);
 

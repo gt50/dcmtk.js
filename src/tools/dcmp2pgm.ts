@@ -19,6 +19,8 @@ interface Dcmp2pgmOptions extends ToolBaseOptions {
     readonly presentationState?: string | undefined;
     /** Frame number to render (0-based). Maps to -f flag. */
     readonly frame?: number | undefined;
+    /** Verbosity level for diagnostic output. `'verbose'` maps to `-v`, `'debug'` maps to `-d`. */
+    readonly verbosity?: 'verbose' | 'debug' | undefined;
 }
 
 /** Result of a successful dcmp2pgm operation. */
@@ -33,6 +35,7 @@ const Dcmp2pgmOptionsSchema = z
         signal: z.instanceof(AbortSignal).optional(),
         presentationState: z.string().min(1).optional(),
         frame: z.number().int().min(0).max(65535).optional(),
+        verbosity: z.enum(['verbose', 'debug']).optional(),
     })
     .strict()
     .optional();
@@ -42,6 +45,12 @@ const Dcmp2pgmOptionsSchema = z
  */
 function buildArgs(inputPath: string, outputPath: string, options?: Dcmp2pgmOptions): string[] {
     const args: string[] = [];
+
+    if (options?.verbosity === 'verbose') {
+        args.push('-v');
+    } else if (options?.verbosity === 'debug') {
+        args.push('-d');
+    }
 
     if (options?.presentationState !== undefined) {
         args.push('-p', options.presentationState);

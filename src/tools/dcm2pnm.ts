@@ -21,6 +21,8 @@ const Dcm2pnmOutputFormat = {
     PNM: 'pnm',
     /** PNG format. */
     PNG: 'png',
+    /** 16-bit PNG format. */
+    PNG_16BIT: 'png16',
     /** BMP format. */
     BMP: 'bmp',
     /** TIFF format. */
@@ -32,6 +34,7 @@ type Dcm2pnmOutputFormatValue = (typeof Dcm2pnmOutputFormat)[keyof typeof Dcm2pn
 const DCM2PNM_FORMAT_FLAGS: Record<Dcm2pnmOutputFormatValue, string> = {
     pnm: '+op',
     png: '+on',
+    png16: '+on2',
     bmp: '+ob',
     tiff: '+ot',
 };
@@ -42,6 +45,12 @@ interface Dcm2pnmOptions extends ToolBaseOptions {
     readonly outputFormat?: Dcm2pnmOutputFormatValue | undefined;
     /** Frame number to extract (0-based, max 65535). */
     readonly frame?: number | undefined;
+    /** Window center for VOI LUT. Must be provided together with {@link windowWidth}. Maps to `+Wl`. */
+    readonly windowCenter?: number | undefined;
+    /** Window width for VOI LUT. Must be provided together with {@link windowCenter}. Maps to `+Wl`. */
+    readonly windowWidth?: number | undefined;
+    /** Verbosity level for diagnostic output. `'verbose'` maps to `-v`, `'debug'` maps to `-d`. */
+    readonly verbosity?: 'verbose' | 'debug' | undefined;
 }
 
 /** Result of a successful dcm2pnm operation. */
@@ -54,17 +63,37 @@ const Dcm2pnmOptionsSchema = z
     .object({
         timeoutMs: z.number().int().positive().optional(),
         signal: z.instanceof(AbortSignal).optional(),
-        outputFormat: z.enum(['pnm', 'png', 'bmp', 'tiff']).optional(),
+        outputFormat: z.enum(['pnm', 'png', 'png16', 'bmp', 'tiff']).optional(),
         frame: z.number().int().min(0).max(65535).optional(),
+        windowCenter: z.number().optional(),
+        windowWidth: z.number().optional(),
+        verbosity: z.enum(['verbose', 'debug']).optional(),
     })
     .strict()
+    .refine(data => (data?.windowCenter === undefined) === (data?.windowWidth === undefined), {
+        message: 'windowCenter and windowWidth must be provided together',
+    })
     .optional();
+
+/** Maps verbosity level to command-line flag. */
+const VERBOSITY_FLAGS: Record<'verbose' | 'debug', string> = { verbose: '-v', debug: '-d' };
+
+/** Appends VOI window arguments when both center and width are provided. */
+function pushWindowArgs(args: string[], options?: Dcm2pnmOptions): void {
+    if (options?.windowCenter !== undefined && options?.windowWidth !== undefined) {
+        args.push('+Wl', String(options.windowCenter), String(options.windowWidth));
+    }
+}
 
 /**
  * Builds dcm2pnm command-line arguments from validated options.
  */
 function buildArgs(inputPath: string, outputPath: string, options?: Dcm2pnmOptions): string[] {
     const args: string[] = [];
+
+    if (options?.verbosity !== undefined) {
+        args.push(VERBOSITY_FLAGS[options.verbosity]);
+    }
 
     if (options?.outputFormat !== undefined) {
         args.push(DCM2PNM_FORMAT_FLAGS[options.outputFormat]);
@@ -73,6 +102,8 @@ function buildArgs(inputPath: string, outputPath: string, options?: Dcm2pnmOptio
     if (options?.frame !== undefined) {
         args.push('+F', String(options.frame));
     }
+
+    pushWindowArgs(args, options);
 
     args.push(inputPath, outputPath);
 
@@ -103,7 +134,8 @@ async function dcm2pnm(inputPath: string, outputPath: string, options?: Dcm2pnmO
         return err(createValidationError('dcm2pnm', validation.error));
     }
 
-    const binaryResult = resolveBinary('dcm2pnm');
+    const dcm2imgResult = resolveBinary('dcm2img');
+    const binaryResult = dcm2imgResult.ok ? dcm2imgResult : resolveBinary('dcm2pnm');
     if (!binaryResult.ok) {
         return err(binaryResult.error);
     }

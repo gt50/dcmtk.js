@@ -52,6 +52,8 @@ interface Dcmj2pnmOptions extends ToolBaseOptions {
     readonly windowCenter?: number | undefined;
     /** Window width for VOI LUT. Must be provided together with {@link windowCenter}. Maps to `+Wl`. */
     readonly windowWidth?: number | undefined;
+    /** Verbosity level for diagnostic output. `'verbose'` maps to `-v`, `'debug'` maps to `-d`. */
+    readonly verbosity?: 'verbose' | 'debug' | undefined;
 }
 
 /** Result of a successful dcmj2pnm operation. */
@@ -68,6 +70,7 @@ const Dcmj2pnmOptionsSchema = z
         frame: z.number().int().min(0).max(65535).optional(),
         windowCenter: z.number().optional(),
         windowWidth: z.number().optional(),
+        verbosity: z.enum(['verbose', 'debug']).optional(),
     })
     .strict()
     .refine(data => (data?.windowCenter === undefined) === (data?.windowWidth === undefined), {
@@ -75,11 +78,25 @@ const Dcmj2pnmOptionsSchema = z
     })
     .optional();
 
+/** Maps verbosity level to command-line flag. */
+const VERBOSITY_FLAGS: Record<'verbose' | 'debug', string> = { verbose: '-v', debug: '-d' };
+
+/** Appends VOI window arguments when both center and width are provided. */
+function pushWindowArgs(args: string[], options?: Dcmj2pnmOptions): void {
+    if (options?.windowCenter !== undefined && options?.windowWidth !== undefined) {
+        args.push('+Wl', String(options.windowCenter), String(options.windowWidth));
+    }
+}
+
 /**
  * Builds dcmj2pnm command-line arguments from validated options.
  */
 function buildArgs(inputPath: string, outputPath: string, options?: Dcmj2pnmOptions): string[] {
     const args: string[] = [];
+
+    if (options?.verbosity !== undefined) {
+        args.push(VERBOSITY_FLAGS[options.verbosity]);
+    }
 
     if (options?.outputFormat !== undefined) {
         args.push(OUTPUT_FORMAT_FLAGS[options.outputFormat]);
@@ -89,9 +106,7 @@ function buildArgs(inputPath: string, outputPath: string, options?: Dcmj2pnmOpti
         args.push('+F', String(options.frame));
     }
 
-    if (options?.windowCenter !== undefined && options?.windowWidth !== undefined) {
-        args.push('+Wl', String(options.windowCenter), String(options.windowWidth));
-    }
+    pushWindowArgs(args, options);
 
     args.push(inputPath, outputPath);
 

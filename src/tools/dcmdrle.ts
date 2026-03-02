@@ -17,6 +17,8 @@ import type { ToolBaseOptions } from './_toolTypes';
 interface DcmdrleOptions extends ToolBaseOptions {
     /** Always write new SOP Instance UID. Maps to +ua flag. */
     readonly uidAlways?: boolean | undefined;
+    /** Verbosity level for diagnostic output. `'verbose'` maps to `-v`, `'debug'` maps to `-d`. */
+    readonly verbosity?: 'verbose' | 'debug' | undefined;
 }
 
 /** Result of a successful dcmdrle decoding. */
@@ -30,6 +32,7 @@ const DcmdrleOptionsSchema = z
         timeoutMs: z.number().int().positive().optional(),
         signal: z.instanceof(AbortSignal).optional(),
         uidAlways: z.boolean().optional(),
+        verbosity: z.enum(['verbose', 'debug']).optional(),
     })
     .strict()
     .optional();
@@ -39,6 +42,12 @@ const DcmdrleOptionsSchema = z
  */
 function buildArgs(inputPath: string, outputPath: string, options?: DcmdrleOptions): string[] {
     const args: string[] = [];
+
+    if (options?.verbosity === 'verbose') {
+        args.push('-v');
+    } else if (options?.verbosity === 'debug') {
+        args.push('-d');
+    }
 
     if (options?.uidAlways === true) {
         args.push('+ua');

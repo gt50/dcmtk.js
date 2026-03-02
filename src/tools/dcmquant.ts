@@ -19,6 +19,8 @@ interface DcmquantOptions extends ToolBaseOptions {
     readonly colors?: number | undefined;
     /** Frame number to extract (0-based, max 65535). */
     readonly frame?: number | undefined;
+    /** Verbosity level for diagnostic output. `'verbose'` maps to `-v`, `'debug'` maps to `-d`. */
+    readonly verbosity?: 'verbose' | 'debug' | undefined;
 }
 
 /** Result of a successful dcmquant operation. */
@@ -33,6 +35,7 @@ const DcmquantOptionsSchema = z
         signal: z.instanceof(AbortSignal).optional(),
         colors: z.number().int().min(2).max(65536).optional(),
         frame: z.number().int().min(0).max(65535).optional(),
+        verbosity: z.enum(['verbose', 'debug']).optional(),
     })
     .strict()
     .optional();
@@ -42,6 +45,12 @@ const DcmquantOptionsSchema = z
  */
 function buildArgs(inputPath: string, outputPath: string, options?: DcmquantOptions): string[] {
     const args: string[] = [];
+
+    if (options?.verbosity === 'verbose') {
+        args.push('-v');
+    } else if (options?.verbosity === 'debug') {
+        args.push('-d');
+    }
 
     if (options?.colors !== undefined) {
         args.push('+pc', String(options.colors));

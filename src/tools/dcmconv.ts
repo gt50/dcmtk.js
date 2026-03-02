@@ -41,6 +41,8 @@ const VALID_TRANSFER_SYNTAXES = ['+ti', '+te', '+tb', '+tl', '+t2', '+tr', '+td'
 interface DcmconvOptions extends ToolBaseOptions {
     /** Target transfer syntax. Required. */
     readonly transferSyntax: TransferSyntaxValue;
+    /** Verbosity level for diagnostic output. `'verbose'` maps to `-v`, `'debug'` maps to `-d`. */
+    readonly verbosity?: 'verbose' | 'debug' | undefined;
 }
 
 /** Result of a successful dcmconv conversion. */
@@ -54,6 +56,7 @@ const DcmconvOptionsSchema = z
         timeoutMs: z.number().int().positive().optional(),
         signal: z.instanceof(AbortSignal).optional(),
         transferSyntax: z.enum(VALID_TRANSFER_SYNTAXES),
+        verbosity: z.enum(['verbose', 'debug']).optional(),
     })
     .strict();
 
@@ -86,7 +89,13 @@ async function dcmconv(inputPath: string, outputPath: string, options: DcmconvOp
         return err(binaryResult.error);
     }
 
-    const args = [options.transferSyntax, inputPath, outputPath];
+    const args: string[] = [];
+    if (options.verbosity === 'verbose') {
+        args.push('-v');
+    } else if (options.verbosity === 'debug') {
+        args.push('-d');
+    }
+    args.push(options.transferSyntax, inputPath, outputPath);
     const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
     const result = await execCommand(binaryResult.value, args, {

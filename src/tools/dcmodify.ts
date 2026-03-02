@@ -39,6 +39,8 @@ interface DcmodifyOptions extends ToolBaseOptions {
     readonly insertIfMissing?: boolean | undefined;
     /** Treat 'tag not found' as success when erasing (uses -imt flag). Defaults to false. */
     readonly ignoreMissingTags?: boolean | undefined;
+    /** Verbosity level for diagnostic output. `'verbose'` maps to `-v`, `'debug'` maps to `-d`. */
+    readonly verbosity?: 'verbose' | 'debug' | undefined;
 }
 
 /** Result of a successful dcmodify operation. */
@@ -55,6 +57,9 @@ const TagModificationSchema = z.object({
     value: z.string(),
 });
 
+/** Maps verbosity level to command-line flag. */
+const VERBOSITY_FLAGS: Record<'verbose' | 'debug', string> = { verbose: '-v', debug: '-d' };
+
 const DcmodifyOptionsSchema = z
     .object({
         timeoutMs: z.number().int().positive().optional(),
@@ -65,6 +70,7 @@ const DcmodifyOptionsSchema = z
         noBackup: z.boolean().optional(),
         insertIfMissing: z.boolean().optional(),
         ignoreMissingTags: z.boolean().optional(),
+        verbosity: z.enum(['verbose', 'debug']).optional(),
     })
     .strict()
     .refine(data => data.modifications.length > 0 || (data.erasures !== undefined && data.erasures.length > 0) || data.erasePrivateTags === true, {
@@ -76,6 +82,10 @@ const DcmodifyOptionsSchema = z
  */
 function buildArgs(inputPath: string, options: DcmodifyOptions): string[] {
     const args: string[] = [];
+
+    if (options.verbosity !== undefined) {
+        args.push(VERBOSITY_FLAGS[options.verbosity]);
+    }
 
     if (options.noBackup !== false) {
         args.push('-nb');

@@ -27,6 +27,8 @@ type Img2dcmInputFormatValue = (typeof Img2dcmInputFormat)[keyof typeof Img2dcmI
 
 /** Options for {@link img2dcm}. */
 interface Img2dcmOptions extends ToolBaseOptions {
+    /** Verbosity level for diagnostic output. `'verbose'` maps to `-v`, `'debug'` maps to `-d`. */
+    readonly verbosity?: 'verbose' | 'debug' | undefined;
     /** Input image format. Maps to `-i JPEG` or `-i BMP`. */
     readonly inputFormat?: Img2dcmInputFormatValue | undefined;
     /** Path to a DICOM dataset file to copy attributes from. Maps to `-df path`. */
@@ -43,6 +45,7 @@ const Img2dcmOptionsSchema = z
     .object({
         timeoutMs: z.number().int().positive().optional(),
         signal: z.instanceof(AbortSignal).optional(),
+        verbosity: z.enum(['verbose', 'debug']).optional(),
         inputFormat: z.enum(['jpeg', 'bmp']).optional(),
         datasetFrom: z.string().min(1).optional(),
     })
@@ -60,6 +63,12 @@ const FORMAT_FLAG_MAP: Record<Img2dcmInputFormatValue, string> = {
  */
 function buildArgs(inputPath: string, outputPath: string, options?: Img2dcmOptions): string[] {
     const args: string[] = [];
+
+    if (options?.verbosity === 'verbose') {
+        args.push('-v');
+    } else if (options?.verbosity === 'debug') {
+        args.push('-d');
+    }
 
     if (options?.inputFormat !== undefined) {
         args.push('-i', FORMAT_FLAG_MAP[options.inputFormat]);

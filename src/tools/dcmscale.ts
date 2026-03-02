@@ -23,6 +23,8 @@ interface DcmscaleOptions extends ToolBaseOptions {
     readonly xSize?: number | undefined;
     /** Target height in pixels. */
     readonly ySize?: number | undefined;
+    /** Verbosity level for diagnostic output. `'verbose'` maps to `-v`, `'debug'` maps to `-d`. */
+    readonly verbosity?: 'verbose' | 'debug' | undefined;
 }
 
 /** Result of a successful dcmscale operation. */
@@ -39,9 +41,29 @@ const DcmscaleOptionsSchema = z
         yFactor: z.number().positive().max(100).optional(),
         xSize: z.number().int().positive().optional(),
         ySize: z.number().int().positive().optional(),
+        verbosity: z.enum(['verbose', 'debug']).optional(),
     })
     .strict()
     .optional();
+
+/** Maps verbosity level to command-line flag. */
+const VERBOSITY_FLAGS: Record<'verbose' | 'debug', string> = { verbose: '-v', debug: '-d' };
+
+/** Appends scaling-specific arguments to the argument list. */
+function pushScalingArgs(args: string[], options?: DcmscaleOptions): void {
+    if (options?.xFactor !== undefined) {
+        args.push('+Sxf', String(options.xFactor));
+    }
+    if (options?.yFactor !== undefined) {
+        args.push('+Syf', String(options.yFactor));
+    }
+    if (options?.xSize !== undefined) {
+        args.push('+Sxv', String(options.xSize));
+    }
+    if (options?.ySize !== undefined) {
+        args.push('+Syv', String(options.ySize));
+    }
+}
 
 /**
  * Builds dcmscale command-line arguments from validated options.
@@ -49,21 +71,11 @@ const DcmscaleOptionsSchema = z
 function buildArgs(inputPath: string, outputPath: string, options?: DcmscaleOptions): string[] {
     const args: string[] = [];
 
-    if (options?.xFactor !== undefined) {
-        args.push('+Sxf', String(options.xFactor));
+    if (options?.verbosity !== undefined) {
+        args.push(VERBOSITY_FLAGS[options.verbosity]);
     }
 
-    if (options?.yFactor !== undefined) {
-        args.push('+Syf', String(options.yFactor));
-    }
-
-    if (options?.xSize !== undefined) {
-        args.push('+Sxv', String(options.xSize));
-    }
-
-    if (options?.ySize !== undefined) {
-        args.push('+Syv', String(options.ySize));
-    }
+    pushScalingArgs(args, options);
 
     args.push(inputPath, outputPath);
 

@@ -17,6 +17,8 @@ import type { ToolBaseOptions } from './_toolTypes';
 interface DcmpsprtOptions extends ToolBaseOptions {
     /** Path to a configuration file. Maps to -c flag. */
     readonly configFile?: string | undefined;
+    /** Verbosity level for diagnostic output. `'verbose'` maps to `-v`, `'debug'` maps to `-d`. */
+    readonly verbosity?: 'verbose' | 'debug' | undefined;
 }
 
 /** Result of a successful dcmpsprt operation. */
@@ -30,6 +32,7 @@ const DcmpsprtOptionsSchema = z
         timeoutMs: z.number().int().positive().optional(),
         signal: z.instanceof(AbortSignal).optional(),
         configFile: z.string().min(1).optional(),
+        verbosity: z.enum(['verbose', 'debug']).optional(),
     })
     .strict()
     .optional();
@@ -39,6 +42,12 @@ const DcmpsprtOptionsSchema = z
  */
 function buildArgs(inputPath: string, options?: DcmpsprtOptions): string[] {
     const args: string[] = [];
+
+    if (options?.verbosity === 'verbose') {
+        args.push('-v');
+    } else if (options?.verbosity === 'debug') {
+        args.push('-d');
+    }
 
     if (options?.configFile !== undefined) {
         args.push('-c', options.configFile);

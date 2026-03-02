@@ -23,6 +23,8 @@ interface DcmqridxOptions extends ToolBaseOptions {
     readonly print?: boolean | undefined;
     /** Mark status as "not new" (-n flag). */
     readonly notNew?: boolean | undefined;
+    /** Verbosity level for diagnostic output. `'verbose'` maps to `-v`, `'debug'` maps to `-d`. */
+    readonly verbosity?: 'verbose' | 'debug' | undefined;
 }
 
 /** Result of a successful dcmqridx operation. */
@@ -36,6 +38,7 @@ const DcmqridxOptionsSchema = z
         inputFiles: z.array(z.string().min(1)).min(1).optional(),
         print: z.boolean().optional(),
         notNew: z.boolean().optional(),
+        verbosity: z.enum(['verbose', 'debug']).optional(),
     })
     .strict()
     .refine(data => (data.inputFiles !== undefined && data.inputFiles.length > 0) || data.print === true, {
@@ -47,6 +50,12 @@ const DcmqridxOptionsSchema = z
  */
 function buildArgs(options: DcmqridxOptions): string[] {
     const args: string[] = [];
+
+    if (options.verbosity === 'verbose') {
+        args.push('-v');
+    } else if (options.verbosity === 'debug') {
+        args.push('-d');
+    }
 
     if (options.print === true) {
         args.push('-p');

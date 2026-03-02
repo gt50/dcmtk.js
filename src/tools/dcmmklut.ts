@@ -43,6 +43,8 @@ interface DcmmklutOptions extends ToolBaseOptions {
     readonly entries?: number | undefined;
     /** Number of bits per LUT entry (8-16). Maps to -b flag. */
     readonly bits?: number | undefined;
+    /** Verbosity level for diagnostic output. `'verbose'` maps to `-v`, `'debug'` maps to `-d`. */
+    readonly verbosity?: 'verbose' | 'debug' | undefined;
 }
 
 /** Result of a successful dcmmklut operation. */
@@ -50,6 +52,9 @@ interface DcmmklutResult {
     /** Path to the created LUT output file. */
     readonly outputPath: string;
 }
+
+/** Maps verbosity level to command-line flag. */
+const VERBOSITY_FLAGS: Record<'verbose' | 'debug', string> = { verbose: '-v', debug: '-d' };
 
 const DcmmklutOptionsSchema = z
     .object({
@@ -59,16 +64,13 @@ const DcmmklutOptionsSchema = z
         gamma: z.number().positive().optional(),
         entries: z.number().int().positive().optional(),
         bits: z.number().int().min(8).max(16).optional(),
+        verbosity: z.enum(['verbose', 'debug']).optional(),
     })
     .strict()
     .optional();
 
-/**
- * Builds dcmmklut command-line arguments from validated options.
- */
-function buildArgs(outputPath: string, options?: DcmmklutOptions): string[] {
-    const args: string[] = [];
-
+/** Appends LUT configuration arguments (type, gamma, entries, bits). */
+function pushLutArgs(args: string[], options?: DcmmklutOptions): void {
     if (options?.lutType !== undefined) {
         args.push(LUT_TYPE_FLAGS[options.lutType]);
     }
@@ -84,6 +86,19 @@ function buildArgs(outputPath: string, options?: DcmmklutOptions): string[] {
     if (options?.bits !== undefined) {
         args.push('-b', String(options.bits));
     }
+}
+
+/**
+ * Builds dcmmklut command-line arguments from validated options.
+ */
+function buildArgs(outputPath: string, options?: DcmmklutOptions): string[] {
+    const args: string[] = [];
+
+    if (options?.verbosity !== undefined) {
+        args.push(VERBOSITY_FLAGS[options.verbosity]);
+    }
+
+    pushLutArgs(args, options);
 
     args.push(outputPath);
 

@@ -55,6 +55,25 @@ describe('dcmj2pnm', () => {
     });
 
     describe('argument building', () => {
+        it('passes -v for verbose verbosity', async () => {
+            await dcmj2pnm('/input.dcm', '/output.png', { verbosity: 'verbose' });
+            const args = mockedExecCommand.mock.calls[0]?.[1] as string[];
+            expect(args).toContain('-v');
+        });
+
+        it('passes -d for debug verbosity', async () => {
+            await dcmj2pnm('/input.dcm', '/output.png', { verbosity: 'debug' });
+            const args = mockedExecCommand.mock.calls[0]?.[1] as string[];
+            expect(args).toContain('-d');
+        });
+
+        it('omits verbosity flag when not specified', async () => {
+            await dcmj2pnm('/input.dcm', '/output.png');
+            const args = mockedExecCommand.mock.calls[0]?.[1] as string[];
+            expect(args).not.toContain('-v');
+            expect(args).not.toContain('-d');
+        });
+
         it('passes +on2 for PNG_16BIT', async () => {
             await dcmj2pnm('/input.dcm', '/output.png', { outputFormat: Dcmj2pnmOutputFormat.PNG_16BIT });
             const args = mockedExecCommand.mock.calls[0]?.[1] as string[];

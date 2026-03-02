@@ -14,8 +14,10 @@ import { createToolError, createValidationError } from './_toolError';
 import type { ToolBaseOptions } from './_toolTypes';
 
 /** Options for {@link dcmftest}. */
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type -- base options only
-interface DcmftestOptions extends ToolBaseOptions {}
+interface DcmftestOptions extends ToolBaseOptions {
+    /** Verbosity level for diagnostic output. `'verbose'` maps to `-v`, `'debug'` maps to `-d`. */
+    readonly verbosity?: 'verbose' | 'debug' | undefined;
+}
 
 /** Result of a successful dcmftest check. */
 interface DcmftestResult {
@@ -27,9 +29,28 @@ const DcmftestOptionsSchema = z
     .object({
         timeoutMs: z.number().int().positive().optional(),
         signal: z.instanceof(AbortSignal).optional(),
+        verbosity: z.enum(['verbose', 'debug']).optional(),
     })
     .strict()
     .optional();
+
+/** Maps verbosity level to command-line flag. */
+const VERBOSITY_FLAGS: Record<'verbose' | 'debug', string> = { verbose: '-v', debug: '-d' };
+
+/**
+ * Builds dcmftest command-line arguments from validated options.
+ */
+function buildArgs(inputPath: string, options?: DcmftestOptions): string[] {
+    const args: string[] = [];
+
+    if (options?.verbosity !== undefined) {
+        args.push(VERBOSITY_FLAGS[options.verbosity]);
+    }
+
+    args.push(inputPath);
+
+    return args;
+}
 
 /**
  * Tests whether a file is a valid DICOM Part 10 file using the dcmftest binary.
@@ -60,7 +81,7 @@ async function dcmftest(inputPath: string, options?: DcmftestOptions): Promise<R
         return err(binaryResult.error);
     }
 
-    const args = [inputPath];
+    const args = buildArgs(inputPath, options);
     const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
     const result = await execCommand(binaryResult.value, args, {

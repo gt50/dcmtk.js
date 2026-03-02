@@ -15,6 +15,8 @@ import type { ToolBaseOptions } from './_toolTypes';
 
 /** Options for {@link xml2dcm}. */
 interface Xml2dcmOptions extends ToolBaseOptions {
+    /** Verbosity level for diagnostic output. `'verbose'` maps to `-v`, `'debug'` maps to `-d`. */
+    readonly verbosity?: 'verbose' | 'debug' | undefined;
     /** Generate new Study/Series/SOP Instance UIDs. Defaults to false. */
     readonly generateNewUIDs?: boolean | undefined;
     /** Validate the XML document. Defaults to false. */
@@ -31,6 +33,7 @@ const Xml2dcmOptionsSchema = z
     .object({
         timeoutMs: z.number().int().positive().optional(),
         signal: z.instanceof(AbortSignal).optional(),
+        verbosity: z.enum(['verbose', 'debug']).optional(),
         generateNewUIDs: z.boolean().optional(),
         validateDocument: z.boolean().optional(),
     })
@@ -42,6 +45,12 @@ const Xml2dcmOptionsSchema = z
  */
 function buildArgs(inputPath: string, outputPath: string, options?: Xml2dcmOptions): string[] {
     const args: string[] = [];
+
+    if (options?.verbosity === 'verbose') {
+        args.push('-v');
+    } else if (options?.verbosity === 'debug') {
+        args.push('-d');
+    }
 
     if (options?.generateNewUIDs === true) {
         args.push('+Ug');

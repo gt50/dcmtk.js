@@ -35,6 +35,8 @@ interface DcmdumpOptions extends ToolBaseOptions {
     readonly searchTag?: string | undefined;
     /** Print tag values with enhanced detail. Defaults to false. */
     readonly printValues?: boolean | undefined;
+    /** Verbosity level for diagnostic output. `'verbose'` maps to `-v`, `'debug'` maps to `-d`. */
+    readonly verbosity?: 'verbose' | 'debug' | undefined;
 }
 
 /** Result of a successful dcmdump operation. */
@@ -42,6 +44,9 @@ interface DcmdumpResult {
     /** The text output from dcmdump. */
     readonly text: string;
 }
+
+/** Maps verbosity level to command-line flag. */
+const VERBOSITY_FLAGS: Record<'verbose' | 'debug', string> = { verbose: '-v', debug: '-d' };
 
 const DcmdumpOptionsSchema = z
     .object({
@@ -54,16 +59,13 @@ const DcmdumpOptionsSchema = z
             .regex(/^\([0-9A-Fa-f]{4},[0-9A-Fa-f]{4}\)$/)
             .optional(),
         printValues: z.boolean().optional(),
+        verbosity: z.enum(['verbose', 'debug']).optional(),
     })
     .strict()
     .optional();
 
-/**
- * Builds dcmdump command-line arguments from validated options.
- */
-function buildArgs(inputPath: string, options?: DcmdumpOptions): string[] {
-    const args: string[] = [];
-
+/** Appends display-related arguments (format, tags, values). */
+function pushDisplayArgs(args: string[], options?: DcmdumpOptions): void {
     if (options?.format === 'short') {
         args.push('+L');
     }
@@ -81,6 +83,19 @@ function buildArgs(inputPath: string, options?: DcmdumpOptions): string[] {
     if (options?.printValues === true) {
         args.push('+Vr');
     }
+}
+
+/**
+ * Builds dcmdump command-line arguments from validated options.
+ */
+function buildArgs(inputPath: string, options?: DcmdumpOptions): string[] {
+    const args: string[] = [];
+
+    if (options?.verbosity !== undefined) {
+        args.push(VERBOSITY_FLAGS[options.verbosity]);
+    }
+
+    pushDisplayArgs(args, options);
 
     args.push(inputPath);
 

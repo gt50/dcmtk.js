@@ -39,6 +39,8 @@ interface Dcm2xmlOptions extends ToolBaseOptions {
     readonly writeBinaryData?: boolean | undefined;
     /** Encode binary data inline instead of referencing external files. Defaults to true when writeBinaryData is true. */
     readonly encodeBinaryBase64?: boolean | undefined;
+    /** Verbosity level for diagnostic output. `'verbose'` maps to `-v`, `'debug'` maps to `-d`. */
+    readonly verbosity?: 'verbose' | 'debug' | undefined;
 }
 
 /** Result of a successful dcm2xml conversion. */
@@ -46,6 +48,9 @@ interface Dcm2xmlResult {
     /** The XML output string in DCMTK Native DICOM Model format. */
     readonly xml: string;
 }
+
+/** Maps verbosity level to command-line flag. */
+const VERBOSITY_FLAGS: Record<'verbose' | 'debug', string> = { verbose: '-v', debug: '-d' };
 
 const Dcm2xmlOptionsSchema = z
     .object({
@@ -55,24 +60,13 @@ const Dcm2xmlOptionsSchema = z
         charset: z.enum(['utf8', 'latin1', 'ascii']).optional(),
         writeBinaryData: z.boolean().optional(),
         encodeBinaryBase64: z.boolean().optional(),
+        verbosity: z.enum(['verbose', 'debug']).optional(),
     })
     .strict()
     .optional();
 
-/**
- * Builds dcm2xml command-line arguments from validated options.
- *
- * @param inputPath - Path to the DICOM input file
- * @param options - Validated options
- * @returns Argument array
- */
-function buildArgs(inputPath: string, options?: Dcm2xmlOptions): string[] {
-    const args: string[] = [];
-
-    if (options?.namespace === true) {
-        args.push('+Xn');
-    }
-
+/** Appends charset and binary-encoding arguments. */
+function pushEncodingArgs(args: string[], options?: Dcm2xmlOptions): void {
     if (options?.charset === 'latin1') {
         args.push('+Cl');
     } else if (options?.charset === 'ascii') {
@@ -85,6 +79,27 @@ function buildArgs(inputPath: string, options?: Dcm2xmlOptions): string[] {
             args.push('+Eb');
         }
     }
+}
+
+/**
+ * Builds dcm2xml command-line arguments from validated options.
+ *
+ * @param inputPath - Path to the DICOM input file
+ * @param options - Validated options
+ * @returns Argument array
+ */
+function buildArgs(inputPath: string, options?: Dcm2xmlOptions): string[] {
+    const args: string[] = [];
+
+    if (options?.verbosity !== undefined) {
+        args.push(VERBOSITY_FLAGS[options.verbosity]);
+    }
+
+    if (options?.namespace === true) {
+        args.push('+Xn');
+    }
+
+    pushEncodingArgs(args, options);
 
     args.push(inputPath);
 

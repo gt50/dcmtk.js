@@ -26,6 +26,8 @@ interface DcmdspfnOptions extends ToolBaseOptions {
     readonly printerFile?: string | undefined;
     /** Ambient light value in cd/m2. Maps to `+Ca`. */
     readonly ambientLight?: number | undefined;
+    /** Verbosity level for diagnostic output. `'verbose'` maps to `-v`, `'debug'` maps to `-d`. */
+    readonly verbosity?: 'verbose' | 'debug' | undefined;
 }
 
 /** Result of a successful dcmdspfn operation. */
@@ -42,9 +44,29 @@ const DcmdspfnOptionsSchema = z
         cameraFile: z.string().min(1).optional(),
         printerFile: z.string().min(1).optional(),
         ambientLight: z.number().positive().optional(),
+        verbosity: z.enum(['verbose', 'debug']).optional(),
     })
     .strict()
     .optional();
+
+/** Maps verbosity level to command-line flag. */
+const VERBOSITY_FLAGS: Record<'verbose' | 'debug', string> = { verbose: '-v', debug: '-d' };
+
+/** Appends device file and ambient light arguments to the argument list. */
+function pushDeviceArgs(args: string[], options?: DcmdspfnOptions): void {
+    if (options?.monitorFile !== undefined) {
+        args.push('+Im', options.monitorFile);
+    }
+    if (options?.cameraFile !== undefined) {
+        args.push('+Ic', options.cameraFile);
+    }
+    if (options?.printerFile !== undefined) {
+        args.push('+Ip', options.printerFile);
+    }
+    if (options?.ambientLight !== undefined) {
+        args.push('+Ca', String(options.ambientLight));
+    }
+}
 
 /**
  * Builds dcmdspfn command-line arguments from validated options.
@@ -52,21 +74,11 @@ const DcmdspfnOptionsSchema = z
 function buildArgs(options?: DcmdspfnOptions): string[] {
     const args: string[] = [];
 
-    if (options?.monitorFile !== undefined) {
-        args.push('+Im', options.monitorFile);
+    if (options?.verbosity !== undefined) {
+        args.push(VERBOSITY_FLAGS[options.verbosity]);
     }
 
-    if (options?.cameraFile !== undefined) {
-        args.push('+Ic', options.cameraFile);
-    }
-
-    if (options?.printerFile !== undefined) {
-        args.push('+Ip', options.printerFile);
-    }
-
-    if (options?.ambientLight !== undefined) {
-        args.push('+Ca', String(options.ambientLight));
-    }
+    pushDeviceArgs(args, options);
 
     return args;
 }

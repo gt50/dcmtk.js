@@ -17,6 +17,8 @@ import type { ToolBaseOptions } from './_toolTypes';
 interface DrtdumpOptions extends ToolBaseOptions {
     /** Print filename for each document. Maps to +Pf. Defaults to false. */
     readonly printFilename?: boolean | undefined;
+    /** Verbosity level for diagnostic output. `'verbose'` maps to `-v`, `'debug'` maps to `-d`. */
+    readonly verbosity?: 'verbose' | 'debug' | undefined;
 }
 
 /** Result of a successful drtdump operation. */
@@ -30,6 +32,7 @@ const DrtdumpOptionsSchema = z
         timeoutMs: z.number().int().positive().optional(),
         signal: z.instanceof(AbortSignal).optional(),
         printFilename: z.boolean().optional(),
+        verbosity: z.enum(['verbose', 'debug']).optional(),
     })
     .strict()
     .optional();
@@ -39,6 +42,12 @@ const DrtdumpOptionsSchema = z
  */
 function buildArgs(inputPath: string, options?: DrtdumpOptions): string[] {
     const args: string[] = [];
+
+    if (options?.verbosity === 'verbose') {
+        args.push('-v');
+    } else if (options?.verbosity === 'debug') {
+        args.push('-d');
+    }
 
     if (options?.printFilename === true) {
         args.push('+Pf');

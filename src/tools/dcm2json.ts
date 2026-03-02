@@ -29,6 +29,8 @@ type Dcm2jsonSource = 'xml' | 'direct';
 interface Dcm2jsonOptions extends ToolBaseOptions {
     /** Skip the XML primary path and use direct dcm2json only. Defaults to false. */
     readonly directOnly?: boolean | undefined;
+    /** Verbosity level for diagnostic output. `'verbose'` maps to `-v`, `'debug'` maps to `-d`. */
+    readonly verbosity?: 'verbose' | 'debug' | undefined;
 }
 
 /** Result of a successful dcm2json conversion. */
@@ -44,26 +46,41 @@ const Dcm2jsonOptionsSchema = z
         timeoutMs: z.number().int().positive().optional(),
         signal: z.instanceof(AbortSignal).optional(),
         directOnly: z.boolean().optional(),
+        verbosity: z.enum(['verbose', 'debug']).optional(),
     })
     .strict()
     .optional();
 
+/** Maps verbosity level to command-line flag. */
+const VERBOSITY_FLAGS: Record<'verbose' | 'debug', string> = { verbose: '-v', debug: '-d' };
+
+/**
+ * Builds verbosity args for internal calls.
+ */
+function buildVerbosityArgs(verbosity?: 'verbose' | 'debug'): string[] {
+    if (verbosity !== undefined) {
+        return [VERBOSITY_FLAGS[verbosity]];
+    }
+    return [];
+}
+
 /**
  * Attempts XML-primary conversion: dcm2xml → xmlToJson.
  */
-async function tryXmlPath(inputPath: string, timeoutMs: number, signal?: AbortSignal): Promise<Result<Dcm2jsonResult>> {
+async function tryXmlPath(inputPath: string, timeoutMs: number, signal?: AbortSignal, verbosity?: 'verbose' | 'debug'): Promise<Result<Dcm2jsonResult>> {
     const xmlBinary = resolveBinary('dcm2xml');
     if (!xmlBinary.ok) {
         return err(xmlBinary.error);
     }
 
-    const xmlResult = await execCommand(xmlBinary.value, ['-nat', inputPath], { timeoutMs, signal });
+    const xmlArgs = [...buildVerbosityArgs(verbosity), '-nat', inputPath];
+    const xmlResult = await execCommand(xmlBinary.value, xmlArgs, { timeoutMs, signal });
     if (!xmlResult.ok) {
         return err(xmlResult.error);
     }
 
     if (xmlResult.value.exitCode !== 0) {
-        return err(createToolError('dcm2xml', ['-nat', inputPath], xmlResult.value.exitCode, xmlResult.value.stderr));
+        return err(createToolError('dcm2xml', xmlArgs, xmlResult.value.exitCode, xmlResult.value.stderr));
     }
 
     const jsonResult = xmlToJson(xmlResult.value.stdout);
@@ -77,19 +94,20 @@ async function tryXmlPath(inputPath: string, timeoutMs: number, signal?: AbortSi
 /**
  * Attempts direct conversion: dcm2json binary → repairJson → JSON.parse.
  */
-async function tryDirectPath(inputPath: string, timeoutMs: number, signal?: AbortSignal): Promise<Result<Dcm2jsonResult>> {
+async function tryDirectPath(inputPath: string, timeoutMs: number, signal?: AbortSignal, verbosity?: 'verbose' | 'debug'): Promise<Result<Dcm2jsonResult>> {
     const jsonBinary = resolveBinary('dcm2json');
     if (!jsonBinary.ok) {
         return err(jsonBinary.error);
     }
 
-    const result = await execCommand(jsonBinary.value, [inputPath], { timeoutMs, signal });
+    const directArgs = [...buildVerbosityArgs(verbosity), inputPath];
+    const result = await execCommand(jsonBinary.value, directArgs, { timeoutMs, signal });
     if (!result.ok) {
         return err(result.error);
     }
 
     if (result.value.exitCode !== 0) {
-        return err(createToolError('dcm2json', [inputPath], result.value.exitCode, result.value.stderr));
+        return err(createToolError('dcm2json', directArgs, result.value.exitCode, result.value.stderr));
     }
 
     try {
@@ -132,19 +150,21 @@ async function dcm2json(inputPath: string, options?: Dcm2jsonOptions): Promise<R
     const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     const signal = options?.signal;
 
+    const verbosity = options?.verbosity;
+
     // Direct-only mode: skip XML path
     if (options?.directOnly === true) {
-        return tryDirectPath(inputPath, timeoutMs, signal);
+        return tryDirectPath(inputPath, timeoutMs, signal, verbosity);
     }
 
     // Try XML path first
-    const xmlResult = await tryXmlPath(inputPath, timeoutMs, signal);
+    const xmlResult = await tryXmlPath(inputPath, timeoutMs, signal, verbosity);
     if (xmlResult.ok) {
         return xmlResult;
     }
 
     // Fall back to direct path
-    return tryDirectPath(inputPath, timeoutMs, signal);
+    return tryDirectPath(inputPath, timeoutMs, signal, verbosity);
 }
 
 export { dcm2json };

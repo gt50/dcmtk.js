@@ -38,6 +38,8 @@ const JPLS_COLOR_CONVERSION_FLAGS: Record<JplsColorConversionValue, string> = {
 interface DcmdjplsOptions extends ToolBaseOptions {
     /** Color conversion mode. Maps to +cp, +ca, or +cn. */
     readonly colorConversion?: JplsColorConversionValue | undefined;
+    /** Verbosity level for diagnostic output. `'verbose'` maps to `-v`, `'debug'` maps to `-d`. */
+    readonly verbosity?: 'verbose' | 'debug' | undefined;
 }
 
 /** Result of a successful dcmdjpls operation. */
@@ -51,6 +53,7 @@ const DcmdjplsOptionsSchema = z
         timeoutMs: z.number().int().positive().optional(),
         signal: z.instanceof(AbortSignal).optional(),
         colorConversion: z.enum(['photometric', 'always', 'never']).optional(),
+        verbosity: z.enum(['verbose', 'debug']).optional(),
     })
     .strict()
     .optional();
@@ -65,6 +68,12 @@ const DcmdjplsOptionsSchema = z
  */
 function buildArgs(inputPath: string, outputPath: string, options?: DcmdjplsOptions): string[] {
     const args: string[] = [];
+
+    if (options?.verbosity === 'verbose') {
+        args.push('-v');
+    } else if (options?.verbosity === 'debug') {
+        args.push('-d');
+    }
 
     if (options?.colorConversion !== undefined) {
         args.push(JPLS_COLOR_CONVERSION_FLAGS[options.colorConversion]);

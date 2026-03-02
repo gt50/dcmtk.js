@@ -17,7 +17,10 @@ import { createToolError, createValidationError } from './_toolError';
 import type { ToolBaseOptions } from './_toolTypes';
 
 /** Options for {@link dcod2lum}. */
-type Dcod2lumOptions = ToolBaseOptions;
+interface Dcod2lumOptions extends ToolBaseOptions {
+    /** Verbosity level for diagnostic output. `'verbose'` maps to `-v`, `'debug'` maps to `-d`. */
+    readonly verbosity?: 'verbose' | 'debug' | undefined;
+}
 
 /** Result of a successful dcod2lum operation. */
 interface Dcod2lumResult {
@@ -29,9 +32,27 @@ const Dcod2lumOptionsSchema = z
     .object({
         timeoutMs: z.number().int().positive().optional(),
         signal: z.instanceof(AbortSignal).optional(),
+        verbosity: z.enum(['verbose', 'debug']).optional(),
     })
     .strict()
     .optional();
+
+/**
+ * Builds dcod2lum command-line arguments from validated options.
+ */
+function buildArgs(inputPath: string, outputPath: string, options?: Dcod2lumOptions): string[] {
+    const args: string[] = [];
+
+    if (options?.verbosity === 'verbose') {
+        args.push('-v');
+    } else if (options?.verbosity === 'debug') {
+        args.push('-d');
+    }
+
+    args.push(inputPath, outputPath);
+
+    return args;
+}
 
 /**
  * Converts hardcopy OD values to softcopy P-values using the dcod2lum binary.
@@ -60,7 +81,7 @@ async function dcod2lum(inputPath: string, outputPath: string, options?: Dcod2lu
         return err(binaryResult.error);
     }
 
-    const args = [inputPath, outputPath];
+    const args = buildArgs(inputPath, outputPath, options);
     const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
     const result = await execCommand(binaryResult.value, args, {

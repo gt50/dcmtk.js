@@ -21,6 +21,8 @@ interface Dsr2xmlOptions extends ToolBaseOptions {
     readonly addSchemaRef?: boolean | undefined;
     /** Assume the specified character set for the input file. Maps to `+Ca`. */
     readonly charsetAssume?: string | undefined;
+    /** Verbosity level for diagnostic output. `'verbose'` maps to `-v`, `'debug'` maps to `-d`. */
+    readonly verbosity?: 'verbose' | 'debug' | undefined;
 }
 
 /** Result of a successful dsr2xml conversion. */
@@ -29,6 +31,9 @@ interface Dsr2xmlResult {
     readonly text: string;
 }
 
+/** Maps verbosity level to command-line flag. */
+const VERBOSITY_FLAGS: Record<'verbose' | 'debug', string> = { verbose: '-v', debug: '-d' };
+
 const Dsr2xmlOptionsSchema = z
     .object({
         timeoutMs: z.number().int().positive().optional(),
@@ -36,6 +41,7 @@ const Dsr2xmlOptionsSchema = z
         useNamespace: z.boolean().optional(),
         addSchemaRef: z.boolean().optional(),
         charsetAssume: z.string().min(1).optional(),
+        verbosity: z.enum(['verbose', 'debug']).optional(),
     })
     .strict()
     .optional();
@@ -45,6 +51,10 @@ const Dsr2xmlOptionsSchema = z
  */
 function buildArgs(inputPath: string, options?: Dsr2xmlOptions): string[] {
     const args: string[] = [];
+
+    if (options?.verbosity !== undefined) {
+        args.push(VERBOSITY_FLAGS[options.verbosity]);
+    }
 
     if (options?.useNamespace === true) {
         args.push('+Xn');

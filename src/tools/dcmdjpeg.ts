@@ -38,6 +38,8 @@ const COLOR_CONVERSION_FLAGS: Record<ColorConversionValue, string> = {
 interface DcmdjpegOptions extends ToolBaseOptions {
     /** Color conversion mode. Maps to +cp, +ca, or +cn. */
     readonly colorConversion?: ColorConversionValue | undefined;
+    /** Verbosity level for diagnostic output. `'verbose'` maps to `-v`, `'debug'` maps to `-d`. */
+    readonly verbosity?: 'verbose' | 'debug' | undefined;
 }
 
 /** Result of a successful dcmdjpeg operation. */
@@ -51,6 +53,7 @@ const DcmdjpegOptionsSchema = z
         timeoutMs: z.number().int().positive().optional(),
         signal: z.instanceof(AbortSignal).optional(),
         colorConversion: z.enum(['photometric', 'always', 'never']).optional(),
+        verbosity: z.enum(['verbose', 'debug']).optional(),
     })
     .strict()
     .optional();
@@ -65,6 +68,12 @@ const DcmdjpegOptionsSchema = z
  */
 function buildArgs(inputPath: string, outputPath: string, options?: DcmdjpegOptions): string[] {
     const args: string[] = [];
+
+    if (options?.verbosity === 'verbose') {
+        args.push('-v');
+    } else if (options?.verbosity === 'debug') {
+        args.push('-d');
+    }
 
     if (options?.colorConversion !== undefined) {
         args.push(COLOR_CONVERSION_FLAGS[options.colorConversion]);

@@ -17,6 +17,8 @@ import type { ToolBaseOptions } from './_toolTypes';
 interface DcmencapOptions extends ToolBaseOptions {
     /** Document title for the encapsulated document. Maps to --title. */
     readonly documentTitle?: string | undefined;
+    /** Verbosity level for diagnostic output. `'verbose'` maps to `-v`, `'debug'` maps to `-d`. */
+    readonly verbosity?: 'verbose' | 'debug' | undefined;
 }
 
 /** Result of a successful dcmencap operation. */
@@ -30,6 +32,7 @@ const DcmencapOptionsSchema = z
         timeoutMs: z.number().int().positive().optional(),
         signal: z.instanceof(AbortSignal).optional(),
         documentTitle: z.string().optional(),
+        verbosity: z.enum(['verbose', 'debug']).optional(),
     })
     .strict()
     .optional();
@@ -44,6 +47,12 @@ const DcmencapOptionsSchema = z
  */
 function buildArgs(inputPath: string, outputPath: string, options?: DcmencapOptions): string[] {
     const args: string[] = [];
+
+    if (options?.verbosity === 'verbose') {
+        args.push('-v');
+    } else if (options?.verbosity === 'debug') {
+        args.push('-d');
+    }
 
     if (options?.documentTitle !== undefined) {
         args.push('--title', options.documentTitle);
