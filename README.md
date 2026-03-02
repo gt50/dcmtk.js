@@ -13,7 +13,8 @@ Type-safe Node.js bindings for the [DCMTK](https://dicom.offis.de/dcmtk.php.en) 
 
 ## Features
 
-- **51 tool wrappers** — async functions for every DCMTK command-line binary (data conversion, network, image processing, structured reports, presentation state)
+- **51 tool wrappers** — async functions for every DCMTK command-line binary with `verbosity` control and full CLI flag coverage
+- **Network resilience** — all 7 network tools support PDU sizing, ACSE/DIMSE/association timeouts, and hostname lookup control
 - **6 server classes + DicomReceiver + DicomSender** — long-lived DICOM listeners with typed EventEmitter APIs, a pooled receiver with auto-scaling workers, and a high-throughput sender with queuing, bucketing, and backpressure
 - **PacsClient** — high-level PACS client with Echo, Query, Retrieve, and Store operations
 - **DICOM data layer** — immutable `DicomDataset`, explicit `ChangeSet` builder, and `DicomInstance` unified file I/O
@@ -63,6 +64,8 @@ const result = await echoscu({
     host: '127.0.0.1',
     port: 4242,
     calledAETitle: 'PACS',
+    verbosity: 'verbose',
+    associationTimeout: 10,
 });
 
 if (result.ok) {

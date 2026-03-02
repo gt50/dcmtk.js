@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] - 2026-03-02
+
+### Added
+
+- **Verbosity control** on all 51 tool wrappers — `verbosity?: 'verbose' | 'debug'` maps to `-v`/`-d` flags for diagnostic output
+- **Network resilience flags** on all 7 network tools (echoscu, storescu, findscu, movescu, getscu, termscu, dcmsend):
+    - `maxPduReceive` / `maxPduSend` — PDU size control (`--max-pdu`, `--max-send-pdu`)
+    - `associationTimeout` / `acseTimeout` / `dimseTimeout` — granular timeout control (`-to`, `-ta`, `-td`)
+    - `noHostnameLookup` — DNS bypass for containerized environments (`-nh`)
+- `storescu`: `noUidChecks` flag (`--no-uid-checks`) for files with non-standard UIDs
+- `dcmcjpeg`: `progressive` flag (`+p`) for progressive JPEG compression
+- `dcm2pnm`: feature parity with dcmj2pnm — `png16` format (`+on2`), `windowCenter`/`windowWidth` (`+Wl`), `dcm2img` binary fallback
+- `dcmj2pnm`: 16-bit PNG format (`+on2`), `windowCenter`/`windowWidth` (`+Wl`), `dcm2img` binary fallback
+- `dcmsend`: `acseTimeout`, `dimseTimeout`, stdout capture in result
+- `dsrdump` / `dsr2xml`: `charsetAssume` option (`+Ca`) for SR files without Specific Character Set
+- `typesVersions` in package.json for classic `moduleResolution: "Node"` compatibility
+- 46 new tool wrapper test files (581 new tests, 1793 total across 100 test files)
+
+### Changed
+
+- `dcmsend`: migrated `verbose?: boolean` to `verbosity?: 'verbose' | 'debug'` (breaking for dcmsend users who passed `verbose: true`)
+- Extracted `pushNetworkArgs` helpers in network tools and `pushDisplayArgs`/`pushLutArgs` in data tools to keep function complexity within ESLint limits
+
 ## [0.3.0] - 2026-03-01
 
 ### Added
