@@ -78,6 +78,22 @@
             }
         }
     },
+    "typesVersions": {
+        "*": {
+            "tools": [
+                "dist/tools.d.ts"
+            ],
+            "servers": [
+                "dist/servers.d.ts"
+            ],
+            "dicom": [
+                "dist/dicom.d.ts"
+            ],
+            "utils": [
+                "dist/utils.d.ts"
+            ]
+        }
+    },
     "sideEffects": false,
     "files": [
         "dist",

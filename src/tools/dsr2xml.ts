@@ -19,6 +19,8 @@ interface Dsr2xmlOptions extends ToolBaseOptions {
     readonly useNamespace?: boolean | undefined;
     /** Add XML Schema reference. Maps to +Xs. Defaults to false. */
     readonly addSchemaRef?: boolean | undefined;
+    /** Assume the specified character set for the input file. Maps to `+Ca`. */
+    readonly charsetAssume?: string | undefined;
 }
 
 /** Result of a successful dsr2xml conversion. */
@@ -33,6 +35,7 @@ const Dsr2xmlOptionsSchema = z
         signal: z.instanceof(AbortSignal).optional(),
         useNamespace: z.boolean().optional(),
         addSchemaRef: z.boolean().optional(),
+        charsetAssume: z.string().min(1).optional(),
     })
     .strict()
     .optional();
@@ -49,6 +52,10 @@ function buildArgs(inputPath: string, options?: Dsr2xmlOptions): string[] {
 
     if (options?.addSchemaRef === true) {
         args.push('+Xs');
+    }
+
+    if (options?.charsetAssume !== undefined) {
+        args.push('+Ca', options.charsetAssume);
     }
 
     args.push(inputPath);

@@ -21,6 +21,8 @@ interface DsrdumpOptions extends ToolBaseOptions {
     readonly printLong?: boolean | undefined;
     /** Print concept name codes. Maps to +Pc. Defaults to false. */
     readonly printCodes?: boolean | undefined;
+    /** Assume the specified character set for the input file. Maps to `+Ca`. */
+    readonly charsetAssume?: string | undefined;
 }
 
 /** Result of a successful dsrdump operation. */
@@ -36,6 +38,7 @@ const DsrdumpOptionsSchema = z
         printFilename: z.boolean().optional(),
         printLong: z.boolean().optional(),
         printCodes: z.boolean().optional(),
+        charsetAssume: z.string().min(1).optional(),
     })
     .strict()
     .optional();
@@ -56,6 +59,10 @@ function buildArgs(inputPath: string, options?: DsrdumpOptions): string[] {
 
     if (options?.printCodes === true) {
         args.push('+Pc');
+    }
+
+    if (options?.charsetAssume !== undefined) {
+        args.push('+Ca', options.charsetAssume);
     }
 
     args.push(inputPath);

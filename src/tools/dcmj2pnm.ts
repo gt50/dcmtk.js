@@ -21,6 +21,8 @@ const Dcmj2pnmOutputFormat = {
     PNM: 'pnm',
     /** PNG format. */
     PNG: 'png',
+    /** 16-bit PNG format. */
+    PNG_16BIT: 'png16',
     /** BMP format. */
     BMP: 'bmp',
     /** TIFF format. */
@@ -34,6 +36,7 @@ type Dcmj2pnmOutputFormatValue = (typeof Dcmj2pnmOutputFormat)[keyof typeof Dcmj
 const OUTPUT_FORMAT_FLAGS: Record<Dcmj2pnmOutputFormatValue, string> = {
     pnm: '+op',
     png: '+on',
+    png16: '+on2',
     bmp: '+ob',
     tiff: '+ot',
     jpeg: '+oj',
@@ -45,6 +48,10 @@ interface Dcmj2pnmOptions extends ToolBaseOptions {
     readonly outputFormat?: Dcmj2pnmOutputFormatValue | undefined;
     /** Frame number to extract (0-based). */
     readonly frame?: number | undefined;
+    /** Window center for VOI LUT. Must be provided together with {@link windowWidth}. Maps to `+Wl`. */
+    readonly windowCenter?: number | undefined;
+    /** Window width for VOI LUT. Must be provided together with {@link windowCenter}. Maps to `+Wl`. */
+    readonly windowWidth?: number | undefined;
 }
 
 /** Result of a successful dcmj2pnm operation. */
@@ -57,10 +64,15 @@ const Dcmj2pnmOptionsSchema = z
     .object({
         timeoutMs: z.number().int().positive().optional(),
         signal: z.instanceof(AbortSignal).optional(),
-        outputFormat: z.enum(['pnm', 'png', 'bmp', 'tiff', 'jpeg']).optional(),
+        outputFormat: z.enum(['pnm', 'png', 'png16', 'bmp', 'tiff', 'jpeg']).optional(),
         frame: z.number().int().min(0).max(65535).optional(),
+        windowCenter: z.number().optional(),
+        windowWidth: z.number().optional(),
     })
     .strict()
+    .refine(data => (data?.windowCenter === undefined) === (data?.windowWidth === undefined), {
+        message: 'windowCenter and windowWidth must be provided together',
+    })
     .optional();
 
 /**
@@ -75,6 +87,10 @@ function buildArgs(inputPath: string, outputPath: string, options?: Dcmj2pnmOpti
 
     if (options?.frame !== undefined) {
         args.push('+F', String(options.frame));
+    }
+
+    if (options?.windowCenter !== undefined && options?.windowWidth !== undefined) {
+        args.push('+Wl', String(options.windowCenter), String(options.windowWidth));
     }
 
     args.push(inputPath, outputPath);
@@ -106,7 +122,8 @@ async function dcmj2pnm(inputPath: string, outputPath: string, options?: Dcmj2pn
         return err(createValidationError('dcmj2pnm', validation.error));
     }
 
-    const binaryResult = resolveBinary('dcmj2pnm');
+    const dcm2imgResult = resolveBinary('dcm2img');
+    const binaryResult = dcm2imgResult.ok ? dcm2imgResult : resolveBinary('dcmj2pnm');
     if (!binaryResult.ok) {
         return err(binaryResult.error);
     }
