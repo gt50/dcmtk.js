@@ -548,17 +548,22 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
         worker.remoteSocket = remoteSocket;
         worker.workerSocket = workerSocket;
 
-        remoteSocket.pipe(workerSocket);
-        workerSocket.pipe(remoteSocket);
-
-        remoteSocket.resume();
-
         const cleanup = (): void => {
             remoteSocket.unpipe(workerSocket);
             workerSocket.unpipe(remoteSocket);
             if (!remoteSocket.destroyed) remoteSocket.destroy();
             if (!workerSocket.destroyed) workerSocket.destroy();
         };
+
+        // Wait for the worker connection to be established before piping.
+        // Writing to a socket before 'connect' buffers data in userland;
+        // on Windows and some container runtimes this buffered data is
+        // silently lost, causing the DICOM association handshake to hang.
+        workerSocket.on('connect', () => {
+            remoteSocket.pipe(workerSocket);
+            workerSocket.pipe(remoteSocket);
+            remoteSocket.resume();
+        });
 
         remoteSocket.on('error', cleanup);
         workerSocket.on('error', cleanup);

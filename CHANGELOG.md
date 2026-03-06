@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.6.1] - 2026-03-06
+
+### Fixed
+
+- **DicomReceiver TCP proxy hang** — defer `pipe()` until worker socket `connect` event fires; pre-connection writes were silently lost on Windows and Docker/Alpine, causing DICOM association negotiation to hang indefinitely (#10)
+- Re-enabled DicomReceiver integration tests in CI (previously skipped due to this bug)
+
 ## [0.6.0] - 2026-03-05
 
 ### Added
