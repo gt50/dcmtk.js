@@ -192,6 +192,8 @@ interface WorkerInfo {
     fileSizes: number[];
     /** Captured output lines during the current association. */
     outputLines: string[];
+    /** Promises for in-flight handleFileReceived calls. */
+    pendingFiles: Promise<void>[];
     /** Timestamp when the TCP connection was routed to this worker. */
     startAt: number | undefined;
     remoteSocket: net.Socket | undefined;
@@ -511,6 +513,7 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
         worker.files = [];
         worker.fileSizes = [];
         worker.outputLines = [];
+        worker.pendingFiles = [];
         worker.startAt = Date.now();
 
         this.pipeConnection(worker, remoteSocket);
@@ -626,6 +629,7 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
             files: [],
             fileSizes: [],
             outputLines: [],
+            pendingFiles: [],
             startAt: undefined,
             remoteSocket: undefined,
             workerSocket: undefined,
@@ -711,7 +715,9 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
     /** Wires FILE_RECEIVED from dcmrecv worker to handleFileReceived. */
     private wireFileReceived(worker: WorkerInfo): void {
         worker.dcmrecv.onFileReceived(data => {
-            void this.handleFileReceived(worker, data);
+            const promise = this.handleFileReceived(worker, data);
+            worker.pendingFiles.push(promise);
+            void promise.finally(() => removePending(worker.pendingFiles, promise));
         });
     }
 
@@ -756,45 +762,63 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
     /** Returns worker to idle pool on association complete, emits summary. */
     private wireAssociationComplete(worker: WorkerInfo): void {
         worker.dcmrecv.onAssociationComplete((data: AssociationCompleteData) => {
-            const assocId = worker.associationId ?? data.associationId;
-            const assocDir = worker.associationDir ?? '';
-            const files = [...worker.files];
-            const output = [...worker.outputLines];
-
-            const endAt = Date.now();
-            const startAt = worker.startAt ?? endAt;
-            const totalBytes = sumArray(worker.fileSizes);
-            const elapsedMs = endAt - startAt;
-            const bytesPerSecond = elapsedMs > 0 ? Math.round((totalBytes / elapsedMs) * 1000) : 0;
-
-            this.emit('ASSOCIATION_COMPLETE', {
-                associationId: assocId,
-                associationDir: assocDir,
-                callingAE: data.callingAE,
-                calledAE: data.calledAE,
-                source: data.source,
-                files,
-                durationMs: data.durationMs,
-                endReason: data.endReason,
-                totalBytes,
-                bytesPerSecond,
-                startAt,
-                endAt,
-                output,
-            });
-
-            worker.state = 'idle';
-            worker.associationId = undefined;
-            worker.associationDir = undefined;
-            worker.files = [];
-            worker.fileSizes = [];
-            worker.outputLines = [];
-            worker.startAt = undefined;
-            worker.remoteSocket = undefined;
-            worker.workerSocket = undefined;
-
-            void this.scaleDown();
+            void this.finalizeAssociation(worker, data);
         });
+    }
+
+    /** Awaits pending file operations, emits ASSOCIATION_COMPLETE, resets worker state. */
+    private async finalizeAssociation(worker: WorkerInfo, data: AssociationCompleteData): Promise<void> {
+        if (worker.pendingFiles.length > 0) {
+            await Promise.all(worker.pendingFiles);
+        }
+
+        this.emitAssociationComplete(worker, data);
+        this.resetWorker(worker);
+        void this.scaleDown();
+    }
+
+    /** Emits the ASSOCIATION_COMPLETE event with transfer stats. */
+    private emitAssociationComplete(worker: WorkerInfo, data: AssociationCompleteData): void {
+        const assocId = worker.associationId ?? data.associationId;
+        const assocDir = worker.associationDir ?? '';
+        const files = [...worker.files];
+        const output = [...worker.outputLines];
+
+        const endAt = Date.now();
+        const startAt = worker.startAt ?? endAt;
+        const totalBytes = sumArray(worker.fileSizes);
+        const elapsedMs = endAt - startAt;
+        const bytesPerSecond = elapsedMs > 0 ? Math.round((totalBytes / elapsedMs) * 1000) : 0;
+
+        this.emit('ASSOCIATION_COMPLETE', {
+            associationId: assocId,
+            associationDir: assocDir,
+            callingAE: data.callingAE,
+            calledAE: data.calledAE,
+            source: data.source,
+            files,
+            durationMs: data.durationMs,
+            endReason: data.endReason,
+            totalBytes,
+            bytesPerSecond,
+            startAt,
+            endAt,
+            output,
+        });
+    }
+
+    /** Resets worker state to idle after an association completes. */
+    private resetWorker(worker: WorkerInfo): void {
+        worker.state = 'idle';
+        worker.associationId = undefined;
+        worker.associationDir = undefined;
+        worker.files = [];
+        worker.fileSizes = [];
+        worker.outputLines = [];
+        worker.pendingFiles = [];
+        worker.startAt = undefined;
+        worker.remoteSocket = undefined;
+        worker.workerSocket = undefined;
     }
 
     /** Bubbles ASSOCIATION_RECEIVED from dcmrecv worker. */
@@ -923,6 +947,13 @@ async function removeDirSafe(dirPath: string): Promise<void> {
     } catch {
         /* best-effort cleanup */
     }
+}
+
+/** Removes a settled promise from the pending-files tracking array. */
+function removePending(arr: Promise<void>[], promise: Promise<void>): void {
+    const idx = arr.indexOf(promise);
+    // splice returns removed elements (already settled) — safe to discard
+    if (idx !== -1) void arr.splice(idx, 1);
 }
 
 /** Promise-based delay. */

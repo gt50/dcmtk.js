@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.6.3] - 2026-03-06
+
+### Fixed
+
+- **DicomReceiver FILE_RECEIVED race condition** — `ASSOCIATION_COMPLETE` now awaits all pending `handleFileReceived` operations before emitting, ensuring `FILE_RECEIVED` events (and their `DicomInstance`) are fully resolved first; previously, `ASSOCIATION_COMPLETE` could fire before files were moved to `storageDir`, causing downstream code that cleaned up the association directory to delete files before `DicomInstance.open()` could read them (#11)
+
 ## [0.6.2] - 2026-03-06
 
 ### Fixed
