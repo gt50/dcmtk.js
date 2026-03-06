@@ -1,13 +1,14 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { resolve } from 'node:path';
 import { readdir } from 'node:fs/promises';
-import { DicomReceiver } from '../../../src/servers/DicomReceiver';
-import { storescu } from '../../../src/tools/storescu';
-import { dcmtkAvailable, SAMPLES, getAvailablePort, createTempDir, removeTempDir, waitForEvent } from '../helpers';
-import type { ReceiverFileData, ReceiverAssociationData } from '../../../src/servers/DicomReceiver';
+import type { ReceiverAssociationData, ReceiverFileData } from '../../../src';
+import { DicomReceiver, storescu } from '../../../src';
+import { createTempDir, dcmtkAvailable, getAvailablePort, removeTempDir, SAMPLES, waitForEvent } from '../helpers';
 
 const CONFIG_FILE = resolve(__dirname, '../../../src/data/storescp.cfg');
 const CONFIG_PROFILE = 'Default';
+/** Default AE title used by DicomReceiver workers — must match calledAETitle in storescu calls. */
+const WORKER_AE_TITLE = 'DCMRECV';
 
 /** Allow workers to fully initialize after start() resolves. */
 const WORKER_WARMUP_MS = 3000;
@@ -85,6 +86,7 @@ describe.skipIf(!dcmtkAvailable)('DicomReceiver integration', () => {
         const sendResult = await storescu({
             host: '127.0.0.1',
             port,
+            calledAETitle: WORKER_AE_TITLE,
             files: [SAMPLES.OTHER_0002D],
             timeoutMs: 30_000,
         });
@@ -124,6 +126,7 @@ describe.skipIf(!dcmtkAvailable)('DicomReceiver integration', () => {
         const sendResult = await storescu({
             host: '127.0.0.1',
             port,
+            calledAETitle: WORKER_AE_TITLE,
             files: [SAMPLES.OTHER_0002D],
             timeoutMs: 30_000,
         });
@@ -170,6 +173,7 @@ describe.skipIf(!dcmtkAvailable)('DicomReceiver integration', () => {
         const send1 = await storescu({
             host: '127.0.0.1',
             port,
+            calledAETitle: WORKER_AE_TITLE,
             files: [SAMPLES.OTHER_0002D],
             timeoutMs: 30_000,
         });
@@ -181,6 +185,7 @@ describe.skipIf(!dcmtkAvailable)('DicomReceiver integration', () => {
         const send2 = await storescu({
             host: '127.0.0.1',
             port,
+            calledAETitle: WORKER_AE_TITLE,
             files: [SAMPLES.OTHER_0002D],
             timeoutMs: 30_000,
         });
@@ -219,6 +224,7 @@ describe.skipIf(!dcmtkAvailable)('DicomReceiver integration', () => {
         const sendResult = await storescu({
             host: '127.0.0.1',
             port,
+            calledAETitle: WORKER_AE_TITLE,
             files: [SAMPLES.OTHER_0002D],
             timeoutMs: 30_000,
         });

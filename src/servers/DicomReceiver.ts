@@ -592,7 +592,7 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
     private createDcmrecv(port: number, tempDir: string): Result<Dcmrecv> {
         return Dcmrecv.create({
             port,
-            aeTitle: this.options.aeTitle ?? 'DCMRECV',
+            aeTitle: this.options.aeTitle,
             outputDirectory: tempDir,
             configFile: this.options.configFile,
             configProfile: this.options.configProfile,

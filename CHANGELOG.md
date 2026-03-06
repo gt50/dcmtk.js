@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.6.2] - 2026-03-06
+
+### Fixed
+
+- **DicomReceiver AE title rejection** — removed hardcoded `'DCMRECV'` default for worker `aeTitle`; when no `aeTitle` is specified, dcmrecv now uses `--use-called-aetitle` (accept any called AE) instead of `--aetitle DCMRECV` which enabled strict checking and rejected senders using the default called AE (`ANY-SCP`) (#10)
+- Fixed DicomReceiver integration tests to pass `calledAETitle` matching the worker AE title
+
 ## [0.6.1] - 2026-03-06
 
 ### Fixed
