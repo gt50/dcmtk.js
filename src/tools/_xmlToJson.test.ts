@@ -101,14 +101,14 @@ describe('xmlToJson()', () => {
         }
     });
 
-    it('converts multi-value elements', () => {
+    it('converts multi-value elements with numeric coercion for DS VR', () => {
         const result = xmlToJson(MULTI_VALUE_XML);
 
         expect(result.ok).toBe(true);
         if (result.ok) {
             expect(result.value['00280030']).toEqual({
                 vr: 'DS',
-                Value: ['0.5', '0.5'],
+                Value: [0.5, 0.5],
             });
         }
     });
@@ -343,6 +343,105 @@ describe('xmlToJson()', () => {
         if (result.ok) {
             expect(result.value['7FE00010']?.vr).toBe('UN');
             expect(result.value['7FE00010']?.InlineBinary).toBe('AQIDBA==');
+        }
+    });
+
+    it('coerces US VR values to numbers', () => {
+        const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<NativeDicomModel>
+  <DicomAttribute tag="00280010" vr="US" keyword="Rows">
+    <Value number="1">512</Value>
+  </DicomAttribute>
+</NativeDicomModel>`;
+
+        const result = xmlToJson(xml);
+
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+            expect(result.value['00280010']!.Value).toEqual([512]);
+        }
+    });
+
+    it('coerces IS VR values to numbers', () => {
+        const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<NativeDicomModel>
+  <DicomAttribute tag="00200013" vr="IS" keyword="InstanceNumber">
+    <Value number="1">42</Value>
+  </DicomAttribute>
+</NativeDicomModel>`;
+
+        const result = xmlToJson(xml);
+
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+            expect(result.value['00200013']!.Value).toEqual([42]);
+        }
+    });
+
+    it('keeps string VR values as strings even if numeric-looking', () => {
+        const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<NativeDicomModel>
+  <DicomAttribute tag="00100020" vr="LO" keyword="PatientID">
+    <Value number="1">123</Value>
+  </DicomAttribute>
+</NativeDicomModel>`;
+
+        const result = xmlToJson(xml);
+
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+            expect(result.value['00100020']!.Value).toEqual(['123']);
+        }
+    });
+
+    it('keeps non-parseable DS values as strings (defensive)', () => {
+        const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<NativeDicomModel>
+  <DicomAttribute tag="00280030" vr="DS" keyword="PixelSpacing">
+    <Value number="1">abc</Value>
+  </DicomAttribute>
+</NativeDicomModel>`;
+
+        const result = xmlToJson(xml);
+
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+            expect(result.value['00280030']!.Value).toEqual(['abc']);
+        }
+    });
+
+    it('unwraps @_number-only wrapper objects', () => {
+        // Simulate fast-xml-parser producing {"@_number": "1"} without #text
+        const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<NativeDicomModel>
+  <DicomAttribute tag="00100020" vr="LO" keyword="PatientID">
+    <Value number="1">test-value</Value>
+  </DicomAttribute>
+</NativeDicomModel>`;
+
+        const result = xmlToJson(xml);
+
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+            // Value should be unwrapped to a plain string, not a wrapper object
+            const val = result.value['00100020']!.Value![0];
+            expect(typeof val).toBe('string');
+        }
+    });
+
+    it('prefers #text over @_number when both present', () => {
+        const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<NativeDicomModel>
+  <DicomAttribute tag="00100020" vr="LO" keyword="PatientID">
+    <Value number="1">actual-text</Value>
+  </DicomAttribute>
+</NativeDicomModel>`;
+
+        const result = xmlToJson(xml);
+
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+            expect(result.value['00100020']!.Value).toEqual(['actual-text']);
         }
     });
 });

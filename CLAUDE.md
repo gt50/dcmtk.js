@@ -445,5 +445,6 @@ await inst.unlink(); // delete file
 - `lookupTag(tag)` / `lookupTagByName(name)` / `lookupTagByKeyword(kw)` — Dictionary lookups
 - `SOP_CLASSES` / `sopClassNameFromUID(uid)` — SOP Class mappings
 - `VR` — Value Representation constants and metadata
+- `walkTags(data, options?)` — Iterate DICOM JSON tags with VR filtering and sequence recursion
 - `batch(items, operation, options?)` — Parallel batch processing with concurrency control
 - `retry(fn, options?)` — Retry with exponential backoff

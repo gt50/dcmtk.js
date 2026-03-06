@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.6.0] - 2026-03-05
+
+### Added
+
+- **`walkTags(data, options?)`** — utility for iterating all DICOM tags in a JSON Model dataset with VR filtering and bounded sequence recursion (#8)
+- `DicomDataset.walkTags(options?)` — instance method delegating to the standalone function
+- Exported types: `WalkTagEntry`, `WalkTagsOptions`
+
+### Fixed
+
+- **Numeric VR coercion** — `DS`, `FL`, `FD`, `IS`, `SL`, `SS`, `SV`, `UL`, `US`, `UV` values are now JSON numbers per DICOM PS3.18 F.2.3, not strings (#9)
+- **`@_number` unwrapping** — fast-xml-parser attribute wrapper objects (`{"@_number": "1"}`) are now unwrapped to plain values (#7)
+
+### Breaking
+
+- `Value` arrays for numeric VRs (`DS`, `IS`, `US`, `UL`, etc.) now contain `number` instead of `string`. Code doing `typeof value === 'string'` on these VRs will need updating. `DicomDataset.getNumber()` is unaffected.
+
 ## [0.5.0] - 2026-03-05
 
 ### Added

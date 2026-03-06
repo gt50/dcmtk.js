@@ -80,6 +80,8 @@ export { DicomDataset } from './dicom/DicomDataset';
 export { ChangeSet } from './dicom/ChangeSet';
 export { DicomInstance } from './dicom/DicomInstance';
 export { xmlToJson } from './dicom/xmlToJson';
+export { walkTags } from './dicom/walkTags';
+export type { WalkTagEntry, WalkTagsOptions } from './dicom/walkTags';
 
 // ---------------------------------------------------------------------------
 // Short-lived tool wrappers — Data & Metadata

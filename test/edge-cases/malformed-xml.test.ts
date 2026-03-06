@@ -206,8 +206,8 @@ describe('xmlToJson malformed XML inputs', () => {
 
         expect(result.ok).toBe(true);
         if (result.ok) {
-            // With parseTagValue: false, the value should remain a string
-            expect(result.value['00280010']!.Value).toEqual(['512']);
+            // US is a numeric VR — value is coerced to a JSON number per PS3.18 F.2.3
+            expect(result.value['00280010']!.Value).toEqual([512]);
         }
     });
 });

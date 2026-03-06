@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { DicomDataset } from './DicomDataset';
 import type { DicomTag, DicomTagPath } from '../brands';
 import type { DicomJsonModel, DicomJsonElement } from '../tools/_xmlToJson';
+import type { WalkTagEntry } from './walkTags';
 
 // ---------------------------------------------------------------------------
 // Test fixtures
@@ -21,7 +22,7 @@ function makeSampleData(): DicomJsonModel {
         '00020010': { vr: 'UI', Value: ['1.2.840.10008.1.2.1'] },
         '00280010': { vr: 'US', Value: [512] },
         '00280011': { vr: 'US', Value: [512] },
-        '00280030': { vr: 'DS', Value: ['0.5', '0.5'] },
+        '00280030': { vr: 'DS', Value: [0.5, 0.5] },
         '00080008': { vr: 'CS', Value: ['ORIGINAL', 'PRIMARY', 'AXIAL'] },
         '7FE00010': { vr: 'OW', InlineBinary: 'AAAA' },
         '00081115': {
@@ -357,7 +358,7 @@ describe('DicomDataset.getStrings', () => {
         const result = ds.getStrings('00280030');
         expect(result.ok).toBe(true);
         if (result.ok) {
-            expect(result.value).toEqual(['0.5', '0.5']);
+            expect(result.value).toEqual(['0.5', '0.5']); // numbers converted to strings by extractStrings
         }
     });
 
@@ -838,5 +839,39 @@ describe('DicomDataset wildcard traversal truncation', () => {
         if (!r.ok) return;
         const values = r.value.findValues('(0008,1115)[*].(0020,000E)' as DicomTagPath);
         expect(values).toHaveLength(100);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// walkTags (delegates to standalone — light coverage)
+// ---------------------------------------------------------------------------
+
+describe('DicomDataset.walkTags', () => {
+    it('returns all tags from a flat dataset', () => {
+        const r = DicomDataset.fromJson({
+            '00100010': { vr: 'PN', Value: [{ Alphabetic: 'Test' }] },
+            '00100020': { vr: 'LO', Value: ['ID'] },
+        });
+        if (!r.ok) return;
+        const entries: ReadonlyArray<WalkTagEntry> = r.value.walkTags();
+        expect(entries).toHaveLength(2);
+    });
+
+    it('filters by VR', () => {
+        const r = DicomDataset.fromJson({
+            '00100010': { vr: 'PN', Value: [{ Alphabetic: 'Test' }] },
+            '00100020': { vr: 'LO', Value: ['ID'] },
+        });
+        if (!r.ok) return;
+        const entries = r.value.walkTags({ vrFilter: ['LO'] });
+        expect(entries).toHaveLength(1);
+        expect(entries[0]!.tag).toBe('00100020');
+    });
+
+    it('recurses into sequences', () => {
+        const ds = makeDataset();
+        const entries = ds.walkTags({ vrFilter: ['UI'] });
+        expect(entries.length).toBeGreaterThan(1);
+        expect(entries.some(e => e.depth > 0)).toBe(true);
     });
 });

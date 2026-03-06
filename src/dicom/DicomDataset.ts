@@ -16,6 +16,8 @@ import { ok, err } from '../types';
 import type { TagSegment } from './tagPath';
 import { tagPathToSegments } from './tagPath';
 import type { DicomJsonElement, DicomJsonModel } from '../tools/_xmlToJson';
+import { walkTags as walkTagsFn } from './walkTags';
+import type { WalkTagEntry, WalkTagsOptions } from './walkTags';
 
 // ---------------------------------------------------------------------------
 // Structural validation
@@ -482,6 +484,16 @@ class DicomDataset {
         }
         const result = collectWildcard(this.data, segments);
         return result.values;
+    }
+
+    /**
+     * Walks all tags in this dataset, optionally filtering by VR and recursing into sequences.
+     *
+     * @param options - Optional VR filter and max depth
+     * @returns A readonly array of all matching tag entries
+     */
+    walkTags(options?: WalkTagsOptions): ReadonlyArray<WalkTagEntry> {
+        return walkTagsFn(this.data, options);
     }
 
     // -----------------------------------------------------------------------

@@ -206,16 +206,39 @@ function convertSequence(attr: XmlDicomAttribute, element: ElementBuilder): void
     if (values.length > 0) element.Value = values;
 }
 
+/** VRs whose values MUST be JSON numbers per DICOM PS3.18 F.2.3. */
+const NUMERIC_JSON_VRS = new Set(['DS', 'FL', 'FD', 'IS', 'SL', 'SS', 'SV', 'UL', 'US', 'UV']);
+
+/** Unwraps fast-xml-parser attribute wrapper objects (e.g., {@_number: "1"}). */
+function unwrapValue(v: unknown): unknown {
+    if (typeof v !== 'object' || v === null) return v;
+    const obj = v as Record<string, unknown>;
+    if ('#text' in obj) return obj['#text'];
+    const keys = Object.keys(obj);
+    if (keys.length === 1 && keys[0] !== undefined && keys[0].startsWith('@_')) {
+        return obj[keys[0]];
+    }
+    return v;
+}
+
+/** Coerces a value to a number. Returns the original if not parseable. */
+function coerceNumeric(value: unknown): unknown {
+    if (typeof value === 'number') return value;
+    if (typeof value !== 'string') return value;
+    const trimmed = value.trim();
+    if (trimmed.length === 0) return value;
+    const num = Number(trimmed);
+    return Number.isNaN(num) ? value : num;
+}
+
 /** Handles regular Value elements. */
-function convertRegularValue(attr: XmlDicomAttribute, element: ElementBuilder): void {
+function convertRegularValue(attr: XmlDicomAttribute, element: ElementBuilder, vr: string): void {
     const valArray = toArray(attr.Value);
     const values: unknown[] = [];
+    const isNumeric = NUMERIC_JSON_VRS.has(vr);
     for (const v of valArray) {
-        if (typeof v === 'object' && v !== null && '#text' in v) {
-            values.push((v as Record<string, unknown>)['#text']);
-        } else {
-            values.push(v);
-        }
+        const unwrapped = unwrapValue(v);
+        values.push(isNumeric ? coerceNumeric(unwrapped) : unwrapped);
     }
     if (values.length > 0) element.Value = values;
 }
@@ -237,7 +260,7 @@ function convertElement(attr: XmlDicomAttribute): DicomJsonElement {
     } else if (element.vr === 'SQ' && attr.Item !== undefined) {
         convertSequence(attr, element);
     } else if (attr.Value !== undefined) {
-        convertRegularValue(attr, element);
+        convertRegularValue(attr, element, vr);
     }
 
     return Object.freeze(element) as DicomJsonElement;
