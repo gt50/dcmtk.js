@@ -62,13 +62,6 @@ describe('dcmodify', () => {
             expect(result.ok).toBe(true);
         });
 
-        it('accepts a sequence path without array index', async () => {
-            const result = await dcmodify('/input.dcm', {
-                modifications: [{ tag: '(0008,1111).(0008,0013)', value: '120000' }],
-            });
-            expect(result.ok).toBe(true);
-        });
-
         it('accepts a sequence path with array index', async () => {
             const result = await dcmodify('/input.dcm', {
                 modifications: [{ tag: '(0008,1111)[0].(0008,0013)', value: '120000' }],
@@ -76,18 +69,39 @@ describe('dcmodify', () => {
             expect(result.ok).toBe(true);
         });
 
-        it('accepts a deeply nested sequence path without indices', async () => {
+        it('accepts a deeply nested path with all indices', async () => {
             const result = await dcmodify('/input.dcm', {
-                modifications: [{ tag: '(0008,1115).(0008,1140).(0008,1150)', value: '1.2.3' }],
+                modifications: [{ tag: '(0008,1115)[0].(0008,1140)[1].(0008,1150)', value: '1.2.3' }],
             });
             expect(result.ok).toBe(true);
         });
 
-        it('accepts a deeply nested path with mixed indices', async () => {
+        it('accepts a path with trailing index on leaf tag', async () => {
             const result = await dcmodify('/input.dcm', {
-                modifications: [{ tag: '(0008,1115)[0].(0008,1140).(0008,1150)[2]', value: '1.2.3' }],
+                modifications: [{ tag: '(0008,1115)[0].(0008,1150)[2]', value: '1.2.3' }],
             });
             expect(result.ok).toBe(true);
+        });
+
+        it('rejects a sequence path without array index before dot', async () => {
+            const result = await dcmodify('/input.dcm', {
+                modifications: [{ tag: '(0008,1111).(0008,0013)', value: '120000' }],
+            });
+            expect(result.ok).toBe(false);
+        });
+
+        it('rejects a deeply nested path missing indices', async () => {
+            const result = await dcmodify('/input.dcm', {
+                modifications: [{ tag: '(0008,1115).(0008,1140).(0008,1150)', value: '1.2.3' }],
+            });
+            expect(result.ok).toBe(false);
+        });
+
+        it('rejects a path with missing index mid-path', async () => {
+            const result = await dcmodify('/input.dcm', {
+                modifications: [{ tag: '(0008,1115)[0].(0008,1140).(0008,1150)', value: '1.2.3' }],
+            });
+            expect(result.ok).toBe(false);
         });
 
         it('rejects an invalid tag format', async () => {
@@ -104,14 +118,14 @@ describe('dcmodify', () => {
             expect(result.ok).toBe(false);
         });
 
-        it('accepts erasure of a sequence path without index', async () => {
+        it('accepts erasure of a sequence path with index', async () => {
             const result = await dcmodify('/input.dcm', {
-                erasures: ['(0008,1111).(0008,0013)'],
+                erasures: ['(0008,1111)[0].(0008,0013)'],
             });
             expect(result.ok).toBe(true);
             const args = mockedSpawnCommand.mock.calls[0]?.[1] as string[];
             expect(args).toContain('-e');
-            expect(args).toContain('(0008,1111).(0008,0013)');
+            expect(args).toContain('(0008,1111)[0].(0008,0013)');
         });
     });
 

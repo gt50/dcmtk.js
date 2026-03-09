@@ -5,11 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [0.6.4] - 2026-03-09
+## [0.6.5] - 2026-03-09
 
 ### Fixed
 
-- **dcmodify sequence path validation** — `TAG_OR_PATH_PATTERN` regex now accepts nested sequence paths without explicit array indices (e.g., `(0008,1111).(0008,0013)`); previously required `[N]` before each dot separator, rejecting valid dcmodify syntax (#12)
+- **dcmodify sequence path validation** — reverted v0.6.4 regex relaxation; dcmodify CLI requires explicit `[N]` array indices before every dot separator in sequence paths (e.g., `(0008,1111)[0].(0008,0013)` not `(0008,1111).(0008,0013)`); the original validation was correct and now catches invalid paths early instead of deferring to a cryptic dcmodify CLI error (#13)
+
+## [0.6.4] - 2026-03-09 [YANKED]
+
+### Fixed (reverted in 0.6.5)
+
+- ~~dcmodify sequence path validation relaxed to accept paths without array indices~~ — incorrect; dcmodify CLI requires explicit `[N]` indices (#12, reverted by #13)
 
 ## [0.6.3] - 2026-03-06
 
