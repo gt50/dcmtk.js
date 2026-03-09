@@ -73,6 +73,22 @@ interface DicomSenderOptions {
     readonly bucketFlushMs?: number | undefined;
     /** Maximum files per bucket before auto-flush (bucket mode only). Defaults to 50. */
     readonly maxBucketSize?: number | undefined;
+    /** Maximum PDU receive size (passed through to storescu `--max-pdu`). */
+    readonly maxPduReceive?: number | undefined;
+    /** Maximum PDU send size (passed through to storescu `--max-send-pdu`). */
+    readonly maxPduSend?: number | undefined;
+    /** Association timeout in seconds (passed through to storescu `-to`). */
+    readonly associationTimeout?: number | undefined;
+    /** ACSE timeout in seconds (passed through to storescu `-ta`). */
+    readonly acseTimeout?: number | undefined;
+    /** DIMSE timeout in seconds (passed through to storescu `-td`). */
+    readonly dimseTimeout?: number | undefined;
+    /** Disable DNS hostname lookup (passed through to storescu `-nh`). Useful in containerized environments. */
+    readonly noHostnameLookup?: boolean | undefined;
+    /** Disable UID validity checking (passed through to storescu `--no-uid-checks`). */
+    readonly noUidChecks?: boolean | undefined;
+    /** Verbosity level for diagnostic output. `'verbose'` maps to `-v`, `'debug'` maps to `-d`. */
+    readonly verbosity?: 'verbose' | 'debug' | undefined;
     /** AbortSignal for external cancellation. */
     readonly signal?: AbortSignal | undefined;
 }

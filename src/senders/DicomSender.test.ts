@@ -1015,6 +1015,98 @@ describe('DicomSender', () => {
     // Edge cases
     // -----------------------------------------------------------------------
 
+    describe('passthrough options', () => {
+        it('accepts all network and diagnostic options in create()', () => {
+            const result = DicomSender.create({
+                ...validOpts,
+                maxPduReceive: 65536,
+                maxPduSend: 32768,
+                associationTimeout: 30,
+                acseTimeout: 15,
+                dimseTimeout: 60,
+                noHostnameLookup: true,
+                noUidChecks: true,
+                verbosity: 'verbose',
+            });
+            expect(result.ok).toBe(true);
+        });
+
+        it('passes network options through to storescu', async () => {
+            const result = DicomSender.create({
+                ...validOpts,
+                mode: 'single',
+                maxPduReceive: 65536,
+                maxPduSend: 32768,
+                associationTimeout: 30,
+                acseTimeout: 15,
+                dimseTimeout: 60,
+                noHostnameLookup: true,
+                noUidChecks: true,
+                verbosity: 'debug',
+            });
+            if (!result.ok) return;
+            const sender = result.value;
+
+            await sender.send(['/file.dcm']);
+            await delay(50);
+
+            const callArgs = (mockStorescu.mock.calls[0] as unknown as unknown[])?.[0] as Record<string, unknown>;
+            expect(callArgs).toMatchObject({
+                maxPduReceive: 65536,
+                maxPduSend: 32768,
+                associationTimeout: 30,
+                acseTimeout: 15,
+                dimseTimeout: 60,
+                noHostnameLookup: true,
+                noUidChecks: true,
+                verbosity: 'debug',
+            });
+
+            await sender.stop();
+        });
+
+        it('rejects maxPduReceive below 4096', () => {
+            const result = DicomSender.create({ ...validOpts, maxPduReceive: 1024 });
+            expect(result.ok).toBe(false);
+        });
+
+        it('rejects maxPduSend above 131072', () => {
+            const result = DicomSender.create({ ...validOpts, maxPduSend: 200000 });
+            expect(result.ok).toBe(false);
+        });
+
+        it('rejects negative acseTimeout', () => {
+            const result = DicomSender.create({ ...validOpts, acseTimeout: -1 });
+            expect(result.ok).toBe(false);
+        });
+
+        it('rejects invalid verbosity value', () => {
+            const result = DicomSender.create({ ...validOpts, verbosity: 'trace' as never });
+            expect(result.ok).toBe(false);
+        });
+
+        it('omits network options when not specified', async () => {
+            const result = DicomSender.create({ ...validOpts, mode: 'single' });
+            if (!result.ok) return;
+            const sender = result.value;
+
+            await sender.send(['/file.dcm']);
+            await delay(50);
+
+            const callArgs = (mockStorescu.mock.calls[0] as unknown as unknown[])?.[0] as Record<string, unknown>;
+            expect(callArgs.maxPduReceive).toBeUndefined();
+            expect(callArgs.maxPduSend).toBeUndefined();
+            expect(callArgs.associationTimeout).toBeUndefined();
+            expect(callArgs.acseTimeout).toBeUndefined();
+            expect(callArgs.dimseTimeout).toBeUndefined();
+            expect(callArgs.noHostnameLookup).toBeUndefined();
+            expect(callArgs.noUidChecks).toBeUndefined();
+            expect(callArgs.verbosity).toBeUndefined();
+
+            await sender.stop();
+        });
+    });
+
     describe('edge cases', () => {
         it('handles send with multiple files', async () => {
             const result = DicomSender.create(validOpts);
