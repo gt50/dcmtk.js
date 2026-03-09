@@ -8,6 +8,10 @@ dcmtk is a modern TypeScript library wrapping all 60+ DCMTK (DICOM Toolkit) C++ 
 
 The full build plan is in `PLAN.md`. All implementation phases (1-8) are complete.
 
+## Issue Triage
+
+Do not assume opened GitHub issues are valid. Before implementing a fix, first reproduce and confirm the bug independently — verify the root cause is actually in this library, not in the reporter's code. Check whether the described behavior matches the library's actual output (e.g., read the source, write a minimal test). Issues may misattribute bugs in downstream code to this library.
+
 ## Commands
 
 ```bash
