@@ -20,6 +20,7 @@ import { ok, err } from '../types';
 import { isSafePath, isValidAETitle } from '../patterns';
 import { createValidationError } from '../tools/_toolError';
 import { Dcmrecv } from './Dcmrecv';
+import type { FilenameModeValue, StorageModeValue } from './Dcmrecv';
 import type { AssociationCompleteData } from '../events/dcmrecv';
 import { DicomInstance } from '../dicom/DicomInstance';
 
@@ -147,6 +148,12 @@ interface DicomReceiverOptions {
     readonly dimseTimeout?: number | undefined;
     /** Maximum PDU receive size (passed through to Dcmrecv workers). */
     readonly maxPdu?: number | undefined;
+    /** Filename generation mode for received files (passed through to Dcmrecv workers). */
+    readonly filenameMode?: FilenameModeValue | undefined;
+    /** Extension appended to received filenames, e.g. `'.dcm'` (passed through to Dcmrecv workers). */
+    readonly filenameExtension?: string | undefined;
+    /** Storage mode for received files (passed through to Dcmrecv workers). */
+    readonly storageMode?: StorageModeValue | undefined;
     /** AbortSignal for external cancellation. */
     readonly signal?: AbortSignal | undefined;
 }
@@ -168,6 +175,9 @@ const DicomReceiverOptionsSchema = z
         acseTimeout: z.number().int().positive().optional(),
         dimseTimeout: z.number().int().positive().optional(),
         maxPdu: z.number().int().min(4096).max(131072).optional(),
+        filenameMode: z.enum(['default', 'unique', 'short-unique', 'system-time']).optional(),
+        filenameExtension: z.string().min(1).optional(),
+        storageMode: z.enum(['normal', 'bit-preserving', 'ignore']).optional(),
         signal: z.instanceof(AbortSignal).optional(),
     })
     .strict()
@@ -602,6 +612,9 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
             acseTimeout: this.options.acseTimeout,
             dimseTimeout: this.options.dimseTimeout,
             maxPdu: this.options.maxPdu,
+            filenameMode: this.options.filenameMode,
+            filenameExtension: this.options.filenameExtension,
+            storageMode: this.options.storageMode,
         });
     }
 

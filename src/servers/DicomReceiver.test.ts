@@ -705,6 +705,102 @@ describe('DicomReceiver', () => {
             });
             expect(result.ok).toBe(false);
         });
+
+        it('passes filenameMode, filenameExtension, storageMode to Dcmrecv.create()', async () => {
+            const result = DicomReceiver.create({
+                port: 4242,
+                storageDir: '/data',
+                minPoolSize: 1,
+                maxPoolSize: 1,
+                filenameMode: 'unique',
+                filenameExtension: '.dcm',
+                storageMode: 'bit-preserving',
+            });
+            if (!result.ok) return;
+
+            await result.value.start();
+
+            // eslint-disable-next-line @typescript-eslint/unbound-method
+            const mockCreate = vi.mocked(Dcmrecv.create);
+            const lastCall = mockCreate.mock.calls[mockCreate.mock.calls.length - 1]?.[0];
+            expect(lastCall).toMatchObject({
+                filenameMode: 'unique',
+                filenameExtension: '.dcm',
+                storageMode: 'bit-preserving',
+            });
+
+            await result.value.stop();
+        });
+
+        it('accepts all filenameMode values', () => {
+            for (const mode of ['default', 'unique', 'short-unique', 'system-time'] as const) {
+                const result = DicomReceiver.create({
+                    port: 4242,
+                    storageDir: '/data',
+                    filenameMode: mode,
+                });
+                expect(result.ok).toBe(true);
+            }
+        });
+
+        it('accepts all storageMode values', () => {
+            for (const mode of ['normal', 'bit-preserving', 'ignore'] as const) {
+                const result = DicomReceiver.create({
+                    port: 4242,
+                    storageDir: '/data',
+                    storageMode: mode,
+                });
+                expect(result.ok).toBe(true);
+            }
+        });
+
+        it('rejects empty filenameExtension', () => {
+            const result = DicomReceiver.create({
+                port: 4242,
+                storageDir: '/data',
+                filenameExtension: '',
+            });
+            expect(result.ok).toBe(false);
+        });
+
+        it('rejects invalid filenameMode', () => {
+            const result = DicomReceiver.create({
+                port: 4242,
+                storageDir: '/data',
+                filenameMode: 'invalid' as never,
+            });
+            expect(result.ok).toBe(false);
+        });
+
+        it('rejects invalid storageMode', () => {
+            const result = DicomReceiver.create({
+                port: 4242,
+                storageDir: '/data',
+                storageMode: 'invalid' as never,
+            });
+            expect(result.ok).toBe(false);
+        });
+
+        it('omits filename and storage options when not specified', async () => {
+            const result = DicomReceiver.create({
+                port: 4242,
+                storageDir: '/data',
+                minPoolSize: 1,
+                maxPoolSize: 1,
+            });
+            if (!result.ok) return;
+
+            await result.value.start();
+
+            // eslint-disable-next-line @typescript-eslint/unbound-method
+            const mockCreate = vi.mocked(Dcmrecv.create);
+            const lastCall = mockCreate.mock.calls[mockCreate.mock.calls.length - 1]?.[0];
+            expect(lastCall?.filenameMode).toBeUndefined();
+            expect(lastCall?.filenameExtension).toBeUndefined();
+            expect(lastCall?.storageMode).toBeUndefined();
+
+            await result.value.stop();
+        });
     });
 
     // -----------------------------------------------------------------------
