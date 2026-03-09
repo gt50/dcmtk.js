@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.6.4] - 2026-03-09
+
+### Fixed
+
+- **dcmodify sequence path validation** — `TAG_OR_PATH_PATTERN` regex now accepts nested sequence paths without explicit array indices (e.g., `(0008,1111).(0008,0013)`); previously required `[N]` before each dot separator, rejecting valid dcmodify syntax (#12)
+
 ## [0.6.3] - 2026-03-06
 
 ### Fixed

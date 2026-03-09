@@ -49,8 +49,8 @@ interface DcmodifyResult {
     readonly filePath: string;
 }
 
-/** Matches a single tag or a dotted tag path: (XXXX,XXXX) or (XXXX,XXXX)[N].(XXXX,XXXX) */
-const TAG_OR_PATH_PATTERN = /^\([0-9A-Fa-f]{4},[0-9A-Fa-f]{4}\)(\[\d+\](\.\([0-9A-Fa-f]{4},[0-9A-Fa-f]{4}\)(\[\d+\])?)*)?$/;
+/** Matches a single tag or a dotted tag path: (XXXX,XXXX) or (XXXX,XXXX)[N].(XXXX,XXXX) — index is optional. */
+const TAG_OR_PATH_PATTERN = /^\([0-9A-Fa-f]{4},[0-9A-Fa-f]{4}\)(\[\d+\])?(\.\([0-9A-Fa-f]{4},[0-9A-Fa-f]{4}\)(\[\d+\])?)*$/;
 
 const TagModificationSchema = z.object({
     tag: z.string().regex(TAG_OR_PATH_PATTERN),
