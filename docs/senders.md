@@ -98,6 +98,14 @@ sender.flush();
 | `retryDelayMs`           | `number`                             | `1000`       | Base retry delay in ms (multiplied by attempt number)            |
 | `bucketFlushMs`          | `number`                             | `5000`       | Bucket flush timeout in ms (bucket mode only)                    |
 | `maxBucketSize`          | `number`                             | `50`         | Max files per bucket (bucket mode only)                          |
+| `maxPduReceive`          | `number`                             | —            | Maximum PDU receive size in bytes (4096-131072)                  |
+| `maxPduSend`             | `number`                             | —            | Maximum PDU send size in bytes (4096-131072)                     |
+| `associationTimeout`     | `number`                             | —            | Association/TCP timeout in seconds                               |
+| `acseTimeout`            | `number`                             | —            | ACSE timeout in seconds                                          |
+| `dimseTimeout`           | `number`                             | —            | DIMSE timeout in seconds                                         |
+| `noHostnameLookup`       | `boolean`                            | —            | Disable DNS hostname lookup (useful in containers)               |
+| `noUidChecks`            | `boolean`                            | —            | Disable UID validity checking                                    |
+| `verbosity`              | `'verbose' \| 'debug'`               | —            | Diagnostic output level (`-v` or `-d`)                           |
 | `signal`                 | `AbortSignal`                        | —            | AbortSignal for external cancellation                            |
 
 ## Per-Send Overrides
@@ -108,7 +116,22 @@ The `send()` method accepts optional overrides:
 await sender.send(['/path/file.dcm'], {
     timeoutMs: 60000, // override timeout for this send
     maxRetries: 5, // override retries for this send
+    calledAETitle: 'OTHER_PACS', // override called AE for this send
+    callingAETitle: 'MY_SCU', // override calling AE for this send
 });
+```
+
+## Send Results
+
+`SendResult` includes storescu output for diagnostics:
+
+```typescript
+const result = await sender.send(['/path/file.dcm']);
+if (result.ok) {
+    console.log('Sent:', result.value.fileCount, 'files');
+    console.log('stdout:', result.value.stdout);
+    console.log('stderr:', result.value.stderr);
+}
 ```
 
 ## Backpressure
