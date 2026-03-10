@@ -92,6 +92,8 @@ interface StorescuOptions extends ToolBaseOptions {
 interface StorescuResult {
     /** Whether the store completed successfully. */
     readonly success: boolean;
+    /** Raw stdout output for diagnostic info. */
+    readonly stdout: string;
     /** Raw stderr output for diagnostic info. */
     readonly stderr: string;
 }
@@ -244,7 +246,7 @@ async function storescu(options: StorescuOptions): Promise<Result<StorescuResult
         return err(createToolError('storescu', args, result.value.exitCode, result.value.stderr));
     }
 
-    return ok({ success: true, stderr: result.value.stderr });
+    return ok({ success: true, stdout: result.value.stdout, stderr: result.value.stderr });
 }
 
 export { storescu, ProposedTransferSyntax };

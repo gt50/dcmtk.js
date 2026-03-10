@@ -103,6 +103,8 @@ interface QueueEntry {
     readonly files: readonly string[];
     readonly timeoutMs: number;
     readonly maxRetries: number;
+    readonly calledAETitle: string | undefined;
+    readonly callingAETitle: string | undefined;
     readonly resolve: (result: Result<SendResult>) => void;
 }
 
@@ -112,6 +114,28 @@ interface BucketEntry {
     readonly resolve: (result: Result<SendResult>) => void;
     readonly timeoutMs: number;
     readonly maxRetries: number;
+    readonly calledAETitle: string | undefined;
+    readonly callingAETitle: string | undefined;
+}
+
+/** Output captured from the last storescu call in an attempt loop. */
+interface StorescuOutput {
+    readonly stdout: string;
+    readonly stderr: string;
+}
+
+/** Result of attemptSend: undefined on success (already handled), or error + output on failure. */
+interface AttemptFailure {
+    readonly error: Error;
+    readonly output: StorescuOutput;
+}
+
+/** Internal parameters extracted from SendOptions for queue/bucket dispatch. */
+interface SendParams {
+    readonly timeoutMs: number;
+    readonly maxRetries: number;
+    readonly calledAETitle: string | undefined;
+    readonly callingAETitle: string | undefined;
 }
 
 /** Resolved configuration with defaults applied. */
@@ -266,15 +290,24 @@ class DicomSender extends EventEmitter<DicomSenderEventMap> {
             return Promise.resolve(err(new Error('DicomSender: no files provided')));
         }
 
-        const timeoutMs = options?.timeoutMs ?? this.defaultTimeoutMs;
-        const maxRetries = options?.maxRetries ?? this.defaultMaxRetries;
+        const params: SendParams = {
+            timeoutMs: options?.timeoutMs ?? this.defaultTimeoutMs,
+            maxRetries: options?.maxRetries ?? this.defaultMaxRetries,
+            calledAETitle: options?.calledAETitle,
+            callingAETitle: options?.callingAETitle,
+        };
 
+        return this.dispatchSend(files, params);
+    }
+
+    /** Dispatches a send to the appropriate mode handler. */
+    private dispatchSend(files: readonly string[], params: SendParams): Promise<Result<SendResult>> {
         switch (this.mode) {
             case 'single':
             case 'multiple':
-                return this.enqueueSend(files, timeoutMs, maxRetries);
+                return this.enqueueSend(files, params);
             case 'bucket':
-                return this.enqueueBucket(files, timeoutMs, maxRetries);
+                return this.enqueueBucket(files, params);
             default:
                 assertUnreachable(this.mode);
         }
@@ -383,7 +416,7 @@ class DicomSender extends EventEmitter<DicomSenderEventMap> {
     // -----------------------------------------------------------------------
 
     /** Enqueues a send and dispatches immediately if capacity allows. */
-    private enqueueSend(files: readonly string[], timeoutMs: number, maxRetries: number): Promise<Result<SendResult>> {
+    private enqueueSend(files: readonly string[], params: SendParams): Promise<Result<SendResult>> {
         return new Promise(resolve => {
             const totalQueued = this.queue.length + this.currentBucket.length;
             if (totalQueued >= this.maxQueueLength) {
@@ -391,7 +424,14 @@ class DicomSender extends EventEmitter<DicomSenderEventMap> {
                 return;
             }
 
-            const entry: QueueEntry = { files, timeoutMs, maxRetries, resolve };
+            const entry: QueueEntry = {
+                files,
+                timeoutMs: params.timeoutMs,
+                maxRetries: params.maxRetries,
+                calledAETitle: params.calledAETitle,
+                callingAETitle: params.callingAETitle,
+                resolve,
+            };
 
             if (this.activeAssociations < this.effectiveMaxAssociations) {
                 void this.executeEntry(entry);
@@ -416,7 +456,7 @@ class DicomSender extends EventEmitter<DicomSenderEventMap> {
     // -----------------------------------------------------------------------
 
     /** Adds files to the current bucket and triggers flush if full. */
-    private enqueueBucket(files: readonly string[], timeoutMs: number, maxRetries: number): Promise<Result<SendResult>> {
+    private enqueueBucket(files: readonly string[], params: SendParams): Promise<Result<SendResult>> {
         return new Promise(resolve => {
             const totalQueued = this.queue.length + this.currentBucket.length;
             if (totalQueued >= this.maxQueueLength) {
@@ -424,7 +464,8 @@ class DicomSender extends EventEmitter<DicomSenderEventMap> {
                 return;
             }
 
-            this.currentBucket.push({ files, resolve, timeoutMs, maxRetries });
+            const { timeoutMs, maxRetries, calledAETitle, callingAETitle } = params;
+            this.currentBucket.push({ files, resolve, timeoutMs, maxRetries, calledAETitle, callingAETitle });
 
             const totalFiles = this.countBucketFiles();
             if (totalFiles >= this.maxBucketSize) {
@@ -473,6 +514,8 @@ class DicomSender extends EventEmitter<DicomSenderEventMap> {
             files: allFiles,
             timeoutMs,
             maxRetries,
+            calledAETitle: entries[0]?.calledAETitle,
+            callingAETitle: entries[0]?.callingAETitle,
             resolve: (result: Result<SendResult>) => {
                 for (let i = 0; i < entries.length; i++) {
                     entries[i]!.resolve(result);
@@ -513,20 +556,27 @@ class DicomSender extends EventEmitter<DicomSenderEventMap> {
         this.activeAssociations++;
         const startMs = Date.now();
         const maxAttempts = entry.maxRetries + 1;
-        const lastError = await this.attemptSend(entry, maxAttempts, startMs);
+        const failure = await this.attemptSend(entry, maxAttempts, startMs);
 
-        if (lastError === undefined) return; // success already handled
+        if (failure === undefined) return; // success already handled
 
         this.activeAssociations--;
         this.recordFailure();
-        this.emit('SEND_FAILED', { files: entry.files, error: lastError, attempts: maxAttempts });
-        entry.resolve(err(lastError));
+        this.emit('SEND_FAILED', {
+            files: entry.files,
+            error: failure.error,
+            attempts: maxAttempts,
+            stdout: failure.output.stdout,
+            stderr: failure.output.stderr,
+        });
+        entry.resolve(err(failure.error));
         this.drainQueue();
     }
 
-    /** Attempts storescu up to maxAttempts times. Returns undefined on success, or the last error. */
-    private async attemptSend(entry: QueueEntry, maxAttempts: number, startMs: number): Promise<Error | undefined> {
+    /** Attempts storescu up to maxAttempts times. Returns undefined on success, or failure info. */
+    private async attemptSend(entry: QueueEntry, maxAttempts: number, startMs: number): Promise<AttemptFailure | undefined> {
         let lastError: Error | undefined;
+        const lastOutput: StorescuOutput = { stdout: '', stderr: '' };
 
         for (let attempt = 0; attempt < maxAttempts; attempt++) {
             if (this.isStopped) {
@@ -538,7 +588,7 @@ class DicomSender extends EventEmitter<DicomSenderEventMap> {
             const result = await this.callStorescu(entry);
 
             if (result.ok) {
-                this.handleSendSuccess(entry, startMs);
+                this.handleSendSuccess(entry, startMs, result.value);
                 return undefined;
             }
 
@@ -548,7 +598,7 @@ class DicomSender extends EventEmitter<DicomSenderEventMap> {
             }
         }
 
-        return lastError ?? new Error('DicomSender: send failed');
+        return { error: lastError ?? new Error('DicomSender: send failed'), output: lastOutput };
     }
 
     /** Calls storescu with the configured options. */
@@ -557,8 +607,8 @@ class DicomSender extends EventEmitter<DicomSenderEventMap> {
             host: this.options.host,
             port: this.options.port,
             files: [...entry.files],
-            calledAETitle: this.options.calledAETitle,
-            callingAETitle: this.options.callingAETitle,
+            calledAETitle: entry.calledAETitle ?? this.options.calledAETitle,
+            callingAETitle: entry.callingAETitle ?? this.options.callingAETitle,
             proposedTransferSyntax: this.options.proposedTransferSyntax,
             maxPduReceive: this.options.maxPduReceive,
             maxPduSend: this.options.maxPduSend,
@@ -574,12 +624,13 @@ class DicomSender extends EventEmitter<DicomSenderEventMap> {
     }
 
     /** Handles a successful send: updates state, emits event, resolves promise. */
-    private handleSendSuccess(entry: QueueEntry, startMs: number): void {
+    private handleSendSuccess(entry: QueueEntry, startMs: number, output: { stdout: string; stderr: string }): void {
         this.activeAssociations--;
         const durationMs = Date.now() - startMs;
         this.recordSuccess();
-        this.emit('SEND_COMPLETE', { files: entry.files, fileCount: entry.files.length, durationMs });
-        entry.resolve(ok({ files: entry.files, fileCount: entry.files.length, durationMs }));
+        const data = { files: entry.files, fileCount: entry.files.length, durationMs, stdout: output.stdout, stderr: output.stderr };
+        this.emit('SEND_COMPLETE', data);
+        entry.resolve(ok(data));
         this.drainQueue();
     }
 

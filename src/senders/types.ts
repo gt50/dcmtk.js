@@ -99,6 +99,10 @@ interface SendOptions {
     readonly timeoutMs?: number | undefined;
     /** Override max retries for this send. */
     readonly maxRetries?: number | undefined;
+    /** Override called AE Title for this send. */
+    readonly calledAETitle?: string | undefined;
+    /** Override calling AE Title for this send. */
+    readonly callingAETitle?: string | undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -113,6 +117,10 @@ interface SendResult {
     readonly fileCount: number;
     /** Total send duration in milliseconds. */
     readonly durationMs: number;
+    /** Raw stdout from storescu (available when verbosity is set). */
+    readonly stdout: string;
+    /** Raw stderr from storescu. */
+    readonly stderr: string;
 }
 
 /** Snapshot of the sender's current state. */
@@ -145,6 +153,10 @@ interface SenderSendCompleteData {
     readonly fileCount: number;
     /** Total send duration in milliseconds. */
     readonly durationMs: number;
+    /** Raw stdout from storescu. */
+    readonly stdout: string;
+    /** Raw stderr from storescu. */
+    readonly stderr: string;
 }
 
 /** Data emitted with SEND_FAILED events. */
@@ -155,6 +167,10 @@ interface SenderSendFailedData {
     readonly error: Error;
     /** Number of attempts made. */
     readonly attempts: number;
+    /** Raw stdout from the last storescu attempt. */
+    readonly stdout: string;
+    /** Raw stderr from the last storescu attempt. */
+    readonly stderr: string;
 }
 
 /** Data emitted with HEALTH_CHANGED events. */

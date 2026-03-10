@@ -6,9 +6,9 @@ import type { SenderSendCompleteData, SenderSendFailedData, SenderHealthChangedD
 // Mock storescu
 // ---------------------------------------------------------------------------
 
-type StorescuResult = { ok: true; value: { success: boolean; stderr: string } } | { ok: false; error: Error };
+type StorescuResult = { ok: true; value: { success: boolean; stdout: string; stderr: string } } | { ok: false; error: Error };
 
-const mockStorescu = vi.fn<() => Promise<StorescuResult>>(() => Promise.resolve({ ok: true, value: { success: true, stderr: '' } }));
+const mockStorescu = vi.fn<() => Promise<StorescuResult>>(() => Promise.resolve({ ok: true, value: { success: true, stdout: '', stderr: '' } }));
 
 vi.mock('../tools/storescu', () => ({
     storescu: (...args: unknown[]) => mockStorescu(...(args as [])),
@@ -56,7 +56,7 @@ describe('DicomSender', () => {
     beforeEach(() => {
         vi.useFakeTimers({ shouldAdvanceTime: true });
         mockStorescu.mockReset();
-        mockStorescu.mockImplementation(() => Promise.resolve({ ok: true, value: { success: true, stderr: '' } }));
+        mockStorescu.mockImplementation(() => Promise.resolve({ ok: true, value: { success: true, stdout: '', stderr: '' } }));
     });
 
     afterEach(() => {
@@ -328,7 +328,7 @@ describe('DicomSender', () => {
             expect(sender.status.activeAssociations).toBe(1);
             expect(sender.status.queueLength).toBe(1);
 
-            d1.resolve({ ok: true, value: { success: true, stderr: '' } });
+            d1.resolve({ ok: true, value: { success: true, stdout: '', stderr: '' } });
             await p1;
 
             // Now second one starts
@@ -336,7 +336,7 @@ describe('DicomSender', () => {
             expect(sender.status.activeAssociations).toBe(1);
             expect(sender.status.queueLength).toBe(0);
 
-            d2.resolve({ ok: true, value: { success: true, stderr: '' } });
+            d2.resolve({ ok: true, value: { success: true, stdout: '', stderr: '' } });
             await p2;
 
             expect(sender.status.activeAssociations).toBe(0);
@@ -364,7 +364,7 @@ describe('DicomSender', () => {
             expect(sender.status.activeAssociations).toBe(2);
             expect(sender.status.queueLength).toBe(1);
 
-            deferreds[0]!.resolve({ ok: true, value: { success: true, stderr: '' } });
+            deferreds[0]!.resolve({ ok: true, value: { success: true, stdout: '', stderr: '' } });
             await p1;
             await delay(10);
 
@@ -372,8 +372,8 @@ describe('DicomSender', () => {
             expect(sender.status.activeAssociations).toBe(2);
             expect(sender.status.queueLength).toBe(0);
 
-            deferreds[1]!.resolve({ ok: true, value: { success: true, stderr: '' } });
-            deferreds[2]!.resolve({ ok: true, value: { success: true, stderr: '' } });
+            deferreds[1]!.resolve({ ok: true, value: { success: true, stdout: '', stderr: '' } });
+            deferreds[2]!.resolve({ ok: true, value: { success: true, stdout: '', stderr: '' } });
             await p2;
             await p3;
 
@@ -404,7 +404,7 @@ describe('DicomSender', () => {
             expect(rejectResult.ok).toBe(false);
             if (!rejectResult.ok) expect(rejectResult.error.message).toMatch(/queue full/);
 
-            d1.resolve({ ok: true, value: { success: true, stderr: '' } });
+            d1.resolve({ ok: true, value: { success: true, stdout: '', stderr: '' } });
             await delay(50);
             await sender.stop();
         });
@@ -559,7 +559,7 @@ describe('DicomSender', () => {
             expect(rejectResult.ok).toBe(false);
             if (!rejectResult.ok) expect(rejectResult.error.message).toMatch(/queue full/);
 
-            d1.resolve({ ok: true, value: { success: true, stderr: '' } });
+            d1.resolve({ ok: true, value: { success: true, stdout: '', stderr: '' } });
             await delay(50);
             await sender.stop();
         });
@@ -574,7 +574,7 @@ describe('DicomSender', () => {
             mockStorescu
                 .mockResolvedValueOnce({ ok: false, error: new Error('fail 1') })
                 .mockResolvedValueOnce({ ok: false, error: new Error('fail 2') })
-                .mockResolvedValueOnce({ ok: true, value: { success: true, stderr: '' } });
+                .mockResolvedValueOnce({ ok: true, value: { success: true, stdout: '', stderr: '' } });
 
             const result = DicomSender.create({ ...validOpts, maxRetries: 2, retryDelayMs: 10 });
             if (!result.ok) return;
@@ -713,7 +713,7 @@ describe('DicomSender', () => {
             expect(sender.status.health).toBe('down');
 
             // Now succeed
-            mockStorescu.mockResolvedValue({ ok: true, value: { success: true, stderr: '' } });
+            mockStorescu.mockResolvedValue({ ok: true, value: { success: true, stdout: '', stderr: '' } });
 
             await sender.send(['/ok1.dcm']);
             await sender.send(['/ok2.dcm']);
@@ -741,7 +741,7 @@ describe('DicomSender', () => {
             expect(sender.status.effectiveMaxAssociations).toBe(1);
 
             // Now succeed
-            mockStorescu.mockResolvedValue({ ok: true, value: { success: true, stderr: '' } });
+            mockStorescu.mockResolvedValue({ ok: true, value: { success: true, stdout: '', stderr: '' } });
 
             // 3 successes → double effectiveMax (1→2) → reaches configured max → HEALTHY
             await sender.send(['/ok1.dcm']);
@@ -757,7 +757,7 @@ describe('DicomSender', () => {
             mockStorescu
                 .mockResolvedValueOnce({ ok: false, error: new Error('fail') })
                 .mockResolvedValueOnce({ ok: false, error: new Error('fail') })
-                .mockResolvedValueOnce({ ok: true, value: { success: true, stderr: '' } })
+                .mockResolvedValueOnce({ ok: true, value: { success: true, stdout: '', stderr: '' } })
                 .mockResolvedValueOnce({ ok: false, error: new Error('fail') });
 
             const result = DicomSender.create({ ...validOpts, maxRetries: 0, maxAssociations: 4 });
@@ -927,7 +927,7 @@ describe('DicomSender', () => {
 
             // stop() rejects queue, but must also resolve d1 so active send completes
             const stopPromise = sender.stop();
-            d1.resolve({ ok: true, value: { success: true, stderr: '' } });
+            d1.resolve({ ok: true, value: { success: true, stdout: '', stderr: '' } });
             await stopPromise;
 
             const r2 = await p2;
@@ -1107,6 +1107,119 @@ describe('DicomSender', () => {
         });
     });
 
+    describe('stdout/stderr in results', () => {
+        it('includes stdout and stderr in SendResult on success', async () => {
+            mockStorescu.mockResolvedValueOnce({
+                ok: true,
+                value: { success: true, stdout: 'verbose output', stderr: 'warning info' },
+            });
+
+            const result = DicomSender.create({ ...validOpts, mode: 'single' });
+            if (!result.ok) return;
+            const sender = result.value;
+
+            const sendResult = await sender.send(['/file.dcm']);
+            expect(sendResult.ok).toBe(true);
+            if (sendResult.ok) {
+                expect(sendResult.value.stdout).toBe('verbose output');
+                expect(sendResult.value.stderr).toBe('warning info');
+            }
+
+            await sender.stop();
+        });
+
+        it('includes stdout and stderr in SEND_COMPLETE event', async () => {
+            mockStorescu.mockResolvedValueOnce({
+                ok: true,
+                value: { success: true, stdout: 'event stdout', stderr: 'event stderr' },
+            });
+
+            const result = DicomSender.create({ ...validOpts, mode: 'single' });
+            if (!result.ok) return;
+            const sender = result.value;
+
+            let captured: SenderSendCompleteData | undefined;
+            sender.on('SEND_COMPLETE', data => {
+                captured = data;
+            });
+
+            await sender.send(['/file.dcm']);
+            await delay(50);
+
+            expect(captured).toBeDefined();
+            expect(captured!.stdout).toBe('event stdout');
+            expect(captured!.stderr).toBe('event stderr');
+
+            await sender.stop();
+        });
+
+        it('includes stdout and stderr in SEND_FAILED event', async () => {
+            mockStorescu.mockResolvedValue({ ok: false, error: new Error('connection refused') });
+
+            const result = DicomSender.create({ ...validOpts, mode: 'single', maxRetries: 0 });
+            if (!result.ok) return;
+            const sender = result.value;
+
+            let captured: SenderSendFailedData | undefined;
+            sender.on('SEND_FAILED', data => {
+                captured = data;
+            });
+
+            await sender.send(['/file.dcm']);
+            await delay(50);
+
+            expect(captured).toBeDefined();
+            expect(captured!.stdout).toBe('');
+            expect(captured!.stderr).toBe('');
+
+            await sender.stop();
+        });
+    });
+
+    describe('per-send AET overrides', () => {
+        it('uses per-send calledAETitle override', async () => {
+            const result = DicomSender.create({ ...validOpts, mode: 'single', calledAETitle: 'DEFAULT_AE' });
+            if (!result.ok) return;
+            const sender = result.value;
+
+            await sender.send(['/file.dcm'], { calledAETitle: 'OVERRIDE_AE' });
+            await delay(50);
+
+            const callArgs = (mockStorescu.mock.calls[0] as unknown as unknown[])?.[0] as Record<string, unknown>;
+            expect(callArgs.calledAETitle).toBe('OVERRIDE_AE');
+
+            await sender.stop();
+        });
+
+        it('uses per-send callingAETitle override', async () => {
+            const result = DicomSender.create({ ...validOpts, mode: 'single', callingAETitle: 'DEFAULT_SCU' });
+            if (!result.ok) return;
+            const sender = result.value;
+
+            await sender.send(['/file.dcm'], { callingAETitle: 'OVERRIDE_SCU' });
+            await delay(50);
+
+            const callArgs = (mockStorescu.mock.calls[0] as unknown as unknown[])?.[0] as Record<string, unknown>;
+            expect(callArgs.callingAETitle).toBe('OVERRIDE_SCU');
+
+            await sender.stop();
+        });
+
+        it('falls back to instance AET when per-send is not specified', async () => {
+            const result = DicomSender.create({ ...validOpts, mode: 'single', calledAETitle: 'INSTANCE_AE' });
+            if (!result.ok) return;
+            const sender = result.value;
+
+            await sender.send(['/file.dcm']);
+            await delay(50);
+
+            const callArgs = (mockStorescu.mock.calls[0] as unknown as unknown[])?.[0] as Record<string, unknown>;
+            expect(callArgs.calledAETitle).toBe('INSTANCE_AE');
+
+            await sender.stop();
+        });
+    });
+
     describe('edge cases', () => {
         it('handles send with multiple files', async () => {
             const result = DicomSender.create(validOpts);
@@ -1133,13 +1246,13 @@ describe('DicomSender', () => {
             const p1 = sender.send(['/f1.dcm']);
             const p2 = sender.send(['/f2.dcm']);
 
-            d1.resolve({ ok: true, value: { success: true, stderr: '' } });
+            d1.resolve({ ok: true, value: { success: true, stdout: '', stderr: '' } });
             await p1;
             await delay(10);
 
             expect(sender.status.activeAssociations).toBe(1);
 
-            d2.resolve({ ok: true, value: { success: true, stderr: '' } });
+            d2.resolve({ ok: true, value: { success: true, stdout: '', stderr: '' } });
             await p2;
 
             expect(sender.status.activeAssociations).toBe(0);
@@ -1162,8 +1275,8 @@ describe('DicomSender', () => {
 
             expect(sender.status.activeAssociations).toBe(2);
 
-            d1.resolve({ ok: true, value: { success: true, stderr: '' } });
-            d2.resolve({ ok: true, value: { success: true, stderr: '' } });
+            d1.resolve({ ok: true, value: { success: true, stdout: '', stderr: '' } });
+            d2.resolve({ ok: true, value: { success: true, stdout: '', stderr: '' } });
             await delay(10);
             await sender.stop();
         });
