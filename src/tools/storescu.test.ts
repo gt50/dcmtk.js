@@ -325,6 +325,12 @@ describe('storescu', () => {
             expect(args).toContain('-nh');
         });
 
+        it('passes -R for required', async () => {
+            await storescu({ host: 'localhost', port: 104, files: ['/test.dcm'], required: true });
+            const args = mockedExecCommand.mock.calls[0]?.[1] as string[];
+            expect(args).toContain('-R');
+        });
+
         it('omits network flags when not specified', async () => {
             await storescu({ host: 'localhost', port: 104, files: ['/test.dcm'] });
             const args = mockedExecCommand.mock.calls[0]?.[1] as string[];
@@ -336,6 +342,7 @@ describe('storescu', () => {
             expect(args).not.toContain('-ta');
             expect(args).not.toContain('-td');
             expect(args).not.toContain('-nh');
+            expect(args).not.toContain('-R');
         });
     });
 
@@ -355,6 +362,35 @@ describe('storescu', () => {
             });
             const result = await storescu({ host: 'localhost', port: 104, files: ['/test.dcm'] });
             expect(result.ok).toBe(false);
+        });
+
+        it('returns error when stderr contains DIMSE failure despite exit code 0', async () => {
+            mockedExecCommand.mockResolvedValue({
+                ok: true,
+                value: {
+                    stdout: '',
+                    stderr: 'E: Store Failed, file: /tmp/test.dcm\nE: 0006:020e DIMSE Failed to send message',
+                    exitCode: 0,
+                },
+            });
+            const result = await storescu({ host: 'localhost', port: 104, files: ['/test.dcm'] });
+            expect(result.ok).toBe(false);
+            if (!result.ok) {
+                expect(result.error.message).toContain('DIMSE Failed');
+            }
+        });
+
+        it('returns success when stderr has warnings but no DIMSE errors', async () => {
+            mockedExecCommand.mockResolvedValue({
+                ok: true,
+                value: {
+                    stdout: '',
+                    stderr: 'W: some warning about something',
+                    exitCode: 0,
+                },
+            });
+            const result = await storescu({ host: 'localhost', port: 104, files: ['/test.dcm'] });
+            expect(result.ok).toBe(true);
         });
 
         it('returns error when binary not found', async () => {

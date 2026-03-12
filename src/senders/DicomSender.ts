@@ -89,6 +89,7 @@ const DicomSenderOptionsSchema = z
         dimseTimeout: z.number().int().positive().optional(),
         noHostnameLookup: z.boolean().optional(),
         verbosity: z.enum(['verbose', 'debug']).optional(),
+        required: z.boolean().optional(),
         signal: z.instanceof(AbortSignal).optional(),
     })
     .strict();
@@ -104,6 +105,7 @@ interface QueueEntry {
     readonly maxRetries: number;
     readonly calledAETitle: string | undefined;
     readonly callingAETitle: string | undefined;
+    readonly required: boolean | undefined;
     readonly resolve: (result: Result<SendResult>) => void;
 }
 
@@ -115,6 +117,7 @@ interface BucketEntry {
     readonly maxRetries: number;
     readonly calledAETitle: string | undefined;
     readonly callingAETitle: string | undefined;
+    readonly required: boolean | undefined;
 }
 
 /** Output captured from the last storescu call in an attempt loop. */
@@ -135,6 +138,7 @@ interface SendParams {
     readonly maxRetries: number;
     readonly calledAETitle: string | undefined;
     readonly callingAETitle: string | undefined;
+    readonly required: boolean | undefined;
 }
 
 /** Resolved configuration with defaults applied. */
@@ -294,6 +298,7 @@ class DicomSender extends EventEmitter<DicomSenderEventMap> {
             maxRetries: options?.maxRetries ?? this.defaultMaxRetries,
             calledAETitle: options?.calledAETitle,
             callingAETitle: options?.callingAETitle,
+            required: options?.required,
         };
 
         return this.dispatchSend(files, params);
@@ -429,6 +434,7 @@ class DicomSender extends EventEmitter<DicomSenderEventMap> {
                 maxRetries: params.maxRetries,
                 calledAETitle: params.calledAETitle,
                 callingAETitle: params.callingAETitle,
+                required: params.required,
                 resolve,
             };
 
@@ -463,8 +469,8 @@ class DicomSender extends EventEmitter<DicomSenderEventMap> {
                 return;
             }
 
-            const { timeoutMs, maxRetries, calledAETitle, callingAETitle } = params;
-            this.currentBucket.push({ files, resolve, timeoutMs, maxRetries, calledAETitle, callingAETitle });
+            const { timeoutMs, maxRetries, calledAETitle, callingAETitle, required } = params;
+            this.currentBucket.push({ files, resolve, timeoutMs, maxRetries, calledAETitle, callingAETitle, required });
 
             const totalFiles = this.countBucketFiles();
             if (totalFiles >= this.maxBucketSize) {
@@ -485,6 +491,33 @@ class DicomSender extends EventEmitter<DicomSenderEventMap> {
         return count;
     }
 
+    /** Merges bucket entries into a single QueueEntry. */
+    private mergeBucketEntries(entries: readonly BucketEntry[]): QueueEntry {
+        const allFiles: string[] = [];
+        let timeoutMs = 0;
+        let maxRetries = 0;
+        for (let i = 0; i < entries.length; i++) {
+            for (let j = 0; j < entries[i]!.files.length; j++) {
+                allFiles.push(entries[i]!.files[j]!);
+            }
+            if (entries[i]!.timeoutMs > timeoutMs) timeoutMs = entries[i]!.timeoutMs;
+            if (entries[i]!.maxRetries > maxRetries) maxRetries = entries[i]!.maxRetries;
+        }
+        return {
+            files: allFiles,
+            timeoutMs,
+            maxRetries,
+            calledAETitle: entries[0]?.calledAETitle,
+            callingAETitle: entries[0]?.callingAETitle,
+            required: entries[0]?.required,
+            resolve: (result: Result<SendResult>): void => {
+                for (let i = 0; i < entries.length; i++) {
+                    entries[i]!.resolve(result);
+                }
+            },
+        };
+    }
+
     /** Flushes the current bucket: combines all files, dispatches as one send. */
     private flushBucketInternal(reason: 'timer' | 'maxSize'): void {
         if (this.currentBucket.length === 0) return;
@@ -492,35 +525,8 @@ class DicomSender extends EventEmitter<DicomSenderEventMap> {
         const entries = [...this.currentBucket];
         this.currentBucket = [];
 
-        const allFiles: string[] = [];
-        for (let i = 0; i < entries.length; i++) {
-            for (let j = 0; j < entries[i]!.files.length; j++) {
-                allFiles.push(entries[i]!.files[j]!);
-            }
-        }
-
-        // Use the max timeoutMs and maxRetries from all entries
-        let timeoutMs = 0;
-        let maxRetries = 0;
-        for (let i = 0; i < entries.length; i++) {
-            if (entries[i]!.timeoutMs > timeoutMs) timeoutMs = entries[i]!.timeoutMs;
-            if (entries[i]!.maxRetries > maxRetries) maxRetries = entries[i]!.maxRetries;
-        }
-
-        this.emit('BUCKET_FLUSHED', { fileCount: allFiles.length, reason });
-
-        const bucketEntry: QueueEntry = {
-            files: allFiles,
-            timeoutMs,
-            maxRetries,
-            calledAETitle: entries[0]?.calledAETitle,
-            callingAETitle: entries[0]?.callingAETitle,
-            resolve: (result: Result<SendResult>) => {
-                for (let i = 0; i < entries.length; i++) {
-                    entries[i]!.resolve(result);
-                }
-            },
-        };
+        const bucketEntry = this.mergeBucketEntries(entries);
+        this.emit('BUCKET_FLUSHED', { fileCount: bucketEntry.files.length, reason });
 
         if (this.activeAssociations < this.effectiveMaxAssociations) {
             void this.executeEntry(bucketEntry);
@@ -616,6 +622,7 @@ class DicomSender extends EventEmitter<DicomSenderEventMap> {
             dimseTimeout: this.options.dimseTimeout,
             noHostnameLookup: this.options.noHostnameLookup,
             verbosity: this.options.verbosity,
+            required: entry.required ?? this.options.required,
             timeoutMs: entry.timeoutMs,
             signal: this.options.signal,
         });

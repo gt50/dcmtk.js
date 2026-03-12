@@ -105,6 +105,7 @@ sender.flush();
 | `dimseTimeout`           | `number`                             | —            | DIMSE timeout in seconds                                         |
 | `noHostnameLookup`       | `boolean`                            | —            | Disable DNS hostname lookup (useful in containers)               |
 | `verbosity`              | `'verbose' \| 'debug'`               | —            | Diagnostic output level (`-v` or `-d`)                           |
+| `required`               | `boolean`                            | —            | Propose only each file's native transfer syntax (`-R`)           |
 | `signal`                 | `AbortSignal`                        | —            | AbortSignal for external cancellation                            |
 
 ## Per-Send Overrides

@@ -84,6 +84,8 @@ interface StorescuOptions extends ToolBaseOptions {
     readonly dimseTimeout?: number | undefined;
     /** Disable hostname lookup for incoming associations. Maps to `-nh`. */
     readonly noHostnameLookup?: boolean | undefined;
+    /** Propose only the file's native transfer syntax. Maps to `-R`/`--required`. */
+    readonly required?: boolean | undefined;
 }
 
 /** Result of a successful C-STORE send. */
@@ -114,6 +116,7 @@ const StorescuOptionsSchema = z
         acseTimeout: z.number().int().positive().optional(),
         dimseTimeout: z.number().int().positive().optional(),
         noHostnameLookup: z.boolean().optional(),
+        required: z.boolean().optional(),
         proposedTransferSyntax: z
             .enum([
                 'uncompressed',
@@ -134,6 +137,9 @@ const StorescuOptionsSchema = z
 
 /** Maps verbosity level to command-line flag. */
 const VERBOSITY_FLAGS: Record<'verbose' | 'debug', string> = { verbose: '-v', debug: '-d' };
+
+/** Detects DIMSE-level send failures in storescu stderr (exit code may still be 0). */
+const DIMSE_ERROR_PATTERN = /^E:.*(?:DIMSE Failed|Store Failed)/m;
 
 /** Appends common network flags to the argument list. */
 function pushNetworkArgs(args: string[], options: StorescuOptions): void {
@@ -187,6 +193,10 @@ function buildArgs(options: StorescuOptions): string[] {
         args.push(PROPOSED_TS_FLAG_MAP[options.proposedTransferSyntax]);
     }
 
+    if (options.required === true) {
+        args.push('-R');
+    }
+
     args.push(options.host, String(options.port));
     args.push(...options.files);
 
@@ -237,6 +247,10 @@ async function storescu(options: StorescuOptions): Promise<Result<StorescuResult
 
     if (result.value.exitCode !== 0) {
         return err(createToolError('storescu', args, result.value.exitCode, result.value.stderr));
+    }
+
+    if (DIMSE_ERROR_PATTERN.test(result.value.stderr)) {
+        return err(createToolError('storescu', args, 0, result.value.stderr));
     }
 
     return ok({ success: true, stdout: result.value.stdout, stderr: result.value.stderr });

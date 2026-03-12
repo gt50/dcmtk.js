@@ -1026,6 +1026,7 @@ describe('DicomSender', () => {
                 dimseTimeout: 60,
                 noHostnameLookup: true,
                 verbosity: 'verbose',
+                required: true,
             });
             expect(result.ok).toBe(true);
         });
@@ -1041,6 +1042,7 @@ describe('DicomSender', () => {
                 dimseTimeout: 60,
                 noHostnameLookup: true,
                 verbosity: 'debug',
+                required: true,
             });
             if (!result.ok) return;
             const sender = result.value;
@@ -1057,6 +1059,7 @@ describe('DicomSender', () => {
                 dimseTimeout: 60,
                 noHostnameLookup: true,
                 verbosity: 'debug',
+                required: true,
             });
 
             await sender.stop();
@@ -1098,6 +1101,7 @@ describe('DicomSender', () => {
             expect(callArgs.dimseTimeout).toBeUndefined();
             expect(callArgs.noHostnameLookup).toBeUndefined();
             expect(callArgs.verbosity).toBeUndefined();
+            expect(callArgs.required).toBeUndefined();
 
             await sender.stop();
         });
@@ -1211,6 +1215,36 @@ describe('DicomSender', () => {
 
             const callArgs = (mockStorescu.mock.calls[0] as unknown as unknown[])?.[0] as Record<string, unknown>;
             expect(callArgs.calledAETitle).toBe('INSTANCE_AE');
+
+            await sender.stop();
+        });
+    });
+
+    describe('per-send required override', () => {
+        it('uses per-send required override', async () => {
+            const result = DicomSender.create({ ...validOpts, mode: 'single' });
+            if (!result.ok) return;
+            const sender = result.value;
+
+            await sender.send(['/file.dcm'], { required: true });
+            await delay(50);
+
+            const callArgs = (mockStorescu.mock.calls[0] as unknown as unknown[])?.[0] as Record<string, unknown>;
+            expect(callArgs.required).toBe(true);
+
+            await sender.stop();
+        });
+
+        it('falls back to instance required when per-send is not specified', async () => {
+            const result = DicomSender.create({ ...validOpts, mode: 'single', required: true });
+            if (!result.ok) return;
+            const sender = result.value;
+
+            await sender.send(['/file.dcm']);
+            await delay(50);
+
+            const callArgs = (mockStorescu.mock.calls[0] as unknown as unknown[])?.[0] as Record<string, unknown>;
+            expect(callArgs.required).toBe(true);
 
             await sender.stop();
         });

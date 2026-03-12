@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.7.2] - 2026-03-12
+
+### Fixed
+
+- **storescu DIMSE failure detection** — `storescu` can exit with code 0 even when DIMSE-level send operations fail (e.g., transfer syntax conversion errors); the wrapper now detects `E: Store Failed` and `E: DIMSE Failed` patterns in stderr and returns `err()` instead of `ok()` (#17)
+
+### Added
+
+- **`required` option on storescu, DicomSender, and SendOptions** — maps to storescu's `-R`/`--required` flag, which proposes only each file's native transfer syntax; prevents transfer syntax negotiation mismatches that cause DIMSE failures with compressed files (#18)
+
 ## [0.7.1] - 2026-03-12
 
 ### Fixed

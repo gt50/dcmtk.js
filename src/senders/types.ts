@@ -87,6 +87,8 @@ interface DicomSenderOptions {
     readonly noHostnameLookup?: boolean | undefined;
     /** Verbosity level for diagnostic output. `'verbose'` maps to `-v`, `'debug'` maps to `-d`. */
     readonly verbosity?: 'verbose' | 'debug' | undefined;
+    /** Propose only each file's native transfer syntax (passed through to storescu `-R`). */
+    readonly required?: boolean | undefined;
     /** AbortSignal for external cancellation. */
     readonly signal?: AbortSignal | undefined;
 }
@@ -101,6 +103,8 @@ interface SendOptions {
     readonly calledAETitle?: string | undefined;
     /** Override calling AE Title for this send. */
     readonly callingAETitle?: string | undefined;
+    /** Override required flag for this send. */
+    readonly required?: boolean | undefined;
 }
 
 // ---------------------------------------------------------------------------
