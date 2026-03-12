@@ -85,8 +85,6 @@ interface DicomSenderOptions {
     readonly dimseTimeout?: number | undefined;
     /** Disable DNS hostname lookup (passed through to storescu `-nh`). Useful in containerized environments. */
     readonly noHostnameLookup?: boolean | undefined;
-    /** Disable UID validity checking (passed through to storescu `--no-uid-checks`). */
-    readonly noUidChecks?: boolean | undefined;
     /** Verbosity level for diagnostic output. `'verbose'` maps to `-v`, `'debug'` maps to `-d`. */
     readonly verbosity?: 'verbose' | 'debug' | undefined;
     /** AbortSignal for external cancellation. */

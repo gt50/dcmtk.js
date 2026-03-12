@@ -104,7 +104,6 @@ sender.flush();
 | `acseTimeout`            | `number`                             | —            | ACSE timeout in seconds                                          |
 | `dimseTimeout`           | `number`                             | —            | DIMSE timeout in seconds                                         |
 | `noHostnameLookup`       | `boolean`                            | —            | Disable DNS hostname lookup (useful in containers)               |
-| `noUidChecks`            | `boolean`                            | —            | Disable UID validity checking                                    |
 | `verbosity`              | `'verbose' \| 'debug'`               | —            | Diagnostic output level (`-v` or `-d`)                           |
 | `signal`                 | `AbortSignal`                        | —            | AbortSignal for external cancellation                            |
 

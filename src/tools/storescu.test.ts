@@ -325,12 +325,6 @@ describe('storescu', () => {
             expect(args).toContain('-nh');
         });
 
-        it('passes --no-uid-checks for noUidChecks', async () => {
-            await storescu({ host: 'localhost', port: 104, files: ['/test.dcm'], noUidChecks: true });
-            const args = mockedExecCommand.mock.calls[0]?.[1] as string[];
-            expect(args).toContain('--no-uid-checks');
-        });
-
         it('omits network flags when not specified', async () => {
             await storescu({ host: 'localhost', port: 104, files: ['/test.dcm'] });
             const args = mockedExecCommand.mock.calls[0]?.[1] as string[];
@@ -342,7 +336,6 @@ describe('storescu', () => {
             expect(args).not.toContain('-ta');
             expect(args).not.toContain('-td');
             expect(args).not.toContain('-nh');
-            expect(args).not.toContain('--no-uid-checks');
         });
     });
 

@@ -88,7 +88,6 @@ const DicomSenderOptionsSchema = z
         acseTimeout: z.number().int().positive().optional(),
         dimseTimeout: z.number().int().positive().optional(),
         noHostnameLookup: z.boolean().optional(),
-        noUidChecks: z.boolean().optional(),
         verbosity: z.enum(['verbose', 'debug']).optional(),
         signal: z.instanceof(AbortSignal).optional(),
     })
@@ -616,7 +615,6 @@ class DicomSender extends EventEmitter<DicomSenderEventMap> {
             acseTimeout: this.options.acseTimeout,
             dimseTimeout: this.options.dimseTimeout,
             noHostnameLookup: this.options.noHostnameLookup,
-            noUidChecks: this.options.noUidChecks,
             verbosity: this.options.verbosity,
             timeoutMs: entry.timeoutMs,
             signal: this.options.signal,

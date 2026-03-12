@@ -39,6 +39,14 @@ pnpm run dry-run             # npm pack --dry-run to verify package contents
 - Arrow parens: avoid for single params
 - Prettier formats all code; ESLint enforces mission-critical rules
 
+## CLI Flag Verification
+
+Every CLI flag passed to a DCMTK binary **must** be verified against the binary's `--help` output before adding it to a tool wrapper. Unit tests mock the binary and will not catch invalid flags. When adding or exposing options that map to CLI flags:
+
+1. Run `<binary> --help` and confirm the flag exists in the output
+2. Add an integration test in `test/integration/` that exercises the flag against the real binary
+3. All servers, senders, and high-level wrappers (DicomReceiver, DicomSender, PacsClient) must have integration tests that confirm **every** passthrough option is accepted by the underlying binary — a send/receive/query must succeed (or fail gracefully), not crash with "Unknown option"
+
 ## Governing Standards
 
 All code **shall** comply with `docs/TypeScript Coding Standard for Mission-Critical Systems.md`. Key rules:

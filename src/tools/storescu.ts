@@ -84,8 +84,6 @@ interface StorescuOptions extends ToolBaseOptions {
     readonly dimseTimeout?: number | undefined;
     /** Disable hostname lookup for incoming associations. Maps to `-nh`. */
     readonly noHostnameLookup?: boolean | undefined;
-    /** Disable UID validity checking. Maps to `--no-uid-checks`. */
-    readonly noUidChecks?: boolean | undefined;
 }
 
 /** Result of a successful C-STORE send. */
@@ -116,7 +114,6 @@ const StorescuOptionsSchema = z
         acseTimeout: z.number().int().positive().optional(),
         dimseTimeout: z.number().int().positive().optional(),
         noHostnameLookup: z.boolean().optional(),
-        noUidChecks: z.boolean().optional(),
         proposedTransferSyntax: z
             .enum([
                 'uncompressed',
@@ -169,10 +166,6 @@ function pushNetworkArgs(args: string[], options: StorescuOptions): void {
 function buildArgs(options: StorescuOptions): string[] {
     const args: string[] = [];
     pushNetworkArgs(args, options);
-
-    if (options.noUidChecks === true) {
-        args.push('--no-uid-checks');
-    }
 
     if (options.callingAETitle !== undefined) {
         args.push('-aet', options.callingAETitle);

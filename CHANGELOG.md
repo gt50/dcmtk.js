@@ -5,12 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.7.1] - 2026-03-12
+
+### Fixed
+
+- **Remove `noUidChecks` from storescu and DicomSender** — `--no-uid-checks` is a `dcmsend`-only flag; `storescu` does not support it and rejects it with "Unknown option", causing 100% send failure when `noUidChecks: true` was set (#16)
+
+### Added
+
+- **CLI Flag Verification rule** in CLAUDE.md — all CLI flags must be verified against `<binary> --help` before adding to a wrapper; integration tests must confirm every passthrough option
+
 ## [0.7.0] - 2026-03-10
 
 ### Added
 
 - **DicomReceiver passthrough options** — `filenameExtension`, `filenameMode`, and `storageMode` are now exposed on `DicomReceiverOptions` and forwarded to Dcmrecv workers; allows controlling received file naming (e.g., `.dcm` extension) and storage behavior (#14)
-- **DicomSender passthrough options** — `maxPduReceive`, `maxPduSend`, `associationTimeout`, `acseTimeout`, `dimseTimeout`, `noHostnameLookup`, `noUidChecks`, and `verbosity` are now exposed on `DicomSenderOptions` and forwarded to storescu (#15)
+- **DicomSender passthrough options** — `maxPduReceive`, `maxPduSend`, `associationTimeout`, `acseTimeout`, `dimseTimeout`, `noHostnameLookup`, and `verbosity` are now exposed on `DicomSenderOptions` and forwarded to storescu (#15)
 - **stdout/stderr in SendResult** — `SendResult`, `SenderSendCompleteData`, and `SenderSendFailedData` now include `stdout` and `stderr` from the storescu call (#15)
 - **Per-send AE Title overrides** — `SendOptions` now accepts `calledAETitle` and `callingAETitle` to override the instance defaults on a per-send basis (#15)
 - `StorescuResult` now includes `stdout` field alongside `stderr`

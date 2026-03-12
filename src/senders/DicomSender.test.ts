@@ -1025,7 +1025,6 @@ describe('DicomSender', () => {
                 acseTimeout: 15,
                 dimseTimeout: 60,
                 noHostnameLookup: true,
-                noUidChecks: true,
                 verbosity: 'verbose',
             });
             expect(result.ok).toBe(true);
@@ -1041,7 +1040,6 @@ describe('DicomSender', () => {
                 acseTimeout: 15,
                 dimseTimeout: 60,
                 noHostnameLookup: true,
-                noUidChecks: true,
                 verbosity: 'debug',
             });
             if (!result.ok) return;
@@ -1058,7 +1056,6 @@ describe('DicomSender', () => {
                 acseTimeout: 15,
                 dimseTimeout: 60,
                 noHostnameLookup: true,
-                noUidChecks: true,
                 verbosity: 'debug',
             });
 
@@ -1100,7 +1097,6 @@ describe('DicomSender', () => {
             expect(callArgs.acseTimeout).toBeUndefined();
             expect(callArgs.dimseTimeout).toBeUndefined();
             expect(callArgs.noHostnameLookup).toBeUndefined();
-            expect(callArgs.noUidChecks).toBeUndefined();
             expect(callArgs.verbosity).toBeUndefined();
 
             await sender.stop();
