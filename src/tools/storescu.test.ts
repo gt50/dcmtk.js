@@ -226,7 +226,31 @@ describe('storescu', () => {
                 files: ['/test.dcm'],
             });
             const args = mockedExecCommand.mock.calls[0]?.[1] as string[];
-            const tsFlags = ['-x=', '-xe', '-xb', '-xi', '-xs', '-xy', '-xx', '-xv', '-xw', '-xt', '-xu'];
+            const tsFlags = [
+                '-x=',
+                '-xe',
+                '-xb',
+                '-xi',
+                '-xs',
+                '-xy',
+                '-xx',
+                '-xv',
+                '-xw',
+                '-xt',
+                '-xu',
+                '-xm',
+                '-xh',
+                '-xn',
+                '-xl',
+                '-x2',
+                '-x3',
+                '-xo',
+                '-x4',
+                '-x5',
+                '-xr',
+                '-xd',
+                '+C',
+            ];
             for (const flag of tsFlags) {
                 expect(args).not.toContain(flag);
             }
@@ -409,9 +433,113 @@ describe('storescu', () => {
         });
     });
 
+    describe('array proposedTransferSyntax', () => {
+        it('passes multiple transfer syntax flags for array input', async () => {
+            await storescu({
+                host: 'localhost',
+                port: 104,
+                files: ['/test.dcm'],
+                proposedTransferSyntax: [ProposedTransferSyntax.JPEG_LOSSLESS, ProposedTransferSyntax.J2K_LOSSLESS],
+            });
+            const args = mockedExecCommand.mock.calls[0]?.[1] as string[];
+            expect(args).toContain('-xs');
+            expect(args).toContain('-xv');
+        });
+
+        it('passes +C for combineProposedTransferSyntaxes', async () => {
+            await storescu({
+                host: 'localhost',
+                port: 104,
+                files: ['/test.dcm'],
+                proposedTransferSyntax: [ProposedTransferSyntax.JPEG_LOSSLESS, ProposedTransferSyntax.J2K_LOSSLESS],
+                combineProposedTransferSyntaxes: true,
+            });
+            const args = mockedExecCommand.mock.calls[0]?.[1] as string[];
+            expect(args).toContain('+C');
+        });
+
+        it('omits +C when combineProposedTransferSyntaxes is not set', async () => {
+            await storescu({
+                host: 'localhost',
+                port: 104,
+                files: ['/test.dcm'],
+                proposedTransferSyntax: ProposedTransferSyntax.JPEG_LOSSLESS,
+            });
+            const args = mockedExecCommand.mock.calls[0]?.[1] as string[];
+            expect(args).not.toContain('+C');
+        });
+
+        it('rejects empty array', async () => {
+            const result = await storescu({
+                host: 'localhost',
+                port: 104,
+                files: ['/test.dcm'],
+                proposedTransferSyntax: [] as never,
+            });
+            expect(result.ok).toBe(false);
+        });
+    });
+
+    describe('additional transfer syntax values', () => {
+        it('passes -xm for MPEG2', async () => {
+            await storescu({
+                host: 'localhost',
+                port: 104,
+                files: ['/test.dcm'],
+                proposedTransferSyntax: ProposedTransferSyntax.MPEG2,
+            });
+            const args = mockedExecCommand.mock.calls[0]?.[1] as string[];
+            expect(args).toContain('-xm');
+        });
+
+        it('passes -xr for RLE', async () => {
+            await storescu({
+                host: 'localhost',
+                port: 104,
+                files: ['/test.dcm'],
+                proposedTransferSyntax: ProposedTransferSyntax.RLE,
+            });
+            const args = mockedExecCommand.mock.calls[0]?.[1] as string[];
+            expect(args).toContain('-xr');
+        });
+
+        it('passes -xd for DEFLATED', async () => {
+            await storescu({
+                host: 'localhost',
+                port: 104,
+                files: ['/test.dcm'],
+                proposedTransferSyntax: ProposedTransferSyntax.DEFLATED,
+            });
+            const args = mockedExecCommand.mock.calls[0]?.[1] as string[];
+            expect(args).toContain('-xd');
+        });
+
+        it('passes -x4 for HEVC', async () => {
+            await storescu({
+                host: 'localhost',
+                port: 104,
+                files: ['/test.dcm'],
+                proposedTransferSyntax: ProposedTransferSyntax.HEVC,
+            });
+            const args = mockedExecCommand.mock.calls[0]?.[1] as string[];
+            expect(args).toContain('-x4');
+        });
+
+        it('passes -x5 for HEVC10', async () => {
+            await storescu({
+                host: 'localhost',
+                port: 104,
+                files: ['/test.dcm'],
+                proposedTransferSyntax: ProposedTransferSyntax.HEVC10,
+            });
+            const args = mockedExecCommand.mock.calls[0]?.[1] as string[];
+            expect(args).toContain('-x5');
+        });
+    });
+
     describe('ProposedTransferSyntax constants', () => {
-        it('has all 11 values', () => {
-            expect(Object.keys(ProposedTransferSyntax)).toHaveLength(11);
+        it('has all 22 values', () => {
+            expect(Object.keys(ProposedTransferSyntax)).toHaveLength(22);
         });
 
         it('values are unique strings', () => {

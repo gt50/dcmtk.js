@@ -15,7 +15,8 @@ import { ok, err, assertUnreachable } from '../types';
 import { DEFAULT_TIMEOUT_MS } from '../constants';
 import { isValidAETitle } from '../patterns';
 import { createValidationError } from '../tools/_toolError';
-import { storescu } from '../tools/storescu';
+import { storescu, PROPOSED_TS_VALUES } from '../tools/storescu';
+import type { ProposedTransferSyntaxValue } from '../tools/storescu';
 import { SenderHealth } from './types';
 import type {
     DicomSenderOptions,
@@ -61,21 +62,8 @@ const DicomSenderOptionsSchema = z
         callingAETitle: z.string().min(1).max(16).refine(isValidAETitle, { message: 'AE Title contains invalid characters' }).optional(),
         mode: z.enum(['single', 'multiple', 'bucket']).optional(),
         maxAssociations: z.number().int().min(1).max(MAX_ASSOCIATIONS_LIMIT).optional(),
-        proposedTransferSyntax: z
-            .enum([
-                'uncompressed',
-                'littleEndian',
-                'bigEndian',
-                'implicitVR',
-                'jpegLossless',
-                'jpeg8Bit',
-                'jpeg12Bit',
-                'j2kLossless',
-                'j2kLossy',
-                'jlsLossless',
-                'jlsLossy',
-            ])
-            .optional(),
+        proposedTransferSyntax: z.union([z.enum(PROPOSED_TS_VALUES), z.array(z.enum(PROPOSED_TS_VALUES)).min(1)]).optional(),
+        combineProposedTransferSyntaxes: z.boolean().optional(),
         maxQueueLength: z.number().int().min(1).optional(),
         timeoutMs: z.number().int().positive().optional(),
         maxRetries: z.number().int().min(0).optional(),
@@ -106,6 +94,8 @@ interface QueueEntry {
     readonly calledAETitle: string | undefined;
     readonly callingAETitle: string | undefined;
     readonly required: boolean | undefined;
+    readonly proposedTransferSyntax: ProposedTransferSyntaxValue | readonly ProposedTransferSyntaxValue[] | undefined;
+    readonly combineProposedTransferSyntaxes: boolean | undefined;
     readonly resolve: (result: Result<SendResult>) => void;
 }
 
@@ -118,6 +108,8 @@ interface BucketEntry {
     readonly calledAETitle: string | undefined;
     readonly callingAETitle: string | undefined;
     readonly required: boolean | undefined;
+    readonly proposedTransferSyntax: ProposedTransferSyntaxValue | readonly ProposedTransferSyntaxValue[] | undefined;
+    readonly combineProposedTransferSyntaxes: boolean | undefined;
 }
 
 /** Output captured from the last storescu call in an attempt loop. */
@@ -139,6 +131,8 @@ interface SendParams {
     readonly calledAETitle: string | undefined;
     readonly callingAETitle: string | undefined;
     readonly required: boolean | undefined;
+    readonly proposedTransferSyntax: ProposedTransferSyntaxValue | readonly ProposedTransferSyntaxValue[] | undefined;
+    readonly combineProposedTransferSyntaxes: boolean | undefined;
 }
 
 /** Resolved configuration with defaults applied. */
@@ -293,15 +287,20 @@ class DicomSender extends EventEmitter<DicomSenderEventMap> {
             return Promise.resolve(err(new Error('DicomSender: no files provided')));
         }
 
-        const params: SendParams = {
+        return this.dispatchSend(files, this.buildSendParams(options));
+    }
+
+    /** Builds SendParams from per-send options, applying instance defaults. */
+    private buildSendParams(options?: SendOptions): SendParams {
+        return {
             timeoutMs: options?.timeoutMs ?? this.defaultTimeoutMs,
             maxRetries: options?.maxRetries ?? this.defaultMaxRetries,
             calledAETitle: options?.calledAETitle,
             callingAETitle: options?.callingAETitle,
             required: options?.required,
+            proposedTransferSyntax: options?.proposedTransferSyntax,
+            combineProposedTransferSyntaxes: options?.combineProposedTransferSyntaxes,
         };
-
-        return this.dispatchSend(files, params);
     }
 
     /** Dispatches a send to the appropriate mode handler. */
@@ -435,6 +434,8 @@ class DicomSender extends EventEmitter<DicomSenderEventMap> {
                 calledAETitle: params.calledAETitle,
                 callingAETitle: params.callingAETitle,
                 required: params.required,
+                proposedTransferSyntax: params.proposedTransferSyntax,
+                combineProposedTransferSyntaxes: params.combineProposedTransferSyntaxes,
                 resolve,
             };
 
@@ -469,8 +470,18 @@ class DicomSender extends EventEmitter<DicomSenderEventMap> {
                 return;
             }
 
-            const { timeoutMs, maxRetries, calledAETitle, callingAETitle, required } = params;
-            this.currentBucket.push({ files, resolve, timeoutMs, maxRetries, calledAETitle, callingAETitle, required });
+            const { timeoutMs, maxRetries, calledAETitle, callingAETitle, required, proposedTransferSyntax, combineProposedTransferSyntaxes } = params;
+            this.currentBucket.push({
+                files,
+                resolve,
+                timeoutMs,
+                maxRetries,
+                calledAETitle,
+                callingAETitle,
+                required,
+                proposedTransferSyntax,
+                combineProposedTransferSyntaxes,
+            });
 
             const totalFiles = this.countBucketFiles();
             if (totalFiles >= this.maxBucketSize) {
@@ -510,6 +521,8 @@ class DicomSender extends EventEmitter<DicomSenderEventMap> {
             calledAETitle: entries[0]?.calledAETitle,
             callingAETitle: entries[0]?.callingAETitle,
             required: entries[0]?.required,
+            proposedTransferSyntax: entries[0]?.proposedTransferSyntax,
+            combineProposedTransferSyntaxes: entries[0]?.combineProposedTransferSyntaxes,
             resolve: (result: Result<SendResult>): void => {
                 for (let i = 0; i < entries.length; i++) {
                     entries[i]!.resolve(result);
@@ -614,7 +627,8 @@ class DicomSender extends EventEmitter<DicomSenderEventMap> {
             files: [...entry.files],
             calledAETitle: entry.calledAETitle ?? this.options.calledAETitle,
             callingAETitle: entry.callingAETitle ?? this.options.callingAETitle,
-            proposedTransferSyntax: this.options.proposedTransferSyntax,
+            proposedTransferSyntax: entry.proposedTransferSyntax ?? this.options.proposedTransferSyntax,
+            combineProposedTransferSyntaxes: entry.combineProposedTransferSyntaxes ?? this.options.combineProposedTransferSyntaxes,
             maxPduReceive: this.options.maxPduReceive,
             maxPduSend: this.options.maxPduSend,
             associationTimeout: this.options.associationTimeout,

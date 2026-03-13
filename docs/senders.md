@@ -83,30 +83,31 @@ sender.flush();
 
 ## Configuration Reference
 
-| Option                   | Type                                 | Default      | Description                                                      |
-| ------------------------ | ------------------------------------ | ------------ | ---------------------------------------------------------------- |
-| `host`                   | `string`                             | (required)   | Remote host or IP address                                        |
-| `port`                   | `number`                             | (required)   | Remote port (1-65535)                                            |
-| `calledAETitle`          | `string`                             | —            | Remote AE Title (max 16 chars)                                   |
-| `callingAETitle`         | `string`                             | —            | Local AE Title (max 16 chars)                                    |
-| `mode`                   | `'single' \| 'multiple' \| 'bucket'` | `'multiple'` | Sending mode                                                     |
-| `maxAssociations`        | `number`                             | `4`          | Max concurrent storescu calls (1-64, forced to 1 in single mode) |
-| `proposedTransferSyntax` | `ProposedTransferSyntaxValue`        | —            | Transfer syntax proposal for associations                        |
-| `maxQueueLength`         | `number`                             | `1000`       | Max queued send requests before rejecting                        |
-| `timeoutMs`              | `number`                             | `30000`      | Per-storescu timeout in ms                                       |
-| `maxRetries`             | `number`                             | `3`          | Max retry attempts per send (0 = no retry)                       |
-| `retryDelayMs`           | `number`                             | `1000`       | Base retry delay in ms (multiplied by attempt number)            |
-| `bucketFlushMs`          | `number`                             | `5000`       | Bucket flush timeout in ms (bucket mode only)                    |
-| `maxBucketSize`          | `number`                             | `50`         | Max files per bucket (bucket mode only)                          |
-| `maxPduReceive`          | `number`                             | —            | Maximum PDU receive size in bytes (4096-131072)                  |
-| `maxPduSend`             | `number`                             | —            | Maximum PDU send size in bytes (4096-131072)                     |
-| `associationTimeout`     | `number`                             | —            | Association/TCP timeout in seconds                               |
-| `acseTimeout`            | `number`                             | —            | ACSE timeout in seconds                                          |
-| `dimseTimeout`           | `number`                             | —            | DIMSE timeout in seconds                                         |
-| `noHostnameLookup`       | `boolean`                            | —            | Disable DNS hostname lookup (useful in containers)               |
-| `verbosity`              | `'verbose' \| 'debug'`               | —            | Diagnostic output level (`-v` or `-d`)                           |
-| `required`               | `boolean`                            | —            | Propose only each file's native transfer syntax (`-R`)           |
-| `signal`                 | `AbortSignal`                        | —            | AbortSignal for external cancellation                            |
+| Option                            | Type                                                           | Default      | Description                                                                |
+| --------------------------------- | -------------------------------------------------------------- | ------------ | -------------------------------------------------------------------------- |
+| `host`                            | `string`                                                       | (required)   | Remote host or IP address                                                  |
+| `port`                            | `number`                                                       | (required)   | Remote port (1-65535)                                                      |
+| `calledAETitle`                   | `string`                                                       | —            | Remote AE Title (max 16 chars)                                             |
+| `callingAETitle`                  | `string`                                                       | —            | Local AE Title (max 16 chars)                                              |
+| `mode`                            | `'single' \| 'multiple' \| 'bucket'`                           | `'multiple'` | Sending mode                                                               |
+| `maxAssociations`                 | `number`                                                       | `4`          | Max concurrent storescu calls (1-64, forced to 1 in single mode)           |
+| `proposedTransferSyntax`          | `ProposedTransferSyntaxValue \| ProposedTransferSyntaxValue[]` | —            | Transfer syntax proposal(s) for associations                               |
+| `combineProposedTransferSyntaxes` | `boolean`                                                      | —            | Combine proposed transfer syntaxes into fewer presentation contexts (`+C`) |
+| `maxQueueLength`                  | `number`                                                       | `1000`       | Max queued send requests before rejecting                                  |
+| `timeoutMs`                       | `number`                                                       | `30000`      | Per-storescu timeout in ms                                                 |
+| `maxRetries`                      | `number`                                                       | `3`          | Max retry attempts per send (0 = no retry)                                 |
+| `retryDelayMs`                    | `number`                                                       | `1000`       | Base retry delay in ms (multiplied by attempt number)                      |
+| `bucketFlushMs`                   | `number`                                                       | `5000`       | Bucket flush timeout in ms (bucket mode only)                              |
+| `maxBucketSize`                   | `number`                                                       | `50`         | Max files per bucket (bucket mode only)                                    |
+| `maxPduReceive`                   | `number`                                                       | —            | Maximum PDU receive size in bytes (4096-131072)                            |
+| `maxPduSend`                      | `number`                                                       | —            | Maximum PDU send size in bytes (4096-131072)                               |
+| `associationTimeout`              | `number`                                                       | —            | Association/TCP timeout in seconds                                         |
+| `acseTimeout`                     | `number`                                                       | —            | ACSE timeout in seconds                                                    |
+| `dimseTimeout`                    | `number`                                                       | —            | DIMSE timeout in seconds                                                   |
+| `noHostnameLookup`                | `boolean`                                                      | —            | Disable DNS hostname lookup (useful in containers)                         |
+| `verbosity`                       | `'verbose' \| 'debug'`                                         | —            | Diagnostic output level (`-v` or `-d`)                                     |
+| `required`                        | `boolean`                                                      | —            | Propose only each file's native transfer syntax (`-R`)                     |
+| `signal`                          | `AbortSignal`                                                  | —            | AbortSignal for external cancellation                                      |
 
 ## Per-Send Overrides
 
@@ -118,6 +119,8 @@ await sender.send(['/path/file.dcm'], {
     maxRetries: 5, // override retries for this send
     calledAETitle: 'OTHER_PACS', // override called AE for this send
     callingAETitle: 'MY_SCU', // override calling AE for this send
+    proposedTransferSyntax: ['jpegLossless', 'j2kLossless'], // override transfer syntaxes
+    combineProposedTransferSyntaxes: true, // combine into fewer presentation contexts
 });
 ```
 

@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.7.3] - 2026-03-13
+
+### Added
+
+- **Multiple proposed transfer syntaxes** — `proposedTransferSyntax` now accepts an array of values, enabling storescu to propose multiple transfer syntaxes (e.g., JPEG Lossless + JPEG 2000 + uncompressed) so the SCP can accept whichever matches the file (#19)
+- **11 new transfer syntax constants** — `ProposedTransferSyntax` now includes MPEG2, MPEG2_HIGH, MPEG4, MPEG4_BD, MPEG4_2_2D, MPEG4_2_3D, MPEG4_2_ST, HEVC, HEVC10, RLE, and DEFLATED (22 total)
+- **`combineProposedTransferSyntaxes` option** — maps to storescu's `+C`/`--combine` flag to combine proposed transfer syntaxes into fewer presentation contexts
+- **Per-send `proposedTransferSyntax` and `combineProposedTransferSyntaxes` overrides** on `SendOptions` for DicomSender
+
 ## [0.7.2] - 2026-03-12
 
 ### Fixed

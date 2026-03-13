@@ -24,7 +24,42 @@ vi.mock('../tools/storescu', () => ({
         J2K_LOSSY: 'j2kLossy',
         JLS_LOSSLESS: 'jlsLossless',
         JLS_LOSSY: 'jlsLossy',
+        MPEG2: 'mpeg2',
+        MPEG2_HIGH: 'mpeg2High',
+        MPEG4: 'mpeg4',
+        MPEG4_BD: 'mpeg4Bd',
+        MPEG4_2_2D: 'mpeg4_2_2d',
+        MPEG4_2_3D: 'mpeg4_2_3d',
+        MPEG4_2_ST: 'mpeg4_2_st',
+        HEVC: 'hevc',
+        HEVC10: 'hevc10',
+        RLE: 'rle',
+        DEFLATED: 'deflated',
     },
+    PROPOSED_TS_VALUES: [
+        'uncompressed',
+        'littleEndian',
+        'bigEndian',
+        'implicitVR',
+        'jpegLossless',
+        'jpeg8Bit',
+        'jpeg12Bit',
+        'j2kLossless',
+        'j2kLossy',
+        'jlsLossless',
+        'jlsLossy',
+        'mpeg2',
+        'mpeg2High',
+        'mpeg4',
+        'mpeg4Bd',
+        'mpeg4_2_2d',
+        'mpeg4_2_3d',
+        'mpeg4_2_st',
+        'hevc',
+        'hevc10',
+        'rle',
+        'deflated',
+    ],
 }));
 
 // ---------------------------------------------------------------------------
@@ -1027,6 +1062,8 @@ describe('DicomSender', () => {
                 noHostnameLookup: true,
                 verbosity: 'verbose',
                 required: true,
+                proposedTransferSyntax: ['jpegLossless', 'j2kLossless'],
+                combineProposedTransferSyntaxes: true,
             });
             expect(result.ok).toBe(true);
         });
@@ -1043,6 +1080,8 @@ describe('DicomSender', () => {
                 noHostnameLookup: true,
                 verbosity: 'debug',
                 required: true,
+                proposedTransferSyntax: ['jpegLossless', 'j2kLossless'],
+                combineProposedTransferSyntaxes: true,
             });
             if (!result.ok) return;
             const sender = result.value;
@@ -1060,6 +1099,8 @@ describe('DicomSender', () => {
                 noHostnameLookup: true,
                 verbosity: 'debug',
                 required: true,
+                proposedTransferSyntax: ['jpegLossless', 'j2kLossless'],
+                combineProposedTransferSyntaxes: true,
             });
 
             await sender.stop();
@@ -1245,6 +1286,53 @@ describe('DicomSender', () => {
 
             const callArgs = (mockStorescu.mock.calls[0] as unknown as unknown[])?.[0] as Record<string, unknown>;
             expect(callArgs.required).toBe(true);
+
+            await sender.stop();
+        });
+    });
+
+    describe('per-send proposedTransferSyntax override', () => {
+        it('uses per-send proposedTransferSyntax override', async () => {
+            const result = DicomSender.create({ ...validOpts, mode: 'single' });
+            if (!result.ok) return;
+            const sender = result.value;
+
+            await sender.send(['/file.dcm'], { proposedTransferSyntax: ['jpegLossless', 'j2kLossless'] });
+            await delay(50);
+
+            const callArgs = (mockStorescu.mock.calls[0] as unknown as unknown[])?.[0] as Record<string, unknown>;
+            expect(callArgs.proposedTransferSyntax).toEqual(['jpegLossless', 'j2kLossless']);
+
+            await sender.stop();
+        });
+
+        it('falls back to instance proposedTransferSyntax when per-send is not specified', async () => {
+            const result = DicomSender.create({ ...validOpts, mode: 'single', proposedTransferSyntax: 'jpegLossless' });
+            if (!result.ok) return;
+            const sender = result.value;
+
+            await sender.send(['/file.dcm']);
+            await delay(50);
+
+            const callArgs = (mockStorescu.mock.calls[0] as unknown as unknown[])?.[0] as Record<string, unknown>;
+            expect(callArgs.proposedTransferSyntax).toBe('jpegLossless');
+
+            await sender.stop();
+        });
+
+        it('uses per-send combineProposedTransferSyntaxes override', async () => {
+            const result = DicomSender.create({ ...validOpts, mode: 'single' });
+            if (!result.ok) return;
+            const sender = result.value;
+
+            await sender.send(['/file.dcm'], {
+                proposedTransferSyntax: ['jpegLossless', 'j2kLossless'],
+                combineProposedTransferSyntaxes: true,
+            });
+            await delay(50);
+
+            const callArgs = (mockStorescu.mock.calls[0] as unknown as unknown[])?.[0] as Record<string, unknown>;
+            expect(callArgs.combineProposedTransferSyntaxes).toBe(true);
 
             await sender.stop();
         });

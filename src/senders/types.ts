@@ -59,8 +59,10 @@ interface DicomSenderOptions {
     readonly mode?: SenderModeValue | undefined;
     /** Maximum concurrent storescu associations. Defaults to 4 (forced to 1 in single mode). */
     readonly maxAssociations?: number | undefined;
-    /** Proposed transfer syntax for associations. */
-    readonly proposedTransferSyntax?: ProposedTransferSyntaxValue | undefined;
+    /** Proposed transfer syntax(es) for associations. Pass an array to propose multiple. */
+    readonly proposedTransferSyntax?: ProposedTransferSyntaxValue | readonly ProposedTransferSyntaxValue[] | undefined;
+    /** Combine proposed transfer syntaxes into fewer presentation contexts. Maps to `+C`/`--combine`. */
+    readonly combineProposedTransferSyntaxes?: boolean | undefined;
     /** Maximum queued send requests before rejecting. Defaults to 1000. */
     readonly maxQueueLength?: number | undefined;
     /** Per-storescu timeout in milliseconds. Defaults to 30000. */
@@ -105,6 +107,10 @@ interface SendOptions {
     readonly callingAETitle?: string | undefined;
     /** Override required flag for this send. */
     readonly required?: boolean | undefined;
+    /** Override proposed transfer syntax(es) for this send. */
+    readonly proposedTransferSyntax?: ProposedTransferSyntaxValue | readonly ProposedTransferSyntaxValue[] | undefined;
+    /** Override combine proposed transfer syntaxes for this send. */
+    readonly combineProposedTransferSyntaxes?: boolean | undefined;
 }
 
 // ---------------------------------------------------------------------------

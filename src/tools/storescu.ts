@@ -34,6 +34,17 @@ const ProposedTransferSyntax = {
     J2K_LOSSY: 'j2kLossy',
     JLS_LOSSLESS: 'jlsLossless',
     JLS_LOSSY: 'jlsLossy',
+    MPEG2: 'mpeg2',
+    MPEG2_HIGH: 'mpeg2High',
+    MPEG4: 'mpeg4',
+    MPEG4_BD: 'mpeg4Bd',
+    MPEG4_2_2D: 'mpeg4_2_2d',
+    MPEG4_2_3D: 'mpeg4_2_3d',
+    MPEG4_2_ST: 'mpeg4_2_st',
+    HEVC: 'hevc',
+    HEVC10: 'hevc10',
+    RLE: 'rle',
+    DEFLATED: 'deflated',
 } as const;
 
 type ProposedTransferSyntaxValue = (typeof ProposedTransferSyntax)[keyof typeof ProposedTransferSyntax];
@@ -50,7 +61,21 @@ const PROPOSED_TS_FLAG_MAP: Record<ProposedTransferSyntaxValue, string> = {
     [ProposedTransferSyntax.J2K_LOSSY]: '-xw',
     [ProposedTransferSyntax.JLS_LOSSLESS]: '-xt',
     [ProposedTransferSyntax.JLS_LOSSY]: '-xu',
+    [ProposedTransferSyntax.MPEG2]: '-xm',
+    [ProposedTransferSyntax.MPEG2_HIGH]: '-xh',
+    [ProposedTransferSyntax.MPEG4]: '-xn',
+    [ProposedTransferSyntax.MPEG4_BD]: '-xl',
+    [ProposedTransferSyntax.MPEG4_2_2D]: '-x2',
+    [ProposedTransferSyntax.MPEG4_2_3D]: '-x3',
+    [ProposedTransferSyntax.MPEG4_2_ST]: '-xo',
+    [ProposedTransferSyntax.HEVC]: '-x4',
+    [ProposedTransferSyntax.HEVC10]: '-x5',
+    [ProposedTransferSyntax.RLE]: '-xr',
+    [ProposedTransferSyntax.DEFLATED]: '-xd',
 };
+
+/** All ProposedTransferSyntax values for Zod enum validation. */
+const PROPOSED_TS_VALUES = Object.values(ProposedTransferSyntax) as [ProposedTransferSyntaxValue, ...ProposedTransferSyntaxValue[]];
 
 /** Options for {@link storescu}. */
 interface StorescuOptions extends ToolBaseOptions {
@@ -68,8 +93,10 @@ interface StorescuOptions extends ToolBaseOptions {
     readonly scanDirectories?: boolean | undefined;
     /** Recurse into subdirectories (requires scanDirectories). */
     readonly recurse?: boolean | undefined;
-    /** Proposed transfer syntax for the association. */
-    readonly proposedTransferSyntax?: ProposedTransferSyntaxValue | undefined;
+    /** Proposed transfer syntax(es) for the association. Pass an array to propose multiple. */
+    readonly proposedTransferSyntax?: ProposedTransferSyntaxValue | readonly ProposedTransferSyntaxValue[] | undefined;
+    /** Combine proposed transfer syntaxes into fewer presentation contexts. Maps to `+C`/`--combine`. */
+    readonly combineProposedTransferSyntaxes?: boolean | undefined;
     /** Verbosity level for diagnostic output. `'verbose'` maps to `-v`, `'debug'` maps to `-d`. */
     readonly verbosity?: 'verbose' | 'debug' | undefined;
     /** Maximum receive PDU size in bytes (4096–131072). Maps to `--max-pdu`. */
@@ -117,23 +144,21 @@ const StorescuOptionsSchema = z
         dimseTimeout: z.number().int().positive().optional(),
         noHostnameLookup: z.boolean().optional(),
         required: z.boolean().optional(),
-        proposedTransferSyntax: z
-            .enum([
-                'uncompressed',
-                'littleEndian',
-                'bigEndian',
-                'implicitVR',
-                'jpegLossless',
-                'jpeg8Bit',
-                'jpeg12Bit',
-                'j2kLossless',
-                'j2kLossy',
-                'jlsLossless',
-                'jlsLossy',
-            ])
-            .optional(),
+        proposedTransferSyntax: z.union([z.enum(PROPOSED_TS_VALUES), z.array(z.enum(PROPOSED_TS_VALUES)).min(1)]).optional(),
+        combineProposedTransferSyntaxes: z.boolean().optional(),
     })
     .strict();
+
+/** Appends proposed transfer syntax flags to the argument list. */
+function pushProposedTsArgs(args: string[], ts: ProposedTransferSyntaxValue | readonly ProposedTransferSyntaxValue[]): void {
+    if (typeof ts === 'string') {
+        args.push(PROPOSED_TS_FLAG_MAP[ts]);
+    } else {
+        for (let i = 0; i < ts.length; i++) {
+            args.push(PROPOSED_TS_FLAG_MAP[ts[i]!]);
+        }
+    }
+}
 
 /** Maps verbosity level to command-line flag. */
 const VERBOSITY_FLAGS: Record<'verbose' | 'debug', string> = { verbose: '-v', debug: '-d' };
@@ -190,7 +215,11 @@ function buildArgs(options: StorescuOptions): string[] {
     }
 
     if (options.proposedTransferSyntax !== undefined) {
-        args.push(PROPOSED_TS_FLAG_MAP[options.proposedTransferSyntax]);
+        pushProposedTsArgs(args, options.proposedTransferSyntax);
+    }
+
+    if (options.combineProposedTransferSyntaxes === true) {
+        args.push('+C');
     }
 
     if (options.required === true) {
@@ -256,5 +285,5 @@ async function storescu(options: StorescuOptions): Promise<Result<StorescuResult
     return ok({ success: true, stdout: result.value.stdout, stderr: result.value.stderr });
 }
 
-export { storescu, ProposedTransferSyntax };
+export { storescu, ProposedTransferSyntax, PROPOSED_TS_VALUES };
 export type { StorescuOptions, StorescuResult, ProposedTransferSyntaxValue };
