@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.8.0] - 2026-03-13
+
+### Added
+
+- **`DicomSend` class** — high-throughput DICOM sender wrapping `dcmsend` binary, with the same queuing, bucketing, backpressure, and retry system as `DicomSender`. `dcmsend` automatically proposes each file's native transfer syntax, avoiding codec license requirements when sending compressed data (e.g., JPEG 2000)
+- **`SenderEngine<TParams>`** — internal generic engine extracted from `DicomSender`; shared by both `DicomSender` (storescu) and `DicomSend` (dcmsend)
+- **dcmsend tool enhancements** — added `noHalt`, `noIllegalProposal`, `decompress`, `multiAssociations`, `createReportFile`, `recurse`, and `scanPattern` options to the `dcmsend` tool wrapper
+
+### Changed
+
+- **`DicomSender` refactored** to delegate to `SenderEngine` — identical external API, reduced code duplication
+
 ## [0.7.3] - 2026-03-13
 
 ### Added

@@ -185,6 +185,70 @@ describe('dcmsend', () => {
             expect(args).toContain('--scan-directories');
         });
 
+        it('passes --no-halt for noHalt', async () => {
+            await dcmsend({ host: 'localhost', port: 104, files: ['/test.dcm'], noHalt: true });
+            const args = mockedExecCommand.mock.calls[0]?.[1] as string[];
+            expect(args).toContain('--no-halt');
+        });
+
+        it('passes --no-illegal-proposal for noIllegalProposal', async () => {
+            await dcmsend({ host: 'localhost', port: 104, files: ['/test.dcm'], noIllegalProposal: true });
+            const args = mockedExecCommand.mock.calls[0]?.[1] as string[];
+            expect(args).toContain('--no-illegal-proposal');
+        });
+
+        it('passes --decompress-never for decompress never', async () => {
+            await dcmsend({ host: 'localhost', port: 104, files: ['/test.dcm'], decompress: 'never' });
+            const args = mockedExecCommand.mock.calls[0]?.[1] as string[];
+            expect(args).toContain('--decompress-never');
+        });
+
+        it('passes --decompress-lossless for decompress lossless', async () => {
+            await dcmsend({ host: 'localhost', port: 104, files: ['/test.dcm'], decompress: 'lossless' });
+            const args = mockedExecCommand.mock.calls[0]?.[1] as string[];
+            expect(args).toContain('--decompress-lossless');
+        });
+
+        it('passes --decompress-lossy for decompress lossy', async () => {
+            await dcmsend({ host: 'localhost', port: 104, files: ['/test.dcm'], decompress: 'lossy' });
+            const args = mockedExecCommand.mock.calls[0]?.[1] as string[];
+            expect(args).toContain('--decompress-lossy');
+        });
+
+        it('passes +ma for multiAssociations true', async () => {
+            await dcmsend({ host: 'localhost', port: 104, files: ['/test.dcm'], multiAssociations: true });
+            const args = mockedExecCommand.mock.calls[0]?.[1] as string[];
+            expect(args).toContain('+ma');
+        });
+
+        it('passes -ma for multiAssociations false', async () => {
+            await dcmsend({ host: 'localhost', port: 104, files: ['/test.dcm'], multiAssociations: false });
+            const args = mockedExecCommand.mock.calls[0]?.[1] as string[];
+            expect(args).toContain('-ma');
+        });
+
+        it('passes --create-report-file with path', async () => {
+            await dcmsend({ host: 'localhost', port: 104, files: ['/test.dcm'], createReportFile: '/tmp/report.txt' });
+            const args = mockedExecCommand.mock.calls[0]?.[1] as string[];
+            const idx = args.indexOf('--create-report-file');
+            expect(idx).toBeGreaterThanOrEqual(0);
+            expect(args[idx + 1]).toBe('/tmp/report.txt');
+        });
+
+        it('passes +r for recurse', async () => {
+            await dcmsend({ host: 'localhost', port: 104, files: ['/dir'], recurse: true });
+            const args = mockedExecCommand.mock.calls[0]?.[1] as string[];
+            expect(args).toContain('+r');
+        });
+
+        it('passes --scan-pattern with pattern', async () => {
+            await dcmsend({ host: 'localhost', port: 104, files: ['/dir'], scanDirectory: true, scanPattern: '*.dcm' });
+            const args = mockedExecCommand.mock.calls[0]?.[1] as string[];
+            const idx = args.indexOf('--scan-pattern');
+            expect(idx).toBeGreaterThanOrEqual(0);
+            expect(args[idx + 1]).toBe('*.dcm');
+        });
+
         it('omits optional flags when not specified', async () => {
             await dcmsend({ host: 'localhost', port: 104, files: ['/test.dcm'] });
             const args = mockedExecCommand.mock.calls[0]?.[1] as string[];
@@ -197,6 +261,16 @@ describe('dcmsend', () => {
             expect(args).not.toContain('-to');
             expect(args).not.toContain('-ta');
             expect(args).not.toContain('-td');
+            expect(args).not.toContain('--no-halt');
+            expect(args).not.toContain('--no-illegal-proposal');
+            expect(args).not.toContain('--decompress-never');
+            expect(args).not.toContain('--decompress-lossless');
+            expect(args).not.toContain('--decompress-lossy');
+            expect(args).not.toContain('+ma');
+            expect(args).not.toContain('-ma');
+            expect(args).not.toContain('--create-report-file');
+            expect(args).not.toContain('+r');
+            expect(args).not.toContain('--scan-pattern');
         });
     });
 

@@ -374,7 +374,7 @@ export type {
 // High-throughput DICOM sender
 // ---------------------------------------------------------------------------
 
-export { DicomSender, SenderMode, SenderHealth } from './senders';
+export { DicomSender, DicomSend, SenderMode, SenderHealth } from './senders';
 export type {
     SenderModeValue,
     SenderHealthValue,
@@ -388,6 +388,9 @@ export type {
     SenderBucketFlushedData,
     SenderErrorData,
     DicomSenderEventMap,
+    DicomSendOptions,
+    DcmsendSendOptions,
+    DicomSendEventMap,
 } from './senders';
 
 // ---------------------------------------------------------------------------

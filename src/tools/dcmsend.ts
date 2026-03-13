@@ -30,10 +30,24 @@ interface DcmsendOptions extends ToolBaseOptions {
     readonly calledAETitle?: string | undefined;
     /** Scan input directory recursively for DICOM files. Defaults to false. */
     readonly scanDirectory?: boolean | undefined;
+    /** Recurse into subdirectories (requires scanDirectory). Maps to `+r`. */
+    readonly recurse?: boolean | undefined;
+    /** Scan pattern for filename filtering (only with scanDirectory). Maps to `--scan-pattern`. */
+    readonly scanPattern?: string | undefined;
     /** Verbosity level for diagnostic output. `'verbose'` maps to `-v`, `'debug'` maps to `-d`. */
     readonly verbosity?: 'verbose' | 'debug' | undefined;
     /** Disable UID validity checking. Maps to `--no-uid-checks`. */
     readonly noUidChecks?: boolean | undefined;
+    /** Do not halt on first invalid input file. Maps to `--no-halt`. */
+    readonly noHalt?: boolean | undefined;
+    /** Do not propose illegal presentation contexts. Maps to `--no-illegal-proposal`. */
+    readonly noIllegalProposal?: boolean | undefined;
+    /** Decompression mode. Maps to `--decompress-never` / `--decompress-lossless` / `--decompress-lossy`. */
+    readonly decompress?: 'never' | 'lossless' | 'lossy' | undefined;
+    /** Use multiple associations (one after the other). Maps to `+ma`. False maps to `-ma`. */
+    readonly multiAssociations?: boolean | undefined;
+    /** Create a detailed report file on the transfer. Maps to `--create-report-file`. */
+    readonly createReportFile?: string | undefined;
     /** Maximum receive PDU size in bytes (4096–131072). Maps to `--max-pdu`. */
     readonly maxPduReceive?: number | undefined;
     /** Maximum send PDU size in bytes (4096–131072). Maps to `--max-send-pdu`. */
@@ -61,6 +75,34 @@ interface DcmsendResult {
 /** Maps verbosity level to command-line flag. */
 const VERBOSITY_FLAGS: Record<'verbose' | 'debug', string> = { verbose: '-v', debug: '-d' };
 
+/** Maps decompress mode to command-line flag. */
+const DECOMPRESS_FLAGS: Record<'never' | 'lossless' | 'lossy', string> = {
+    never: '--decompress-never',
+    lossless: '--decompress-lossless',
+    lossy: '--decompress-lossy',
+};
+
+/** Appends dcmsend-specific send mode arguments. */
+function pushSendModeArgs(args: string[], options: DcmsendOptions): void {
+    if (options.noHalt === true) {
+        args.push('--no-halt');
+    }
+    if (options.noIllegalProposal === true) {
+        args.push('--no-illegal-proposal');
+    }
+    if (options.decompress !== undefined) {
+        args.push(DECOMPRESS_FLAGS[options.decompress]);
+    }
+    if (options.multiAssociations === true) {
+        args.push('+ma');
+    } else if (options.multiAssociations === false) {
+        args.push('-ma');
+    }
+    if (options.createReportFile !== undefined) {
+        args.push('--create-report-file', options.createReportFile);
+    }
+}
+
 const DcmsendOptionsSchema = z
     .object({
         timeoutMs: z.number().int().positive().optional(),
@@ -71,8 +113,15 @@ const DcmsendOptionsSchema = z
         callingAETitle: z.string().min(1).max(16).refine(isValidAETitle, { message: 'AE Title contains invalid characters' }).optional(),
         calledAETitle: z.string().min(1).max(16).refine(isValidAETitle, { message: 'AE Title contains invalid characters' }).optional(),
         scanDirectory: z.boolean().optional(),
+        recurse: z.boolean().optional(),
+        scanPattern: z.string().min(1).optional(),
         verbosity: z.enum(['verbose', 'debug']).optional(),
         noUidChecks: z.boolean().optional(),
+        noHalt: z.boolean().optional(),
+        noIllegalProposal: z.boolean().optional(),
+        decompress: z.enum(['never', 'lossless', 'lossy']).optional(),
+        multiAssociations: z.boolean().optional(),
+        createReportFile: z.string().min(1).optional(),
         maxPduReceive: z.number().int().min(4096).max(131072).optional(),
         maxPduSend: z.number().int().min(4096).max(131072).optional(),
         noHostnameLookup: z.boolean().optional(),
@@ -136,6 +185,16 @@ function buildArgs(options: DcmsendOptions): string[] {
     if (options.scanDirectory === true) {
         args.push('--scan-directories');
     }
+
+    if (options.recurse === true) {
+        args.push('+r');
+    }
+
+    if (options.scanPattern !== undefined) {
+        args.push('--scan-pattern', options.scanPattern);
+    }
+
+    pushSendModeArgs(args, options);
 
     args.push(options.host, String(options.port));
     args.push(...options.files);

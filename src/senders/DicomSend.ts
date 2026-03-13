@@ -1,11 +1,11 @@
 /**
- * High-throughput DICOM sender with queuing, bucketing, and backpressure.
+ * High-throughput DICOM sender using the dcmsend binary.
  *
- * Manages concurrent `storescu` calls with three sending modes
- * (single, multiple, bucket), automatic retry, and adaptive
- * backpressure to handle struggling remote endpoints.
+ * Similar interface to {@link DicomSender} but wraps `dcmsend` instead of
+ * `storescu`. `dcmsend` automatically proposes each file's native transfer
+ * syntax, avoiding the need for codec licenses when sending compressed data.
  *
- * @module senders/DicomSender
+ * @module senders/DicomSend
  */
 
 import { EventEmitter } from 'node:events';
@@ -15,21 +15,10 @@ import { ok, err } from '../types';
 import { DEFAULT_TIMEOUT_MS } from '../constants';
 import { isValidAETitle } from '../patterns';
 import { createValidationError } from '../tools/_toolError';
-import { storescu, PROPOSED_TS_VALUES } from '../tools/storescu';
-import type { ProposedTransferSyntaxValue } from '../tools/storescu';
+import { dcmsend } from '../tools/dcmsend';
 import { SenderEngine } from './SenderEngine';
 import type { SendExecutor } from './SenderEngine';
-import type {
-    DicomSenderOptions,
-    SendOptions,
-    SendResult,
-    SenderStatus,
-    SenderSendCompleteData,
-    SenderSendFailedData,
-    SenderHealthChangedData,
-    SenderBucketFlushedData,
-    DicomSenderEventMap,
-} from './types';
+import type { SendResult, SenderStatus, SenderSendCompleteData, SenderSendFailedData, SenderHealthChangedData, SenderBucketFlushedData } from './types';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -44,10 +33,89 @@ const DEFAULT_MAX_BUCKET_SIZE = 50;
 const MAX_ASSOCIATIONS_LIMIT = 64;
 
 // ---------------------------------------------------------------------------
+// Options & event types
+// ---------------------------------------------------------------------------
+
+/** Options for creating a DicomSend instance. */
+interface DicomSendOptions {
+    /** Remote host or IP address (required). */
+    readonly host: string;
+    /** Remote port number, 1-65535 (required). */
+    readonly port: number;
+    /** Called AE Title of the remote SCP (max 16 chars). */
+    readonly calledAETitle?: string | undefined;
+    /** Calling AE Title of the local SCU (max 16 chars). */
+    readonly callingAETitle?: string | undefined;
+    /** Sending mode. Defaults to 'multiple'. */
+    readonly mode?: 'single' | 'multiple' | 'bucket' | undefined;
+    /** Maximum concurrent dcmsend calls. Defaults to 4 (forced to 1 in single mode). */
+    readonly maxAssociations?: number | undefined;
+    /** Maximum queued send requests before rejecting. Defaults to 1000. */
+    readonly maxQueueLength?: number | undefined;
+    /** Per-dcmsend timeout in milliseconds. Defaults to 30000. */
+    readonly timeoutMs?: number | undefined;
+    /** Maximum retry attempts per send (0 = no retry). Defaults to 3. */
+    readonly maxRetries?: number | undefined;
+    /** Base retry delay in milliseconds. Defaults to 1000. */
+    readonly retryDelayMs?: number | undefined;
+    /** Bucket flush timeout in milliseconds (bucket mode only). Defaults to 5000. */
+    readonly bucketFlushMs?: number | undefined;
+    /** Maximum files per bucket before auto-flush (bucket mode only). Defaults to 50. */
+    readonly maxBucketSize?: number | undefined;
+    /** Maximum PDU receive size (4096-131072). Maps to `--max-pdu`. */
+    readonly maxPduReceive?: number | undefined;
+    /** Maximum PDU send size (4096-131072). Maps to `--max-send-pdu`. */
+    readonly maxPduSend?: number | undefined;
+    /** Association timeout in seconds. Maps to `-to`. */
+    readonly associationTimeout?: number | undefined;
+    /** ACSE timeout in seconds. Maps to `-ta`. */
+    readonly acseTimeout?: number | undefined;
+    /** DIMSE timeout in seconds. Maps to `-td`. */
+    readonly dimseTimeout?: number | undefined;
+    /** Disable DNS hostname lookup. Maps to `-nh`. */
+    readonly noHostnameLookup?: boolean | undefined;
+    /** Verbosity level. `'verbose'` maps to `-v`, `'debug'` maps to `-d`. */
+    readonly verbosity?: 'verbose' | 'debug' | undefined;
+    /** Do not halt on first invalid input file. Maps to `--no-halt`. */
+    readonly noHalt?: boolean | undefined;
+    /** Do not propose illegal presentation contexts. Maps to `--no-illegal-proposal`. */
+    readonly noIllegalProposal?: boolean | undefined;
+    /** Decompression mode. Maps to `--decompress-never`/`--decompress-lossless`/`--decompress-lossy`. */
+    readonly decompress?: 'never' | 'lossless' | 'lossy' | undefined;
+    /** Use multiple associations (one after the other). `true` maps to `+ma`, `false` maps to `-ma`. */
+    readonly multiAssociations?: boolean | undefined;
+    /** Disable UID validity checking. Maps to `--no-uid-checks`. */
+    readonly noUidChecks?: boolean | undefined;
+    /** AbortSignal for external cancellation. */
+    readonly signal?: AbortSignal | undefined;
+}
+
+/** Per-send options for DicomSend. */
+interface DcmsendSendOptions {
+    /** Override per-dcmsend timeout for this send. */
+    readonly timeoutMs?: number | undefined;
+    /** Override max retries for this send. */
+    readonly maxRetries?: number | undefined;
+    /** Override called AE Title for this send. */
+    readonly calledAETitle?: string | undefined;
+    /** Override calling AE Title for this send. */
+    readonly callingAETitle?: string | undefined;
+}
+
+/** Typed event map for DicomSend. */
+interface DicomSendEventMap {
+    SEND_COMPLETE: [SenderSendCompleteData];
+    SEND_FAILED: [SenderSendFailedData];
+    HEALTH_CHANGED: [SenderHealthChangedData];
+    BUCKET_FLUSHED: [SenderBucketFlushedData];
+    error: [{ readonly error: Error; readonly files?: readonly string[] | undefined }];
+}
+
+// ---------------------------------------------------------------------------
 // Zod validation schema
 // ---------------------------------------------------------------------------
 
-const DicomSenderOptionsSchema = z
+const DicomSendOptionsSchema = z
     .object({
         host: z.string().min(1),
         port: z.number().int().min(1).max(65535),
@@ -55,8 +123,6 @@ const DicomSenderOptionsSchema = z
         callingAETitle: z.string().min(1).max(16).refine(isValidAETitle, { message: 'AE Title contains invalid characters' }).optional(),
         mode: z.enum(['single', 'multiple', 'bucket']).optional(),
         maxAssociations: z.number().int().min(1).max(MAX_ASSOCIATIONS_LIMIT).optional(),
-        proposedTransferSyntax: z.union([z.enum(PROPOSED_TS_VALUES), z.array(z.enum(PROPOSED_TS_VALUES)).min(1)]).optional(),
-        combineProposedTransferSyntaxes: z.boolean().optional(),
         maxQueueLength: z.number().int().min(1).optional(),
         timeoutMs: z.number().int().positive().optional(),
         maxRetries: z.number().int().min(0).optional(),
@@ -70,7 +136,11 @@ const DicomSenderOptionsSchema = z
         dimseTimeout: z.number().int().positive().optional(),
         noHostnameLookup: z.boolean().optional(),
         verbosity: z.enum(['verbose', 'debug']).optional(),
-        required: z.boolean().optional(),
+        noHalt: z.boolean().optional(),
+        noIllegalProposal: z.boolean().optional(),
+        decompress: z.enum(['never', 'lossless', 'lossy']).optional(),
+        multiAssociations: z.boolean().optional(),
+        noUidChecks: z.boolean().optional(),
         signal: z.instanceof(AbortSignal).optional(),
     })
     .strict();
@@ -79,30 +149,25 @@ const DicomSenderOptionsSchema = z
 // Internal types
 // ---------------------------------------------------------------------------
 
-/** storescu-specific parameters that vary per send. */
-interface StorescuParams {
+/** dcmsend-specific parameters that vary per send. */
+interface DcmsendParams {
     readonly calledAETitle: string | undefined;
     readonly callingAETitle: string | undefined;
-    readonly required: boolean | undefined;
-    readonly proposedTransferSyntax: ProposedTransferSyntaxValue | readonly ProposedTransferSyntaxValue[] | undefined;
-    readonly combineProposedTransferSyntaxes: boolean | undefined;
 }
 
 // ---------------------------------------------------------------------------
 // Executor factory
 // ---------------------------------------------------------------------------
 
-/** Creates a SendExecutor that calls storescu with the instance-level options. */
-function createStorescuExecutor(options: DicomSenderOptions): SendExecutor<StorescuParams> {
+/** Creates a SendExecutor that calls dcmsend with the instance-level options. */
+function createDcmsendExecutor(options: DicomSendOptions): SendExecutor<DcmsendParams> {
     return async (files, timeoutMs, params, signal) => {
-        const result = await storescu({
+        const result = await dcmsend({
             host: options.host,
             port: options.port,
             files: [...files],
             calledAETitle: params.calledAETitle ?? options.calledAETitle,
             callingAETitle: params.callingAETitle ?? options.callingAETitle,
-            proposedTransferSyntax: params.proposedTransferSyntax ?? options.proposedTransferSyntax,
-            combineProposedTransferSyntaxes: params.combineProposedTransferSyntaxes ?? options.combineProposedTransferSyntaxes,
             maxPduReceive: options.maxPduReceive,
             maxPduSend: options.maxPduSend,
             associationTimeout: options.associationTimeout,
@@ -110,7 +175,11 @@ function createStorescuExecutor(options: DicomSenderOptions): SendExecutor<Store
             dimseTimeout: options.dimseTimeout,
             noHostnameLookup: options.noHostnameLookup,
             verbosity: options.verbosity,
-            required: params.required ?? options.required,
+            noHalt: options.noHalt,
+            noIllegalProposal: options.noIllegalProposal,
+            decompress: options.decompress,
+            multiAssociations: options.multiAssociations,
+            noUidChecks: options.noUidChecks,
             timeoutMs,
             signal,
         });
@@ -124,7 +193,7 @@ function createStorescuExecutor(options: DicomSenderOptions): SendExecutor<Store
 // ---------------------------------------------------------------------------
 
 /** Resolves user options into engine configuration values. */
-function resolveConfig(options: DicomSenderOptions): {
+function resolveConfig(options: DicomSendOptions): {
     mode: 'single' | 'multiple' | 'bucket';
     configuredMaxAssociations: number;
     maxQueueLength: number;
@@ -149,20 +218,25 @@ function resolveConfig(options: DicomSenderOptions): {
 }
 
 // ---------------------------------------------------------------------------
-// DicomSender class
+// DicomSend class
 // ---------------------------------------------------------------------------
 
 /**
- * High-throughput DICOM sender with queuing, bucketing, and backpressure.
+ * High-throughput DICOM sender wrapping the `dcmsend` binary.
  *
- * Manages concurrent `storescu` calls with three sending modes:
+ * Unlike {@link DicomSender} (which uses `storescu`), `DicomSend` uses
+ * `dcmsend` which automatically proposes each file's native transfer
+ * syntax. This avoids the need for commercial codec licenses when
+ * sending compressed DICOM data (e.g., JPEG 2000).
+ *
+ * Supports the same three sending modes as DicomSender:
  * - **single**: One association at a time (FIFO queue).
  * - **multiple**: Up to N concurrent associations.
  * - **bucket**: Accumulates files into buckets, each flushed as one association.
  *
  * @example
  * ```ts
- * const result = DicomSender.create({
+ * const result = DicomSend.create({
  *     host: '192.168.1.100',
  *     port: 104,
  *     calledAETitle: 'PACS',
@@ -179,14 +253,14 @@ function resolveConfig(options: DicomSenderOptions): {
  * await sender.stop();
  * ```
  */
-class DicomSender extends EventEmitter<DicomSenderEventMap> {
-    private readonly engine: SenderEngine<StorescuParams>;
+class DicomSend extends EventEmitter<DicomSendEventMap> {
+    private readonly engine: SenderEngine<DcmsendParams>;
     private readonly defaultTimeoutMs: number;
     private readonly defaultMaxRetries: number;
     private readonly signal: AbortSignal | undefined;
     private abortHandler: (() => void) | undefined;
 
-    private constructor(engine: SenderEngine<StorescuParams>, cfg: ReturnType<typeof resolveConfig>, signal: AbortSignal | undefined) {
+    private constructor(engine: SenderEngine<DcmsendParams>, cfg: ReturnType<typeof resolveConfig>, signal: AbortSignal | undefined) {
         super();
         this.setMaxListeners(20);
         this.on('error', () => {
@@ -207,24 +281,24 @@ class DicomSender extends EventEmitter<DicomSenderEventMap> {
     // -----------------------------------------------------------------------
 
     /**
-     * Creates a new DicomSender instance.
+     * Creates a new DicomSend instance.
      *
      * @param options - Configuration options
      * @returns A Result containing the instance or a validation error
      */
-    static create(options: DicomSenderOptions): Result<DicomSender> {
-        const validation = DicomSenderOptionsSchema.safeParse(options);
+    static create(options: DicomSendOptions): Result<DicomSend> {
+        const validation = DicomSendOptionsSchema.safeParse(options);
         if (!validation.success) {
-            return err(createValidationError('DicomSender', validation.error));
+            return err(createValidationError('DicomSend', validation.error));
         }
 
         const cfg = resolveConfig(options);
-        const senderRef: { current: DicomSender | undefined } = { current: undefined };
-        const engine = new SenderEngine<StorescuParams>({
+        const senderRef: { current: DicomSend | undefined } = { current: undefined };
+        const engine = new SenderEngine<DcmsendParams>({
             ...cfg,
-            executor: createStorescuExecutor(options),
+            executor: createDcmsendExecutor(options),
             signal: options.signal,
-            senderName: 'DicomSender',
+            senderName: 'DicomSend',
             emitters: {
                 emitSendComplete: (data): void => {
                     senderRef.current!.emit('SEND_COMPLETE', data);
@@ -240,7 +314,7 @@ class DicomSender extends EventEmitter<DicomSenderEventMap> {
                 },
             },
         });
-        const sender = new DicomSender(engine, cfg, options.signal);
+        const sender = new DicomSend(engine, cfg, options.signal);
         senderRef.current = sender;
         return ok(sender);
     }
@@ -248,20 +322,19 @@ class DicomSender extends EventEmitter<DicomSenderEventMap> {
     /**
      * Sends one or more DICOM files to the remote endpoint.
      *
-     * In single/multiple mode, files are sent as one storescu call.
+     * In single/multiple mode, files are sent as one dcmsend call.
      * In bucket mode, files are accumulated into a bucket and flushed
      * when the bucket reaches maxBucketSize or the flush timer fires.
-     *
-     * The returned promise resolves when the files are actually sent
-     * (not just queued). Callers can await for confirmation or
-     * fire-and-forget with `void sender.send(files)`.
      *
      * @param files - One or more DICOM file paths
      * @param options - Per-send overrides
      * @returns A Result containing the send result or an error
      */
-    send(files: readonly string[], options?: SendOptions): Promise<Result<SendResult>> {
-        const params = buildStorescuParams(options);
+    send(files: readonly string[], options?: DcmsendSendOptions): Promise<Result<SendResult>> {
+        const params: DcmsendParams = {
+            calledAETitle: options?.calledAETitle,
+            callingAETitle: options?.callingAETitle,
+        };
         const timeoutMs = options?.timeoutMs ?? this.defaultTimeoutMs;
         const maxRetries = options?.maxRetries ?? this.defaultMaxRetries;
         return this.engine.send(files, timeoutMs, maxRetries, params);
@@ -296,13 +369,13 @@ class DicomSender extends EventEmitter<DicomSenderEventMap> {
     // -----------------------------------------------------------------------
 
     /**
-     * Registers a typed listener for a DicomSender-specific event.
+     * Registers a typed listener for a DicomSend-specific event.
      *
-     * @param event - The event name from DicomSenderEventMap
+     * @param event - The event name from DicomSendEventMap
      * @param listener - Callback receiving typed event data
      * @returns this for chaining
      */
-    onEvent<K extends keyof DicomSenderEventMap>(event: K, listener: (...args: DicomSenderEventMap[K]) => void): this {
+    onEvent<K extends keyof DicomSendEventMap>(event: K, listener: (...args: DicomSendEventMap[K]) => void): this {
         return this.on(event, listener as never);
     }
 
@@ -364,19 +437,5 @@ class DicomSender extends EventEmitter<DicomSenderEventMap> {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/** Builds StorescuParams from per-send options. */
-function buildStorescuParams(options?: SendOptions): StorescuParams {
-    return {
-        calledAETitle: options?.calledAETitle,
-        callingAETitle: options?.callingAETitle,
-        required: options?.required,
-        proposedTransferSyntax: options?.proposedTransferSyntax,
-        combineProposedTransferSyntaxes: options?.combineProposedTransferSyntaxes,
-    };
-}
-
-export { DicomSender };
+export { DicomSend };
+export type { DicomSendOptions, DcmsendSendOptions, DicomSendEventMap };

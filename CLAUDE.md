@@ -100,12 +100,14 @@ All code **shall** comply with `docs/TypeScript Coding Standard for Mission-Crit
 
 All DCMTK server binaries are **single-threaded** and handle **one association at a time**. Concurrent connections queue at the TCP level — associations never interleave. `Dcmrecv` and `StoreSCP` include a built-in `AssociationTracker` that automatically correlates files to associations via `FILE_RECEIVED` and `ASSOCIATION_COMPLETE` events.
 
-### High-Throughput Sender (`src/senders/`)
+### High-Throughput Senders (`src/senders/`)
 
 - `DicomSender` — Queued sender wrapping `storescu` with three modes (single, multiple, bucket), adaptive backpressure, retry, and typed events
+- `DicomSend` — Queued sender wrapping `dcmsend` with the same engine; auto-proposes each file's native transfer syntax (no codec license needed)
+- `SenderEngine<TParams>` — Internal generic engine shared by both senders (queue, backpressure, bucket, retry)
 - `types.ts` — `DicomSenderOptions`, `SendOptions`, `SendResult`, `SenderStatus`, event data types, `SenderMode`/`SenderHealth` const objects, `DicomSenderEventMap`
 
-`DicomSender` extends `EventEmitter` directly (not DcmtkProcess) — it manages short-lived `storescu` calls, not a long-lived process. Private constructor + static `create()` with Zod `.strict()` validation. No `start()` needed — ready to send immediately after `create()`. `send()` returns `Promise<Result<SendResult>>` that resolves when the actual `storescu` call completes.
+Both senders extend `EventEmitter` directly (not DcmtkProcess) — they manage short-lived binary calls, not long-lived processes. Private constructor + static `create()` with Zod `.strict()` validation. No `start()` needed — ready to send immediately after `create()`. `send()` returns `Promise<Result<SendResult>>` that resolves when the actual binary call completes.
 
 ### High-Level PACS Client (`src/pacs/`)
 
@@ -366,6 +368,30 @@ await sender.stop(); // graceful shutdown
 ```
 
 Three modes: **single** (serial FIFO), **multiple** (up to N concurrent storescu calls), **bucket** (accumulate files, flush on timeout or max size). Backpressure halves effective concurrency on consecutive failures, recovers on consecutive successes.
+
+### DicomSend
+
+High-throughput DICOM sender wrapping `dcmsend`. Auto-proposes each file's native transfer syntax — no codec license needed for JPEG 2000 etc.
+
+```typescript
+const result = DicomSend.create({
+    host: '192.168.1.100',
+    port: 104,
+    calledAETitle: 'PACS',
+    mode: 'multiple',
+    noHalt: true,
+});
+if (!result.ok) {
+    console.error(result.error.message);
+    return;
+}
+const sender = result.value;
+
+await sender.send(['/path/to/file.dcm']);
+await sender.stop();
+```
+
+Same three modes, backpressure, retry, and events as `DicomSender`. dcmsend-specific options: `noHalt`, `noIllegalProposal`, `decompress`, `multiAssociations`, `noUidChecks`.
 
 ### PacsClient
 

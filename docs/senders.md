@@ -1,4 +1,17 @@
-# DicomSender — High-Throughput DICOM Sender
+# High-Throughput DICOM Senders
+
+Two sender classes share the same queuing, bucketing, backpressure, and retry engine:
+
+| Class         | Binary     | Best For                                                      |
+| ------------- | ---------- | ------------------------------------------------------------- |
+| `DicomSender` | `storescu` | Fine-grained transfer syntax proposals (`--propose-*`, `+C`)  |
+| `DicomSend`   | `dcmsend`  | Auto-proposes each file's native TS — no codec license needed |
+
+Both have identical lifecycle (`create` → `send` → `stop`), three sending modes (single, multiple, bucket), adaptive backpressure, and typed events.
+
+---
+
+# DicomSender (storescu)
 
 The `DicomSender` class provides a high-throughput DICOM sending abstraction with queuing, bucketing, and adaptive backpressure. It wraps `storescu` calls with three sending modes, automatic retry, and health monitoring.
 
@@ -225,3 +238,110 @@ await sender.stop();
 | `onHealthChanged(listener)`   | `this`                        | Listen for health transitions            |
 | `onBucketFlushed(listener)`   | `this`                        | Listen for bucket flushes                |
 | `onEvent(event, listener)`    | `this`                        | Generic typed event listener             |
+
+---
+
+# DicomSend (dcmsend)
+
+The `DicomSend` class wraps the `dcmsend` binary with the same high-throughput engine as `DicomSender`. `dcmsend` automatically proposes each file's native transfer syntax, so it works with JPEG 2000 and other compressed files without commercial codec licenses.
+
+## Quick Start
+
+```typescript
+import { DicomSend } from '@ubercode/dcmtk';
+
+const result = DicomSend.create({
+    host: '192.168.1.100',
+    port: 104,
+    calledAETitle: 'PACS',
+});
+if (!result.ok) {
+    console.error(result.error.message);
+    process.exit(1);
+}
+const sender = result.value;
+
+sender.onSendComplete(data => console.log('Sent:', data.fileCount, 'files in', data.durationMs, 'ms'));
+sender.onSendFailed(data => console.error('Failed:', data.error.message, 'after', data.attempts, 'attempts'));
+
+const sendResult = await sender.send(['/path/to/file1.dcm', '/path/to/file2.dcm']);
+if (sendResult.ok) {
+    console.log('All files sent successfully');
+}
+
+await sender.stop();
+```
+
+## Sending Modes
+
+Same three modes as DicomSender: **single**, **multiple** (default), and **bucket**. See the DicomSender section above for details.
+
+## Configuration Reference
+
+| Option               | Type                                 | Default      | Description                                                     |
+| -------------------- | ------------------------------------ | ------------ | --------------------------------------------------------------- |
+| `host`               | `string`                             | (required)   | Remote host or IP address                                       |
+| `port`               | `number`                             | (required)   | Remote port (1-65535)                                           |
+| `calledAETitle`      | `string`                             | —            | Remote AE Title (max 16 chars)                                  |
+| `callingAETitle`     | `string`                             | —            | Local AE Title (max 16 chars)                                   |
+| `mode`               | `'single' \| 'multiple' \| 'bucket'` | `'multiple'` | Sending mode                                                    |
+| `maxAssociations`    | `number`                             | `4`          | Max concurrent dcmsend calls (1-64, forced to 1 in single mode) |
+| `maxQueueLength`     | `number`                             | `1000`       | Max queued send requests before rejecting                       |
+| `timeoutMs`          | `number`                             | `30000`      | Per-dcmsend timeout in ms                                       |
+| `maxRetries`         | `number`                             | `3`          | Max retry attempts per send (0 = no retry)                      |
+| `retryDelayMs`       | `number`                             | `1000`       | Base retry delay in ms (multiplied by attempt number)           |
+| `bucketFlushMs`      | `number`                             | `5000`       | Bucket flush timeout in ms (bucket mode only)                   |
+| `maxBucketSize`      | `number`                             | `50`         | Max files per bucket (bucket mode only)                         |
+| `maxPduReceive`      | `number`                             | —            | Maximum PDU receive size in bytes (4096-131072)                 |
+| `maxPduSend`         | `number`                             | —            | Maximum PDU send size in bytes (4096-131072)                    |
+| `associationTimeout` | `number`                             | —            | Association/TCP timeout in seconds                              |
+| `acseTimeout`        | `number`                             | —            | ACSE timeout in seconds                                         |
+| `dimseTimeout`       | `number`                             | —            | DIMSE timeout in seconds                                        |
+| `noHostnameLookup`   | `boolean`                            | —            | Disable DNS hostname lookup                                     |
+| `verbosity`          | `'verbose' \| 'debug'`               | —            | Diagnostic output level (`-v` or `-d`)                          |
+| `noHalt`             | `boolean`                            | —            | Do not halt on first invalid input file (`--no-halt`)           |
+| `noIllegalProposal`  | `boolean`                            | —            | Do not propose illegal presentation contexts                    |
+| `decompress`         | `'never' \| 'lossless' \| 'lossy'`   | —            | Decompression mode                                              |
+| `multiAssociations`  | `boolean`                            | —            | Use multiple associations (`+ma` / `-ma`)                       |
+| `noUidChecks`        | `boolean`                            | —            | Disable UID validity checking                                   |
+| `signal`             | `AbortSignal`                        | —            | AbortSignal for external cancellation                           |
+
+## Per-Send Overrides
+
+```typescript
+await sender.send(['/path/file.dcm'], {
+    timeoutMs: 60000,
+    maxRetries: 5,
+    calledAETitle: 'OTHER_PACS',
+    callingAETitle: 'MY_SCU',
+});
+```
+
+## API Summary
+
+| Method                      | Returns                       | Description                              |
+| --------------------------- | ----------------------------- | ---------------------------------------- |
+| `DicomSend.create(options)` | `Result<DicomSend>`           | Factory with Zod validation              |
+| `send(files, options?)`     | `Promise<Result<SendResult>>` | Send files (resolves on actual send)     |
+| `flush()`                   | `void`                        | Force-flush current bucket (bucket mode) |
+| `stop()`                    | `Promise<void>`               | Graceful shutdown                        |
+| `status`                    | `SenderStatus`                | Current state snapshot                   |
+| `onSendComplete(listener)`  | `this`                        | Listen for successful sends              |
+| `onSendFailed(listener)`    | `this`                        | Listen for failed sends                  |
+| `onHealthChanged(listener)` | `this`                        | Listen for health transitions            |
+| `onBucketFlushed(listener)` | `this`                        | Listen for bucket flushes                |
+| `onEvent(event, listener)`  | `this`                        | Generic typed event listener             |
+
+## DicomSender vs DicomSend
+
+| Feature                  | DicomSender (storescu)            | DicomSend (dcmsend)              |
+| ------------------------ | --------------------------------- | -------------------------------- |
+| Transfer syntax control  | `--propose-*` flags, `+C` combine | Auto-proposes native TS per file |
+| Codec license needed     | Yes, for TS conversion            | No — sends files as-is           |
+| `proposedTransferSyntax` | 22 values, single or array        | N/A                              |
+| `required` flag          | Yes (`-R`)                        | N/A (always native)              |
+| `noHalt`                 | N/A                               | Yes (`--no-halt`)                |
+| `decompress`             | N/A                               | Yes (`--decompress-*`)           |
+| `multiAssociations`      | N/A                               | Yes (`+ma`/`-ma`)                |
+| `noIllegalProposal`      | N/A                               | Yes (`--no-illegal-proposal`)    |
+| `noUidChecks`            | N/A                               | Yes (`--no-uid-checks`)          |

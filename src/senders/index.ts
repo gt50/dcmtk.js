@@ -1,13 +1,14 @@
 /**
- * DicomSender barrel export.
+ * Senders barrel export.
  *
- * Re-exports the DicomSender class and all public types from the
+ * Re-exports sender classes and all public types from the
  * senders module.
  *
  * @module senders
  */
 
 export { DicomSender } from './DicomSender';
+export { DicomSend } from './DicomSend';
 export { SenderMode, SenderHealth } from './types';
 export type {
     SenderModeValue,
@@ -23,3 +24,4 @@ export type {
     SenderErrorData,
     DicomSenderEventMap,
 } from './types';
+export type { DicomSendOptions, DcmsendSendOptions, DicomSendEventMap } from './DicomSend';
