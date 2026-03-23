@@ -115,7 +115,7 @@ async function tryDirectPath(inputPath: string, timeoutMs: number, signal?: Abor
         return err(jsonBinary.error);
     }
 
-    const directArgs = [...buildVerbosityArgs(verbosity), inputPath];
+    const directArgs = [...buildVerbosityArgs(verbosity), '+b', inputPath];
     const result = await execCommand(jsonBinary.value, directArgs, { timeoutMs, signal });
     if (!result.ok) {
         return err(result.error);

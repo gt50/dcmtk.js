@@ -82,6 +82,18 @@ describe('dcm2json', () => {
             expect(args).toContain('-d');
         });
 
+        it('passes +b (bulk-enabled) on direct path to handle compressed pixel data', async () => {
+            mockedResolveBinary.mockReturnValue({ ok: true, value: '/usr/local/bin/dcm2json' });
+            mockedExecCommand.mockResolvedValue({
+                ok: true,
+                value: { stdout: '{}', stderr: '', exitCode: 0 },
+            });
+            mockedRepairJson.mockReturnValue('{}');
+            await dcm2json('/input.dcm', { directOnly: true });
+            const args = mockedExecCommand.mock.calls[0]?.[1] as string[];
+            expect(args).toContain('+b');
+        });
+
         it('passes +Ca with charset value via XML path', async () => {
             await dcm2json('/input.dcm', { charsetAssume: 'ISO_IR 100' });
             const args = mockedExecCommand.mock.calls[0]?.[1] as string[];
