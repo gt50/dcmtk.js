@@ -44,6 +44,32 @@ describe('dcm2xml', () => {
             expect(args).not.toContain('-v');
             expect(args).not.toContain('-d');
         });
+
+        it('passes +Ca with charset value for charsetAssume', async () => {
+            await dcm2xml('/input.dcm', { charsetAssume: 'ISO_IR 100' });
+            const args = mockedExecCommand.mock.calls[0]?.[1] as string[];
+            const idx = args.indexOf('+Ca');
+            expect(idx).toBeGreaterThanOrEqual(0);
+            expect(args[idx + 1]).toBe('ISO_IR 100');
+        });
+
+        it('omits +Ca when charsetAssume not specified', async () => {
+            await dcm2xml('/input.dcm');
+            const args = mockedExecCommand.mock.calls[0]?.[1] as string[];
+            expect(args).not.toContain('+Ca');
+        });
+    });
+
+    describe('validation', () => {
+        it('rejects empty charsetAssume', async () => {
+            const result = await dcm2xml('/input.dcm', { charsetAssume: '' });
+            expect(result.ok).toBe(false);
+        });
+
+        it('accepts valid charsetAssume', async () => {
+            const result = await dcm2xml('/input.dcm', { charsetAssume: 'Latin1' });
+            expect(result.ok).toBe(true);
+        });
     });
 
     describe('result handling', () => {

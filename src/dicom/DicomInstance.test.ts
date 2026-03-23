@@ -99,7 +99,20 @@ describe('DicomInstance', () => {
             expect(mockedDcm2json).toHaveBeenCalledWith('/path/to/test.dcm', {
                 timeoutMs: 5000,
                 signal: controller.signal,
+                charsetAssume: undefined,
             });
+        });
+
+        it('passes charsetAssume to dcm2json', async () => {
+            await DicomInstance.open('/path/to/test.dcm', {
+                charsetAssume: 'ISO_IR 100',
+            });
+            expect(mockedDcm2json).toHaveBeenCalledWith(
+                '/path/to/test.dcm',
+                expect.objectContaining({
+                    charsetAssume: 'ISO_IR 100',
+                })
+            );
         });
     });
 

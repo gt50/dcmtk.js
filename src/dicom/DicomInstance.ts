@@ -16,7 +16,7 @@ import { err, ok } from '../types';
 import { ChangeSet } from './ChangeSet';
 import { DicomDataset } from './DicomDataset';
 import { dcm2json } from '../tools';
-import type { FileIOOptions } from './_fileHelpers';
+import type { DicomOpenOptions, FileIOOptions } from './_fileHelpers';
 import { applyModifications, copyFileSafe, statFileSize, unlinkFile } from './_fileHelpers';
 
 // ---------------------------------------------------------------------------
@@ -62,16 +62,17 @@ class DicomInstance {
      * Opens a DICOM file and creates a DicomInstance.
      *
      * @param path - Filesystem path to the DICOM file
-     * @param options - Timeout and abort options
+     * @param options - Timeout, abort, and charset options
      * @returns A Result containing the DicomInstance or an error
      */
-    static async open(path: string, options?: FileIOOptions): Promise<Result<DicomInstance>> {
+    static async open(path: string, options?: DicomOpenOptions): Promise<Result<DicomInstance>> {
         const filePathResult = createDicomFilePath(path);
         if (!filePathResult.ok) return err(filePathResult.error);
 
         const jsonResult = await dcm2json(path, {
             timeoutMs: options?.timeoutMs ?? DEFAULT_TIMEOUT_MS,
             signal: options?.signal,
+            charsetAssume: options?.charsetAssume,
         });
         if (!jsonResult.ok) return err(jsonResult.error);
 

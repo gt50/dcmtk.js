@@ -29,6 +29,8 @@ type Dcm2jsonSource = 'xml' | 'direct';
 interface Dcm2jsonOptions extends ToolBaseOptions {
     /** Skip the XML primary path and use direct dcm2json only. Defaults to false. */
     readonly directOnly?: boolean | undefined;
+    /** Assume the specified character set when SpecificCharacterSet (0008,0005) is absent. Passed to dcm2xml as `+Ca`. Only effective on the XML path (dcm2json binary does not support this flag). */
+    readonly charsetAssume?: string | undefined;
     /** Verbosity level for diagnostic output. `'verbose'` maps to `-v`, `'debug'` maps to `-d`. */
     readonly verbosity?: 'verbose' | 'debug' | undefined;
 }
@@ -46,10 +48,14 @@ const Dcm2jsonOptionsSchema = z
         timeoutMs: z.number().int().positive().optional(),
         signal: z.instanceof(AbortSignal).optional(),
         directOnly: z.boolean().optional(),
+        charsetAssume: z.string().min(1).optional(),
         verbosity: z.enum(['verbose', 'debug']).optional(),
     })
     .strict()
     .optional();
+
+/** Options forwarded to the XML conversion path. */
+type XmlPathOpts = { readonly verbosity?: 'verbose' | 'debug'; readonly charsetAssume?: string };
 
 /** Maps verbosity level to command-line flag. */
 const VERBOSITY_FLAGS: Record<'verbose' | 'debug', string> = { verbose: '-v', debug: '-d' };
@@ -64,16 +70,25 @@ function buildVerbosityArgs(verbosity?: 'verbose' | 'debug'): string[] {
     return [];
 }
 
+/** Builds XML-path options, omitting undefined values for exactOptionalPropertyTypes. */
+function buildXmlOpts(options?: Dcm2jsonOptions): XmlPathOpts {
+    const result: Record<string, string> = {};
+    if (options?.verbosity !== undefined) result['verbosity'] = options.verbosity;
+    if (options?.charsetAssume !== undefined) result['charsetAssume'] = options.charsetAssume;
+    return result;
+}
+
 /**
  * Attempts XML-primary conversion: dcm2xml → xmlToJson.
  */
-async function tryXmlPath(inputPath: string, timeoutMs: number, signal?: AbortSignal, verbosity?: 'verbose' | 'debug'): Promise<Result<Dcm2jsonResult>> {
+async function tryXmlPath(inputPath: string, timeoutMs: number, signal?: AbortSignal, opts?: XmlPathOpts): Promise<Result<Dcm2jsonResult>> {
     const xmlBinary = resolveBinary('dcm2xml');
     if (!xmlBinary.ok) {
         return err(xmlBinary.error);
     }
 
-    const xmlArgs = [...buildVerbosityArgs(verbosity), '-nat', inputPath];
+    const charsetArgs = opts?.charsetAssume !== undefined ? ['+Ca', opts.charsetAssume] : [];
+    const xmlArgs = [...buildVerbosityArgs(opts?.verbosity), ...charsetArgs, '-nat', inputPath];
     const xmlResult = await execCommand(xmlBinary.value, xmlArgs, { timeoutMs, signal });
     if (!xmlResult.ok) {
         return err(xmlResult.error);
@@ -158,7 +173,7 @@ async function dcm2json(inputPath: string, options?: Dcm2jsonOptions): Promise<R
     }
 
     // Try XML path first
-    const xmlResult = await tryXmlPath(inputPath, timeoutMs, signal, verbosity);
+    const xmlResult = await tryXmlPath(inputPath, timeoutMs, signal, buildXmlOpts(options));
     if (xmlResult.ok) {
         return xmlResult;
     }

@@ -81,6 +81,44 @@ describe('dcm2json', () => {
             const args = mockedExecCommand.mock.calls[0]?.[1] as string[];
             expect(args).toContain('-d');
         });
+
+        it('passes +Ca with charset value via XML path', async () => {
+            await dcm2json('/input.dcm', { charsetAssume: 'ISO_IR 100' });
+            const args = mockedExecCommand.mock.calls[0]?.[1] as string[];
+            const idx = args.indexOf('+Ca');
+            expect(idx).toBeGreaterThanOrEqual(0);
+            expect(args[idx + 1]).toBe('ISO_IR 100');
+        });
+
+        it('omits +Ca when charsetAssume not specified', async () => {
+            await dcm2json('/input.dcm');
+            const args = mockedExecCommand.mock.calls[0]?.[1] as string[];
+            expect(args).not.toContain('+Ca');
+        });
+
+        it('does not pass +Ca to direct path', async () => {
+            mockedResolveBinary.mockReturnValue({ ok: true, value: '/usr/local/bin/dcm2json' });
+            mockedExecCommand.mockResolvedValue({
+                ok: true,
+                value: { stdout: '{}', stderr: '', exitCode: 0 },
+            });
+            mockedRepairJson.mockReturnValue('{}');
+            await dcm2json('/input.dcm', { charsetAssume: 'ISO_IR 100', directOnly: true });
+            const args = mockedExecCommand.mock.calls[0]?.[1] as string[];
+            expect(args).not.toContain('+Ca');
+        });
+    });
+
+    describe('validation', () => {
+        it('rejects empty charsetAssume', async () => {
+            const result = await dcm2json('/input.dcm', { charsetAssume: '' });
+            expect(result.ok).toBe(false);
+        });
+
+        it('accepts valid charsetAssume', async () => {
+            const result = await dcm2json('/input.dcm', { charsetAssume: 'Latin1' });
+            expect(result.ok).toBe(true);
+        });
     });
 
     describe('result handling', () => {

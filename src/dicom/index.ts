@@ -30,6 +30,7 @@ export type { TagSegment } from './tagPath';
 export { DicomDataset } from './DicomDataset';
 export { ChangeSet } from './ChangeSet';
 export { DicomInstance } from './DicomInstance';
+export type { DicomOpenOptions } from './_fileHelpers';
 export { xmlToJson } from './xmlToJson';
 
 // ---------------------------------------------------------------------------

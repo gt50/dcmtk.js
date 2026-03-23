@@ -79,6 +79,7 @@ export type { TagSegment } from './dicom/tagPath';
 export { DicomDataset } from './dicom/DicomDataset';
 export { ChangeSet } from './dicom/ChangeSet';
 export { DicomInstance } from './dicom/DicomInstance';
+export type { DicomOpenOptions } from './dicom/_fileHelpers';
 export { xmlToJson } from './dicom/xmlToJson';
 export { walkTags } from './dicom/walkTags';
 export type { WalkTagEntry, WalkTagsOptions } from './dicom/walkTags';

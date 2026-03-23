@@ -23,6 +23,12 @@ interface FileIOOptions {
     readonly signal?: AbortSignal | undefined;
 }
 
+/** Options for opening a DICOM file. Extends FileIOOptions with read-specific settings. */
+interface DicomOpenOptions extends FileIOOptions {
+    /** Assume the specified character set when SpecificCharacterSet (0008,0005) is absent. Maps to dcm2xml `+Ca`. */
+    readonly charsetAssume?: string | undefined;
+}
+
 /** Bridges a ChangeSet to a dcmodify call on the given file. */
 async function applyModifications(filePath: DicomFilePath, changeset: ChangeSet, options: FileIOOptions): Promise<Result<void>> {
     const modifications = changeset.toModifications();
@@ -69,4 +75,4 @@ async function unlinkFile(path: string): Promise<Result<void>> {
 }
 
 export { applyModifications, copyFileSafe, statFileSize, unlinkFile };
-export type { FileIOOptions };
+export type { FileIOOptions, DicomOpenOptions };

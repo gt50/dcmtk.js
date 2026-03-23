@@ -39,6 +39,8 @@ interface Dcm2xmlOptions extends ToolBaseOptions {
     readonly writeBinaryData?: boolean | undefined;
     /** Encode binary data inline instead of referencing external files. Defaults to true when writeBinaryData is true. */
     readonly encodeBinaryBase64?: boolean | undefined;
+    /** Assume the specified character set when SpecificCharacterSet (0008,0005) is absent. Maps to `+Ca`. */
+    readonly charsetAssume?: string | undefined;
     /** Verbosity level for diagnostic output. `'verbose'` maps to `-v`, `'debug'` maps to `-d`. */
     readonly verbosity?: 'verbose' | 'debug' | undefined;
 }
@@ -60,6 +62,7 @@ const Dcm2xmlOptionsSchema = z
         charset: z.enum(['utf8', 'latin1', 'ascii']).optional(),
         writeBinaryData: z.boolean().optional(),
         encodeBinaryBase64: z.boolean().optional(),
+        charsetAssume: z.string().min(1).optional(),
         verbosity: z.enum(['verbose', 'debug']).optional(),
     })
     .strict()
@@ -97,6 +100,10 @@ function buildArgs(inputPath: string, options?: Dcm2xmlOptions): string[] {
 
     if (options?.namespace === true) {
         args.push('+Xn');
+    }
+
+    if (options?.charsetAssume !== undefined) {
+        args.push('+Ca', options.charsetAssume);
     }
 
     pushEncodingArgs(args, options);
