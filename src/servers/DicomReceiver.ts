@@ -738,10 +738,34 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
     /** Moves a received file, opens it as DicomInstance, and emits FILE_RECEIVED. */
     private async handleFileReceived(worker: WorkerInfo, data: { filePath: string; callingAE: string; calledAE: string; source: string }): Promise<void> {
         if (worker.associationDir === undefined || worker.associationId === undefined) return;
-        const srcPath = data.filePath;
-        const destPath = path.join(worker.associationDir, path.basename(srcPath));
         const assocId = worker.associationId;
         const assocDir = worker.associationDir;
+
+        try {
+            await this.moveAndEmitFile(worker, data, assocId, assocDir);
+        } catch (thrown: unknown) {
+            const error = thrown instanceof Error ? thrown : new Error(String(thrown));
+            this.emit('error', {
+                error,
+                filePath: data.filePath,
+                associationId: assocId,
+                associationDir: assocDir,
+                callingAE: data.callingAE,
+                calledAE: data.calledAE,
+                source: data.source,
+            });
+        }
+    }
+
+    /** Inner handler: move file, parse DICOM, emit FILE_RECEIVED or error. */
+    private async moveAndEmitFile(
+        worker: WorkerInfo,
+        data: { filePath: string; callingAE: string; calledAE: string; source: string },
+        assocId: string,
+        assocDir: string
+    ): Promise<void> {
+        const srcPath = data.filePath;
+        const destPath = path.join(assocDir, path.basename(srcPath));
 
         const moveResult = await moveFile(srcPath, destPath);
         const finalPath = moveResult.ok ? destPath : srcPath;
