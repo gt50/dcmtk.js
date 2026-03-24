@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { resolve } from 'node:path';
 import { readdir } from 'node:fs/promises';
-import type { ReceiverAssociationData, ReceiverFileData } from '../../../src';
+import type { ReceiverAssociationData, ReceiverInstanceData } from '../../../src';
 import { DicomReceiver, storescu } from '../../../src';
 import { createTempDir, dcmtkAvailable, getAvailablePort, removeTempDir, SAMPLES, waitForEvent } from '../helpers';
 
@@ -75,7 +75,7 @@ describe.skipIf(!dcmtkAvailable)('DicomReceiver integration', () => {
         if (!createResult.ok) return;
 
         receiver = createResult.value;
-        const filePromise = waitForEvent<ReceiverFileData>(receiver, 'FILE_RECEIVED', EVENT_TIMEOUT_MS);
+        const filePromise = waitForEvent<ReceiverInstanceData>(receiver, 'INSTANCE_RECEIVED', EVENT_TIMEOUT_MS);
 
         const startResult = await receiver.start();
         expect(startResult.ok).toBe(true);

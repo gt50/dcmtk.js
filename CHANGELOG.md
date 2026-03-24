@@ -5,6 +5,45 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.11.0] - 2026-03-24
+
+### Breaking Changes
+
+- **DicomReceiver event model split into three stages** — the single `FILE_RECEIVED` event that carried a `DicomInstance` has been replaced with a three-stage pipeline (#23):
+    - **`FILE_RECEIVED`** — fires immediately when dcmrecv stores a file (before move/parse). Data: `ReceiverFileReceivedData` (`filePath`, `associationId`, `callingAE`, `calledAE`, `source`)
+    - **`FILE_STORED`** — fires after the file is moved to the association directory and stat'd. Data: `ReceiverFileStoredData` (`filePath`, `fileSize`, `associationId`, `associationDir`, `callingAE`, `calledAE`, `source`). **This event always fires if dcmrecv stored the file — no file is ever silently lost.**
+    - **`INSTANCE_RECEIVED`** — fires after `DicomInstance.open()` succeeds. Data: `ReceiverInstanceData` (same as `FILE_STORED` plus `instance: DicomInstance`). This event is fire-and-forget and does NOT block `FILE_STORED` or `ASSOCIATION_COMPLETE`. If parsing times out or fails, `FILE_STORED` already fired.
+- **`ReceiverFileData` is deprecated** — use `ReceiverFileStoredData` instead. The old type is re-exported as an alias for backward compatibility.
+- **Consumers listening for `FILE_RECEIVED` to get `DicomInstance`** must switch to `INSTANCE_RECEIVED`:
+
+    ```typescript
+    // Before (0.10.x):
+    receiver.onFileReceived(data => {
+        console.log(data.instance.patientName);
+    });
+
+    // After (0.11.0):
+    receiver.onInstanceReceived(data => {
+        console.log(data.instance.patientName);
+    });
+
+    // Or use FILE_STORED for file-on-disk without waiting for parsing:
+    receiver.onFileStored(data => {
+        console.log(data.filePath, data.fileSize);
+    });
+    ```
+
+### Added
+
+- **`onFileStored()` convenience method** — registers a listener for `FILE_STORED` events
+- **`onInstanceReceived()` convenience method** — registers a listener for `INSTANCE_RECEIVED` events
+- **`ReceiverFileReceivedData`**, **`ReceiverFileStoredData`**, **`ReceiverInstanceData`** types exported
+- **Better exec error messages** — timeout/error messages now include the binary name and PID (e.g., `dcm2xml timed out after 30000ms (pid: 12345)`)
+
+### Fixed
+
+- **DicomInstance.open timeout no longer blocks file delivery** — `INSTANCE_RECEIVED` (parsing) is fire-and-forget; `FILE_STORED` fires immediately after the file is on disk. A 30s parse timeout no longer prevents the application from seeing the file (#23)
+
 ## [0.10.0] - 2026-03-24
 
 ### Changed

@@ -119,15 +119,17 @@ Remote SCU ──TCP──► DicomReceiver (:4242)
 
 ### Events
 
-| Event                  | Data                                                                                                                                               | Description                                                           |
-| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `FILE_RECEIVED`        | `{ filePath, fileSize, associationId, associationDir, callingAE, calledAE, source, instance }`                                                     | File moved to association dir; `instance` is a parsed `DicomInstance` |
-| `ASSOCIATION_COMPLETE` | `{ associationId, associationDir, callingAE, calledAE, source, files, durationMs, endReason, totalBytes, bytesPerSecond, startAt, endAt, output }` | Association ended; includes transfer stats and captured output        |
-| `ASSOCIATION_RECEIVED` | `{ associationId, callingAE, calledAE, source }`                                                                                                   | New association received by a worker                                  |
-| `C_STORE_REQUEST`      | `{ associationId, raw }`                                                                                                                           | C-STORE request received (per-file progress)                          |
-| `ECHO_REQUEST`         | `{ associationId }`                                                                                                                                | C-ECHO request received                                               |
-| `REFUSING_ASSOCIATION` | `{ reason }`                                                                                                                                       | Worker refused an association                                         |
-| `error`                | `{ error, filePath?, associationId?, associationDir?, callingAE?, calledAE?, source? }`                                                            | Error with optional file/association context                          |
+| Event                  | Data                                                                                                                                               | Description                                                                          |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `FILE_RECEIVED`        | `{ filePath, associationId, callingAE, calledAE, source }`                                                                                         | Raw notification from dcmrecv — file stored in temp dir, before move/parse           |
+| `FILE_STORED`          | `{ filePath, fileSize, associationId, associationDir, callingAE, calledAE, source }`                                                               | File moved to association dir and stat'd — **always fires if dcmrecv stored a file** |
+| `INSTANCE_RECEIVED`    | `{ filePath, fileSize, associationId, associationDir, callingAE, calledAE, source, instance }`                                                     | `DicomInstance` parsed — fire-and-forget, does not block `FILE_STORED`               |
+| `ASSOCIATION_COMPLETE` | `{ associationId, associationDir, callingAE, calledAE, source, files, durationMs, endReason, totalBytes, bytesPerSecond, startAt, endAt, output }` | Association ended; includes transfer stats and captured output                       |
+| `ASSOCIATION_RECEIVED` | `{ associationId, callingAE, calledAE, source }`                                                                                                   | New association received by a worker                                                 |
+| `C_STORE_REQUEST`      | `{ associationId, raw }`                                                                                                                           | C-STORE request received (per-file progress)                                         |
+| `ECHO_REQUEST`         | `{ associationId }`                                                                                                                                | C-ECHO request received                                                              |
+| `REFUSING_ASSOCIATION` | `{ reason }`                                                                                                                                       | Worker refused an association                                                        |
+| `error`                | `{ error, filePath?, associationId?, associationDir?, callingAE?, calledAE?, source? }`                                                            | Error with optional file/association context                                         |
 
 ### Worker Lifecycle
 
@@ -173,8 +175,12 @@ receiver.onEvent('error', data => {
     console.error(`Error: ${data.error.message}`, data.filePath ?? '');
 });
 
-receiver.onFileReceived(data => {
-    console.log(`File: ${data.filePath} (patient: ${data.instance.patientName})`);
+receiver.onFileStored(data => {
+    console.log(`Stored: ${data.filePath} (${data.fileSize} bytes)`);
+});
+
+receiver.onInstanceReceived(data => {
+    console.log(`Parsed: ${data.filePath} (patient: ${data.instance.patientName})`);
 });
 
 receiver.onAssociationComplete(data => {

@@ -307,7 +307,7 @@ Pooled DICOM receiver managing multiple `Dcmrecv` workers behind a TCP proxy.
 
 Options include `port`, `storageDir`, `aeTitle`, pool sizing (`minPoolSize`/`maxPoolSize`), `connectionTimeoutMs`, `configFile`/`configProfile`, `acseTimeout`, `dimseTimeout`, `maxPdu`, `filenameMode` (defaults to `'unique'`), `filenameExtension`, `storageMode`, and `signal`. Set `port: 0` for external socket mode (no TCP proxy). The `filenameMode` defaults to `'unique'` to prevent data loss from duplicate SOP Instance UIDs — see `docs/servers.md` for details.
 
-Events: `FILE_RECEIVED`, `ASSOCIATION_COMPLETE` (includes `output` lines), `ASSOCIATION_RECEIVED`, `C_STORE_REQUEST`, `ECHO_REQUEST`, `REFUSING_ASSOCIATION`, `error`.
+Events: `FILE_RECEIVED` (raw from dcmrecv), `FILE_STORED` (moved to assoc dir), `INSTANCE_RECEIVED` (parsed DicomInstance), `ASSOCIATION_COMPLETE` (includes `output` lines), `ASSOCIATION_RECEIVED`, `C_STORE_REQUEST`, `ECHO_REQUEST`, `REFUSING_ASSOCIATION`, `error`.
 
 ```typescript
 const result = DicomReceiver.create({
@@ -324,7 +324,8 @@ if (!result.ok) {
 }
 const receiver = result.value;
 
-receiver.onFileReceived(data => console.log(data.filePath, data.fileSize, data.instance.patientName));
+receiver.onFileStored(data => console.log(data.filePath, data.fileSize));
+receiver.onInstanceReceived(data => console.log(data.instance.patientName));
 receiver.onAssociationComplete(data => console.log(data.files, data.totalBytes, data.output.length));
 receiver.onAssociationReceived(data => console.log(data.callingAE, data.source));
 receiver.onCStoreRequest(data => console.log(data.associationId, data.raw));

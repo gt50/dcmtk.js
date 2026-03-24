@@ -50,8 +50,28 @@ interface PoolStatus {
     readonly total: number;
 }
 
-/** Data emitted with FILE_RECEIVED events. */
-interface ReceiverFileData {
+/** Data emitted with FILE_RECEIVED events (raw from dcmrecv, before processing). */
+interface ReceiverFileReceivedData {
+    readonly filePath: string;
+    readonly associationId: string;
+    readonly callingAE: string;
+    readonly calledAE: string;
+    readonly source: string;
+}
+
+/** Data emitted with FILE_STORED events (file moved to association dir). */
+interface ReceiverFileStoredData {
+    readonly filePath: string;
+    readonly fileSize: number;
+    readonly associationId: string;
+    readonly associationDir: string;
+    readonly callingAE: string;
+    readonly calledAE: string;
+    readonly source: string;
+}
+
+/** Data emitted with INSTANCE_RECEIVED events (parsed DicomInstance available). */
+interface ReceiverInstanceData {
     readonly filePath: string;
     readonly fileSize: number;
     readonly associationId: string;
@@ -117,7 +137,9 @@ interface ReceiverErrorData {
 
 /** Typed event map for DicomReceiver. */
 interface DicomReceiverEventMap {
-    FILE_RECEIVED: [ReceiverFileData];
+    FILE_RECEIVED: [ReceiverFileReceivedData];
+    FILE_STORED: [ReceiverFileStoredData];
+    INSTANCE_RECEIVED: [ReceiverInstanceData];
     ASSOCIATION_COMPLETE: [ReceiverAssociationData];
     ASSOCIATION_RECEIVED: [PoolAssociationReceivedData];
     C_STORE_REQUEST: [PoolCStoreRequestData];
@@ -482,13 +504,33 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
     }
 
     /**
-     * Registers a listener for received files.
+     * Registers a listener for files received by dcmrecv (before move/parse).
      *
-     * @param listener - Callback receiving file data
+     * @param listener - Callback receiving raw file data
      * @returns this for chaining
      */
-    onFileReceived(listener: (data: ReceiverFileData) => void): this {
+    onFileReceived(listener: (data: ReceiverFileReceivedData) => void): this {
         return this.on('FILE_RECEIVED', listener);
+    }
+
+    /**
+     * Registers a listener for files stored in the association directory.
+     *
+     * @param listener - Callback receiving stored file data with size
+     * @returns this for chaining
+     */
+    onFileStored(listener: (data: ReceiverFileStoredData) => void): this {
+        return this.on('FILE_STORED', listener);
+    }
+
+    /**
+     * Registers a listener for parsed DicomInstance availability.
+     *
+     * @param listener - Callback receiving instance data
+     * @returns this for chaining
+     */
+    onInstanceReceived(listener: (data: ReceiverInstanceData) => void): this {
+        return this.on('INSTANCE_RECEIVED', listener);
     }
 
     /**
@@ -832,12 +874,21 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
                 return;
             }
 
+            // FILE_RECEIVED: raw notification from dcmrecv, before any processing
+            this.emit('FILE_RECEIVED', {
+                filePath: data.filePath,
+                associationId: ctx.associationId,
+                callingAE: data.callingAE,
+                calledAE: data.calledAE,
+                source: data.source,
+            });
+
             const promise = this.handleFileReceived(worker, data, ctx);
             worker.trackFile(promise);
         });
     }
 
-    /** Moves a received file, opens it as DicomInstance, and emits FILE_RECEIVED. */
+    /** Moves file to association dir, emits FILE_STORED, then parses instance. */
     private async handleFileReceived(
         worker: Worker,
         data: { filePath: string; callingAE: string; calledAE: string; source: string },
@@ -859,7 +910,7 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
         }
     }
 
-    /** Inner handler: move file, parse DICOM, emit FILE_RECEIVED or error. */
+    /** Inner handler: move file, emit FILE_STORED, parse DICOM, emit INSTANCE_RECEIVED. */
     private async moveAndEmitFile(
         worker: Worker,
         data: { filePath: string; callingAE: string; calledAE: string; source: string },
@@ -873,21 +924,8 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
         const fileSize = await statFileSafe(finalPath);
         worker.recordFile(finalPath, fileSize);
 
-        const openResult = await DicomInstance.open(finalPath);
-        if (!openResult.ok) {
-            this.emit('error', {
-                error: openResult.error,
-                filePath: finalPath,
-                associationId: ctx.associationId,
-                associationDir: ctx.associationDir,
-                callingAE: data.callingAE,
-                calledAE: data.calledAE,
-                source: data.source,
-            });
-            return;
-        }
-
-        this.emit('FILE_RECEIVED', {
+        // FILE_STORED: file is safely on disk in the association directory
+        this.emit('FILE_STORED', {
             filePath: finalPath,
             fileSize,
             associationId: ctx.associationId,
@@ -895,7 +933,41 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
             callingAE: data.callingAE,
             calledAE: data.calledAE,
             source: data.source,
-            instance: openResult.value,
+        });
+
+        this.emitInstanceReceived(finalPath, fileSize, data, ctx);
+    }
+
+    /** Parses a DICOM file and emits INSTANCE_RECEIVED or error. */
+    private emitInstanceReceived(
+        filePath: string,
+        fileSize: number,
+        data: { callingAE: string; calledAE: string; source: string },
+        ctx: AssociationContext
+    ): void {
+        void DicomInstance.open(filePath).then(openResult => {
+            if (!openResult.ok) {
+                this.emit('error', {
+                    error: openResult.error,
+                    filePath,
+                    associationId: ctx.associationId,
+                    associationDir: ctx.associationDir,
+                    callingAE: data.callingAE,
+                    calledAE: data.calledAE,
+                    source: data.source,
+                });
+                return;
+            }
+            this.emit('INSTANCE_RECEIVED', {
+                filePath,
+                fileSize,
+                associationId: ctx.associationId,
+                associationDir: ctx.associationDir,
+                callingAE: data.callingAE,
+                calledAE: data.calledAE,
+                source: data.source,
+                instance: openResult.value,
+            });
         });
     }
 
@@ -1012,10 +1084,16 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
     }
 }
 
+/** @deprecated Use ReceiverFileStoredData instead. */
+type ReceiverFileData = ReceiverFileStoredData;
+
 export { DicomReceiver };
 export type {
     DicomReceiverOptions,
     DicomReceiverEventMap,
+    ReceiverFileReceivedData,
+    ReceiverFileStoredData,
+    ReceiverInstanceData,
     ReceiverFileData,
     ReceiverAssociationData,
     ReceiverErrorData,

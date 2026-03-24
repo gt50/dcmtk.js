@@ -2,7 +2,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'node:events';
 import { DicomReceiver } from './DicomReceiver';
 import type {
-    ReceiverFileData,
+    ReceiverFileReceivedData,
+    ReceiverFileStoredData,
+    ReceiverInstanceData,
     ReceiverAssociationData,
     ReceiverErrorData,
     PoolAssociationReceivedData,
@@ -419,7 +421,7 @@ describe('DicomReceiver', () => {
     // -----------------------------------------------------------------------
 
     describe('worker event wiring', () => {
-        it('emits FILE_RECEIVED when worker receives a file', async () => {
+        it('emits FILE_RECEIVED, FILE_STORED, and INSTANCE_RECEIVED for each file', async () => {
             const result = DicomReceiver.create({
                 port: 4242,
                 storageDir: '/data',
@@ -429,20 +431,24 @@ describe('DicomReceiver', () => {
             if (!result.ok) return;
 
             const receiver = result.value;
-            const fileEvents: ReceiverFileData[] = [];
-            receiver.onFileReceived(data => fileEvents.push(data));
+            const fileReceivedEvents: ReceiverFileReceivedData[] = [];
+            const fileStoredEvents: ReceiverFileStoredData[] = [];
+            const instanceEvents: ReceiverInstanceData[] = [];
+            const errorEvents: ReceiverErrorData[] = [];
+            receiver.onFileReceived(data => fileReceivedEvents.push(data));
+            receiver.onFileStored(data => fileStoredEvents.push(data));
+            receiver.onInstanceReceived(data => instanceEvents.push(data));
+            receiver.onEvent('error', data => errorEvents.push(data));
 
             await receiver.start();
             const worker = createdFakes[0];
             if (worker === undefined) return;
 
-            // Trigger a connection to make worker busy
             if (connectionHandler !== undefined) {
                 connectionHandler(createMockSocket());
                 await delay(50);
             }
 
-            // Simulate FILE_RECEIVED from the worker dcmrecv
             worker.emit('FILE_RECEIVED', {
                 filePath: '/tmp/dcmrecv-pool-50001-1234/file1.dcm',
                 associationId: 'assoc-1',
@@ -451,14 +457,21 @@ describe('DicomReceiver', () => {
                 source: '192.168.1.1:5000',
             });
 
-            // Wait for async file move
-            await delay(50);
+            await delay(100);
 
-            expect(fileEvents).toHaveLength(1);
-            expect(fileEvents[0]?.associationId).toBe('assoc-1');
-            expect(fileEvents[0]?.callingAE).toBe('SCU1');
-            expect(fileEvents[0]?.instance).toBe(mockDicomInstance);
-            expect(fileEvents[0]?.fileSize).toBe(524288);
+            // FILE_RECEIVED fires immediately (raw from dcmrecv)
+            expect(fileReceivedEvents).toHaveLength(1);
+            expect(fileReceivedEvents[0]?.associationId).toBe('assoc-1');
+
+            // FILE_STORED fires after move + stat
+            expect(fileStoredEvents).toHaveLength(1);
+            expect(fileStoredEvents[0]?.fileSize).toBe(524288);
+
+            // INSTANCE_RECEIVED fires after DicomInstance.open
+            expect(instanceEvents).toHaveLength(1);
+            expect(instanceEvents[0]?.instance).toBe(mockDicomInstance);
+
+            expect(errorEvents).toHaveLength(0);
 
             await receiver.stop();
         });
@@ -554,16 +567,18 @@ describe('DicomReceiver', () => {
             await receiver.stop();
         });
 
-        it('emits error (not FILE_RECEIVED) when DicomInstance.open fails', async () => {
+        it('emits FILE_STORED but error (not INSTANCE_RECEIVED) when DicomInstance.open fails', async () => {
             mockOpen.mockResolvedValueOnce({ ok: false, error: new Error('Failed to parse DICOM') });
 
             const result = DicomReceiver.create({ port: 4242, storageDir: '/data', minPoolSize: 1, maxPoolSize: 1 });
             if (!result.ok) return;
 
             const receiver = result.value;
-            const fileEvents: ReceiverFileData[] = [];
+            const storedEvents: ReceiverFileStoredData[] = [];
+            const instanceEvents: ReceiverInstanceData[] = [];
             const errorEvents: ReceiverErrorData[] = [];
-            receiver.onFileReceived(data => fileEvents.push(data));
+            receiver.onFileStored(data => storedEvents.push(data));
+            receiver.onInstanceReceived(data => instanceEvents.push(data));
             receiver.onEvent('error', data => errorEvents.push(data));
 
             await receiver.start();
@@ -582,25 +597,28 @@ describe('DicomReceiver', () => {
                 calledAE: 'DCMRECV',
                 source: '192.168.1.1:5000',
             });
-            await delay(50);
+            await delay(100);
 
-            expect(fileEvents).toHaveLength(0);
+            // FILE_STORED fires (file is on disk)
+            expect(storedEvents).toHaveLength(1);
+            // INSTANCE_RECEIVED does NOT fire (parse failed)
+            expect(instanceEvents).toHaveLength(0);
+            // Error event fires with the parse failure
             const fileError = errorEvents.find(e => e.filePath !== undefined);
             expect(fileError).toBeDefined();
             expect(fileError?.error.message).toBe('Failed to parse DICOM');
-            expect(fileError?.associationId).toBe('assoc-1');
 
             await receiver.stop();
         });
 
-        it('emits FILE_RECEIVED for all 4 files when 2 unique instances are each sent twice (regression: #23)', async () => {
+        it('emits FILE_STORED for all 4 files when 2 unique instances are each sent twice (regression: #23)', async () => {
             const result = DicomReceiver.create({ port: 4242, storageDir: '/data', minPoolSize: 1, maxPoolSize: 1 });
             if (!result.ok) return;
 
             const receiver = result.value;
-            const fileEvents: ReceiverFileData[] = [];
+            const fileEvents: ReceiverFileStoredData[] = [];
             const errorEvents: ReceiverErrorData[] = [];
-            receiver.onFileReceived(data => fileEvents.push(data));
+            receiver.onFileStored(data => fileEvents.push(data));
             receiver.onEvent('error', data => errorEvents.push(data));
 
             await receiver.start();

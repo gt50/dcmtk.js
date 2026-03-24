@@ -361,6 +361,9 @@ export { DicomReceiver } from './servers/DicomReceiver';
 export type {
     DicomReceiverOptions,
     DicomReceiverEventMap,
+    ReceiverFileReceivedData,
+    ReceiverFileStoredData,
+    ReceiverInstanceData,
     ReceiverFileData,
     ReceiverAssociationData,
     ReceiverErrorData,
