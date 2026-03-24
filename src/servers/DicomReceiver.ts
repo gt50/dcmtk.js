@@ -726,7 +726,7 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
         this.wireOutputCapture(worker);
     }
 
-    /** Wires FILE_RECEIVED from dcmrecv worker to handleFileReceived. */
+    /** Wires FILE_RECEIVED from dcmrecv worker — files are processed serially per worker. */
     private wireFileReceived(worker: WorkerInfo): void {
         worker.dcmrecv.onFileReceived(data => {
             // Capture association context SYNCHRONOUSLY — this runs inside processLines,
@@ -747,7 +747,6 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
 
             const promise = this.handleFileReceived(worker, data, assocId, assocDir);
             worker.pendingFiles.push(promise);
-            void promise.finally(() => removePending(worker.pendingFiles, promise));
         });
     }
 
@@ -825,10 +824,7 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
 
     /** Awaits ALL pending file operations, emits ASSOCIATION_COMPLETE, resets worker state. */
     private async finalizeAssociation(worker: WorkerInfo, data: AssociationCompleteData): Promise<void> {
-        // Drain loop: new FILE_RECEIVED handlers may be pushed to pendingFiles
-        // after Promise.all captures the array (stdout pipe chunking). Loop until
-        // truly empty so resetWorker never runs with in-flight file operations.
-        while (worker.pendingFiles.length > 0) {
+        if (worker.pendingFiles.length > 0) {
             await Promise.all(worker.pendingFiles);
         }
 
@@ -1007,13 +1003,6 @@ async function removeDirSafe(dirPath: string): Promise<void> {
     } catch {
         /* best-effort cleanup */
     }
-}
-
-/** Removes a settled promise from the pending-files tracking array. */
-function removePending(arr: Promise<void>[], promise: Promise<void>): void {
-    const idx = arr.indexOf(promise);
-    // splice returns removed elements (already settled) — safe to discard
-    if (idx !== -1) void arr.splice(idx, 1);
 }
 
 /** Promise-based delay. */
