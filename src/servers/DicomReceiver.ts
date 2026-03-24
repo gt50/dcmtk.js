@@ -52,6 +52,7 @@ interface PoolStatus {
 /** Data emitted with FILE_RECEIVED events. */
 interface ReceiverFileData {
     readonly filePath: string;
+    readonly fileSize: number;
     readonly associationId: string;
     readonly associationDir: string;
     readonly callingAE: string;
@@ -612,7 +613,7 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
             acseTimeout: this.options.acseTimeout,
             dimseTimeout: this.options.dimseTimeout,
             maxPdu: this.options.maxPdu,
-            filenameMode: this.options.filenameMode,
+            filenameMode: this.options.filenameMode ?? 'unique',
             filenameExtension: this.options.filenameExtension,
             storageMode: this.options.storageMode,
         });
@@ -744,8 +745,9 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
 
         const moveResult = await moveFile(srcPath, destPath);
         const finalPath = moveResult.ok ? destPath : srcPath;
+        const fileSize = await statFileSafe(finalPath);
         worker.files.push(finalPath);
-        worker.fileSizes.push(await statFileSafe(finalPath));
+        worker.fileSizes.push(fileSize);
 
         const openResult = await DicomInstance.open(finalPath);
         if (!openResult.ok) {
@@ -763,6 +765,7 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
 
         this.emit('FILE_RECEIVED', {
             filePath: finalPath,
+            fileSize,
             associationId: assocId,
             associationDir: assocDir,
             callingAE: data.callingAE,

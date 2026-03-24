@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.9.1] - 2026-03-24
+
+### Changed
+
+- **DicomReceiver `filenameMode` defaults to `'unique'`** — dcmrecv's default mode (`'default'`) names files by SOP Instance UID, which causes silent data loss when a remote SCU sends duplicate SOP Instance UIDs within a single association. The second store overwrites the first file on disk while concurrent `handleFileReceived` handlers race on the same path, causing files that dcmrecv successfully received to never be delivered to the application. The `'unique'` mode generates a fresh UID-based filename for every C-STORE, eliminating the overwrite race without modifying any DICOM data. **It is strongly recommended to keep this default.** (#23)
+
+### Added
+
+- **`fileSize` on `FILE_RECEIVED` event** — `ReceiverFileData` now includes `fileSize: number` (bytes), available without a separate `stat` call
+- **`DicomHammer` load testing tool** — generates N copies of a template DICOM file with unique UIDs and sends them to a target SCP with configurable concurrency; reports throughput (files/sec, bytes/sec) (#22)
+- **`charsetAssume` option** — exposed on `dcm2xml`, `dcm2json`, and `DicomInstance.open()` for files missing SpecificCharacterSet (maps to dcm2xml `+Ca` flag) (#20)
+
+### Fixed
+
+- **dcm2json compressed pixel data** — fallback direct path now uses `+b +bd <tmpdir>` to redirect bulk data to a temp directory, preventing exit code 81 failures on compressed DICOM files and "Unable to create bulk data file" errors in read-only containers (#21)
+- **fast-xml-parser** updated 5.4.1 → 5.5.8 (CVE-2026-26278)
+
 ## [0.8.0] - 2026-03-13
 
 ### Added

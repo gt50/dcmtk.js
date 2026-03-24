@@ -458,6 +458,7 @@ describe('DicomReceiver', () => {
             expect(fileEvents[0]?.associationId).toBe('assoc-1');
             expect(fileEvents[0]?.callingAE).toBe('SCU1');
             expect(fileEvents[0]?.instance).toBe(mockDicomInstance);
+            expect(fileEvents[0]?.fileSize).toBe(524288);
 
             await receiver.stop();
         });
@@ -795,7 +796,7 @@ describe('DicomReceiver', () => {
             // eslint-disable-next-line @typescript-eslint/unbound-method
             const mockCreate = vi.mocked(Dcmrecv.create);
             const lastCall = mockCreate.mock.calls[mockCreate.mock.calls.length - 1]?.[0];
-            expect(lastCall?.filenameMode).toBeUndefined();
+            expect(lastCall?.filenameMode).toBe('unique');
             expect(lastCall?.filenameExtension).toBeUndefined();
             expect(lastCall?.storageMode).toBeUndefined();
 
