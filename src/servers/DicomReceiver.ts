@@ -11,18 +11,19 @@
 
 import * as net from 'node:net';
 import * as path from 'node:path';
-import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
+import { setTimeout as delay } from 'node:timers/promises';
 import { EventEmitter } from 'node:events';
 import { z } from 'zod';
 import type { Result } from '../types';
 import { ok, err } from '../types';
 import { isSafePath, isValidAETitle } from '../patterns';
 import { createValidationError } from '../tools/_toolError';
+import { ensureDirectory, moveFile, statFileSafe, removeDirSafe } from '../utils';
 import { Dcmrecv } from './Dcmrecv';
 import type { FilenameModeValue, StorageModeValue } from './Dcmrecv';
 import type { AssociationCompleteData } from '../events/dcmrecv';
-import { DicomInstance } from '../dicom/DicomInstance';
+import { DicomInstance } from '../dicom';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -187,28 +188,130 @@ const DicomReceiverOptionsSchema = z
     });
 
 // ---------------------------------------------------------------------------
-// Internal worker type
+// Internal types
 // ---------------------------------------------------------------------------
 
-interface WorkerInfo {
+/** Frozen context for a single association, captured synchronously at connection time. */
+interface AssociationContext {
+    readonly associationId: string;
+    readonly associationDir: string;
+    readonly startAt: number;
+}
+
+// ---------------------------------------------------------------------------
+// Internal Worker class
+// ---------------------------------------------------------------------------
+
+/** Encapsulates a single Dcmrecv worker and its per-association state. */
+class Worker {
     readonly dcmrecv: Dcmrecv;
     readonly port: number;
     readonly tempDir: string;
-    state: 'idle' | 'busy';
-    associationId: string | undefined;
-    associationDir: string | undefined;
-    /** Files moved to the association dir during the current association. */
-    files: string[];
+    private _state: 'idle' | 'busy' = 'idle';
+    private _context: AssociationContext | undefined;
+    private readonly _pending = new Set<Promise<void>>();
+    private readonly _files: string[] = [];
+    private readonly _fileSizes: number[] = [];
+    private readonly _outputLines: string[] = [];
+    private _remoteSocket: net.Socket | undefined;
+    private _workerSocket: net.Socket | undefined;
+
+    constructor(dcmrecv: Dcmrecv, port: number, tempDir: string) {
+        this.dcmrecv = dcmrecv;
+        this.port = port;
+        this.tempDir = tempDir;
+    }
+
+    /** Current worker state. */
+    get state(): 'idle' | 'busy' {
+        return this._state;
+    }
+
+    /** Active association context, or undefined when idle. */
+    get context(): AssociationContext | undefined {
+        return this._context;
+    }
+
+    /** Files moved to the association directory during the current association. */
+    get files(): readonly string[] {
+        return this._files;
+    }
+
     /** Byte sizes parallel to files[], for transfer stats. */
-    fileSizes: number[];
+    get fileSizes(): readonly number[] {
+        return this._fileSizes;
+    }
+
     /** Captured output lines during the current association. */
-    outputLines: string[];
-    /** Promises for in-flight handleFileReceived calls. */
-    pendingFiles: Promise<void>[];
-    /** Timestamp when the TCP connection was routed to this worker. */
-    startAt: number | undefined;
-    remoteSocket: net.Socket | undefined;
-    workerSocket: net.Socket | undefined;
+    get outputLines(): readonly string[] {
+        return this._outputLines;
+    }
+
+    /** Marks the worker busy with a new association context. */
+    beginAssociation(ctx: AssociationContext): void {
+        this._state = 'busy';
+        this._context = ctx;
+        this._files.length = 0;
+        this._fileSizes.length = 0;
+        this._outputLines.length = 0;
+        this._pending.clear();
+    }
+
+    /** Returns the worker to idle and clears all association state. */
+    endAssociation(): void {
+        this._state = 'idle';
+        this._context = undefined;
+        this._files.length = 0;
+        this._fileSizes.length = 0;
+        this._outputLines.length = 0;
+        this._pending.clear();
+        this._remoteSocket = undefined;
+        this._workerSocket = undefined;
+    }
+
+    /** Tracks an in-flight file handling promise; auto-removes on completion. */
+    trackFile(promise: Promise<void>): void {
+        this._pending.add(promise);
+        void promise.finally(() => {
+            this._pending.delete(promise);
+        });
+    }
+
+    /** Records a successfully received file path and its size. */
+    recordFile(filePath: string, size: number): void {
+        this._files.push(filePath);
+        this._fileSizes.push(size);
+    }
+
+    /** Awaits all in-flight file handling promises. */
+    async drainPendingFiles(): Promise<void> {
+        if (this._pending.size > 0) {
+            await Promise.all(this._pending);
+        }
+    }
+
+    /** Appends a line to the output buffer, respecting the cap. */
+    captureOutput(text: string): void {
+        if (this._outputLines.length < MAX_OUTPUT_LINES_PER_ASSOCIATION) {
+            this._outputLines.push(text);
+        }
+    }
+
+    /** Stores the remote and worker sockets for later cleanup. */
+    setSockets(remote: net.Socket, worker: net.Socket): void {
+        this._remoteSocket = remote;
+        this._workerSocket = worker;
+    }
+
+    /** Destroys both sockets if they exist and are not already destroyed. */
+    destroySockets(): void {
+        if (this._remoteSocket !== undefined && !this._remoteSocket.destroyed) {
+            this._remoteSocket.destroy();
+        }
+        if (this._workerSocket !== undefined && !this._workerSocket.destroyed) {
+            this._workerSocket.destroy();
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -232,6 +335,19 @@ function allocatePort(): Promise<Result<number>> {
             resolve(err(new Error(`Port allocation failed: ${e.message}`)));
         });
     });
+}
+
+// ---------------------------------------------------------------------------
+// Trivial helpers
+// ---------------------------------------------------------------------------
+
+/** Sums an array of numbers iteratively. */
+function sumArray(arr: readonly number[]): number {
+    let total = 0;
+    for (let i = 0; i < arr.length; i++) {
+        total += arr[i] ?? 0;
+    }
+    return total;
 }
 
 // ---------------------------------------------------------------------------
@@ -267,7 +383,7 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
     private readonly minPoolSize: number;
     private readonly maxPoolSize: number;
     private readonly connectionTimeoutMs: number;
-    private readonly workers: Map<number, WorkerInfo> = new Map();
+    private readonly workers: Map<number, Worker> = new Map();
     private tcpServer: net.Server | undefined;
     private associationCounter = 0;
     private started = false;
@@ -277,9 +393,6 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
     private constructor(options: DicomReceiverOptions) {
         super();
         this.setMaxListeners(20);
-        this.on('error', () => {
-            /* prevent Node.js uncaught exception on unhandled 'error' */
-        });
         this.options = options;
         this.minPoolSize = options.minPoolSize ?? DEFAULT_MIN_POOL_SIZE;
         this.maxPoolSize = options.maxPoolSize ?? DEFAULT_MAX_POOL_SIZE;
@@ -518,21 +631,19 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
             return;
         }
 
-        worker.state = 'busy';
-        worker.associationId = associationId;
-        worker.associationDir = associationDir;
-        worker.files = [];
-        worker.fileSizes = [];
-        worker.outputLines = [];
-        worker.pendingFiles = [];
-        worker.startAt = Date.now();
+        const ctx: AssociationContext = {
+            associationId,
+            associationDir,
+            startAt: Date.now(),
+        };
 
+        worker.beginAssociation(ctx);
         this.pipeConnection(worker, remoteSocket);
         void this.replenishPool();
     }
 
     /** Finds an idle worker, retrying up to connectionTimeoutMs. */
-    private async findIdleWorker(): Promise<WorkerInfo | undefined> {
+    private async findIdleWorker(): Promise<Worker | undefined> {
         const idle = this.getIdleWorker();
         if (idle !== undefined) return idle;
 
@@ -548,7 +659,7 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
     }
 
     /** Returns the first idle worker, or undefined. */
-    private getIdleWorker(): WorkerInfo | undefined {
+    private getIdleWorker(): Worker | undefined {
         for (const w of this.workers.values()) {
             if (w.state === 'idle') return w;
         }
@@ -556,11 +667,10 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
     }
 
     /** Pipes remote socket bidirectionally to the worker's port. */
-    private pipeConnection(worker: WorkerInfo, remoteSocket: net.Socket): void {
+    private pipeConnection(worker: Worker, remoteSocket: net.Socket): void {
         const workerSocket = net.createConnection({ port: worker.port, host: '127.0.0.1' });
 
-        worker.remoteSocket = remoteSocket;
-        worker.workerSocket = workerSocket;
+        worker.setSockets(remoteSocket, workerSocket);
 
         const cleanup = (): void => {
             remoteSocket.unpipe(workerSocket);
@@ -591,7 +701,7 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
 
     /** Spawns `count` new workers and adds them to the pool. */
     private async spawnWorkers(count: number): Promise<Result<void>> {
-        const promises: Promise<Result<WorkerInfo>>[] = [];
+        const promises: Promise<Result<Worker>>[] = [];
         for (let i = 0; i < count; i++) {
             promises.push(this.spawnWorker());
         }
@@ -620,7 +730,7 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
     }
 
     /** Spawns a single Dcmrecv worker with an ephemeral port. */
-    private async spawnWorker(): Promise<Result<WorkerInfo>> {
+    private async spawnWorker(): Promise<Result<Worker>> {
         const portResult = await allocatePort();
         if (!portResult.ok) return portResult;
         const port = portResult.value;
@@ -633,21 +743,7 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
         if (!createResult.ok) return createResult;
 
         const dcmrecv = createResult.value;
-        const worker: WorkerInfo = {
-            dcmrecv,
-            port,
-            tempDir,
-            state: 'idle',
-            associationId: undefined,
-            associationDir: undefined,
-            files: [],
-            fileSizes: [],
-            outputLines: [],
-            pendingFiles: [],
-            startAt: undefined,
-            remoteSocket: undefined,
-            workerSocket: undefined,
-        };
+        const worker = new Worker(dcmrecv, port, tempDir);
 
         this.wireWorkerEvents(worker);
         const startResult = await dcmrecv.start();
@@ -659,14 +755,9 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
         return ok(worker);
     }
 
-    /** Stops a single worker: stop process, clean temp dir, remove from pool. */
-    private async stopWorker(worker: WorkerInfo): Promise<void> {
-        if (worker.remoteSocket !== undefined && !worker.remoteSocket.destroyed) {
-            worker.remoteSocket.destroy();
-        }
-        if (worker.workerSocket !== undefined && !worker.workerSocket.destroyed) {
-            worker.workerSocket.destroy();
-        }
+    /** Stops a single worker: destroy sockets, stop process, clean temp dir, remove from pool. */
+    private async stopWorker(worker: Worker): Promise<void> {
+        worker.destroySockets();
         await worker.dcmrecv.stop();
         worker.dcmrecv[Symbol.dispose]();
         await removeDirSafe(worker.tempDir);
@@ -682,7 +773,7 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
 
         if (toSpawn <= 0) return;
 
-        const promises: Promise<Result<WorkerInfo>>[] = [];
+        const promises: Promise<Result<Worker>>[] = [];
         for (let i = 0; i < toSpawn; i++) {
             promises.push(this.spawnWorker());
         }
@@ -696,7 +787,7 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
 
     /** Stops excess idle workers when idle count > minPoolSize + 2. */
     private async scaleDown(): Promise<void> {
-        const idleWorkers: WorkerInfo[] = [];
+        const idleWorkers: Worker[] = [];
         for (const w of this.workers.values()) {
             if (w.state === 'idle') idleWorkers.push(w);
         }
@@ -716,7 +807,7 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
     // -----------------------------------------------------------------------
 
     /** Wires all events on a worker: file handling, association lifecycle, output capture. */
-    private wireWorkerEvents(worker: WorkerInfo): void {
+    private wireWorkerEvents(worker: Worker): void {
         this.wireFileReceived(worker);
         this.wireAssociationComplete(worker);
         this.wireAssociationReceived(worker);
@@ -726,15 +817,11 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
         this.wireOutputCapture(worker);
     }
 
-    /** Wires FILE_RECEIVED from dcmrecv worker — files are processed serially per worker. */
-    private wireFileReceived(worker: WorkerInfo): void {
+    /** Wires FILE_RECEIVED from dcmrecv worker — captures context synchronously. */
+    private wireFileReceived(worker: Worker): void {
         worker.dcmrecv.onFileReceived(data => {
-            // Capture association context SYNCHRONOUSLY — this runs inside processLines,
-            // before any async work or resetWorker can interfere.
-            const assocId = worker.associationId;
-            const assocDir = worker.associationDir;
-
-            if (assocDir === undefined || assocId === undefined) {
+            const ctx = worker.context;
+            if (ctx === undefined) {
                 this.emit('error', {
                     error: new Error(`DicomReceiver: FILE_RECEIVED with no active association (worker state: ${worker.state})`),
                     filePath: data.filePath,
@@ -745,27 +832,26 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
                 return;
             }
 
-            const promise = this.handleFileReceived(worker, data, assocId, assocDir);
-            worker.pendingFiles.push(promise);
+            const promise = this.handleFileReceived(worker, data, ctx);
+            worker.trackFile(promise);
         });
     }
 
     /** Moves a received file, opens it as DicomInstance, and emits FILE_RECEIVED. */
     private async handleFileReceived(
-        worker: WorkerInfo,
+        worker: Worker,
         data: { filePath: string; callingAE: string; calledAE: string; source: string },
-        assocId: string,
-        assocDir: string
+        ctx: AssociationContext
     ): Promise<void> {
         try {
-            await this.moveAndEmitFile(worker, data, assocId, assocDir);
+            await this.moveAndEmitFile(worker, data, ctx);
         } catch (thrown: unknown) {
             const error = thrown instanceof Error ? thrown : new Error(String(thrown));
             this.emit('error', {
                 error,
                 filePath: data.filePath,
-                associationId: assocId,
-                associationDir: assocDir,
+                associationId: ctx.associationId,
+                associationDir: ctx.associationDir,
                 callingAE: data.callingAE,
                 calledAE: data.calledAE,
                 source: data.source,
@@ -775,27 +861,25 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
 
     /** Inner handler: move file, parse DICOM, emit FILE_RECEIVED or error. */
     private async moveAndEmitFile(
-        worker: WorkerInfo,
+        worker: Worker,
         data: { filePath: string; callingAE: string; calledAE: string; source: string },
-        assocId: string,
-        assocDir: string
+        ctx: AssociationContext
     ): Promise<void> {
         const srcPath = data.filePath;
-        const destPath = path.join(assocDir, path.basename(srcPath));
+        const destPath = path.join(ctx.associationDir, path.basename(srcPath));
 
         const moveResult = await moveFile(srcPath, destPath);
         const finalPath = moveResult.ok ? destPath : srcPath;
         const fileSize = await statFileSafe(finalPath);
-        worker.files.push(finalPath);
-        worker.fileSizes.push(fileSize);
+        worker.recordFile(finalPath, fileSize);
 
         const openResult = await DicomInstance.open(finalPath);
         if (!openResult.ok) {
             this.emit('error', {
                 error: openResult.error,
                 filePath: finalPath,
-                associationId: assocId,
-                associationDir: assocDir,
+                associationId: ctx.associationId,
+                associationDir: ctx.associationDir,
                 callingAE: data.callingAE,
                 calledAE: data.calledAE,
                 source: data.source,
@@ -806,8 +890,8 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
         this.emit('FILE_RECEIVED', {
             filePath: finalPath,
             fileSize,
-            associationId: assocId,
-            associationDir: assocDir,
+            associationId: ctx.associationId,
+            associationDir: ctx.associationDir,
             callingAE: data.callingAE,
             calledAE: data.calledAE,
             source: data.source,
@@ -816,32 +900,30 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
     }
 
     /** Returns worker to idle pool on association complete, emits summary. */
-    private wireAssociationComplete(worker: WorkerInfo): void {
+    private wireAssociationComplete(worker: Worker): void {
         worker.dcmrecv.onAssociationComplete((data: AssociationCompleteData) => {
             void this.finalizeAssociation(worker, data);
         });
     }
 
     /** Awaits ALL pending file operations, emits ASSOCIATION_COMPLETE, resets worker state. */
-    private async finalizeAssociation(worker: WorkerInfo, data: AssociationCompleteData): Promise<void> {
-        if (worker.pendingFiles.length > 0) {
-            await Promise.all(worker.pendingFiles);
-        }
-
+    private async finalizeAssociation(worker: Worker, data: AssociationCompleteData): Promise<void> {
+        await worker.drainPendingFiles();
         this.emitAssociationComplete(worker, data);
-        this.resetWorker(worker);
+        worker.endAssociation();
         void this.scaleDown();
     }
 
     /** Emits the ASSOCIATION_COMPLETE event with transfer stats. */
-    private emitAssociationComplete(worker: WorkerInfo, data: AssociationCompleteData): void {
-        const assocId = worker.associationId ?? data.associationId;
-        const assocDir = worker.associationDir ?? '';
+    private emitAssociationComplete(worker: Worker, data: AssociationCompleteData): void {
+        const ctx = worker.context;
+        const assocId = ctx?.associationId ?? data.associationId;
+        const assocDir = ctx?.associationDir ?? '';
+        const startAt = ctx?.startAt ?? Date.now();
         const files = [...worker.files];
         const output = [...worker.outputLines];
 
         const endAt = Date.now();
-        const startAt = worker.startAt ?? endAt;
         const totalBytes = sumArray(worker.fileSizes);
         const elapsedMs = endAt - startAt;
         const bytesPerSecond = elapsedMs > 0 ? Math.round((totalBytes / elapsedMs) * 1000) : 0;
@@ -863,25 +945,11 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
         });
     }
 
-    /** Resets worker state to idle after an association completes. */
-    private resetWorker(worker: WorkerInfo): void {
-        worker.state = 'idle';
-        worker.associationId = undefined;
-        worker.associationDir = undefined;
-        worker.files = [];
-        worker.fileSizes = [];
-        worker.outputLines = [];
-        worker.pendingFiles = [];
-        worker.startAt = undefined;
-        worker.remoteSocket = undefined;
-        worker.workerSocket = undefined;
-    }
-
     /** Bubbles ASSOCIATION_RECEIVED from dcmrecv worker. */
-    private wireAssociationReceived(worker: WorkerInfo): void {
+    private wireAssociationReceived(worker: Worker): void {
         worker.dcmrecv.onEvent('ASSOCIATION_RECEIVED', (data: { callingAE: string; calledAE: string; source: string }) => {
             this.emit('ASSOCIATION_RECEIVED', {
-                associationId: worker.associationId ?? '',
+                associationId: worker.context?.associationId ?? '',
                 callingAE: data.callingAE,
                 calledAE: data.calledAE,
                 source: data.source,
@@ -890,26 +958,26 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
     }
 
     /** Bubbles C_STORE_REQUEST from dcmrecv worker. */
-    private wireCStoreRequest(worker: WorkerInfo): void {
+    private wireCStoreRequest(worker: Worker): void {
         worker.dcmrecv.onEvent('C_STORE_REQUEST', (data: { raw: string }) => {
             this.emit('C_STORE_REQUEST', {
-                associationId: worker.associationId ?? '',
+                associationId: worker.context?.associationId ?? '',
                 raw: data.raw,
             });
         });
     }
 
     /** Bubbles ECHO_REQUEST from dcmrecv worker. */
-    private wireEchoRequest(worker: WorkerInfo): void {
+    private wireEchoRequest(worker: Worker): void {
         worker.dcmrecv.onEvent('ECHO_REQUEST', () => {
             this.emit('ECHO_REQUEST', {
-                associationId: worker.associationId ?? '',
+                associationId: worker.context?.associationId ?? '',
             });
         });
     }
 
     /** Bubbles REFUSING_ASSOCIATION from dcmrecv worker. */
-    private wireRefusingAssociation(worker: WorkerInfo): void {
+    private wireRefusingAssociation(worker: Worker): void {
         worker.dcmrecv.onEvent('REFUSING_ASSOCIATION', (data: { reason: string }) => {
             this.emit('REFUSING_ASSOCIATION', {
                 reason: data.reason,
@@ -918,10 +986,10 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
     }
 
     /** Captures worker output lines during busy associations. */
-    private wireOutputCapture(worker: WorkerInfo): void {
+    private wireOutputCapture(worker: Worker): void {
         worker.dcmrecv.on('line', ({ text }: { text: string }) => {
-            if (worker.state === 'busy' && worker.outputLines.length < MAX_OUTPUT_LINES_PER_ASSOCIATION) {
-                worker.outputLines.push(text);
+            if (worker.state === 'busy') {
+                worker.captureOutput(text);
             }
         });
     }
@@ -942,74 +1010,6 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
         };
         signal.addEventListener('abort', this.abortHandler, { once: true });
     }
-}
-
-// ---------------------------------------------------------------------------
-// File system helpers
-// ---------------------------------------------------------------------------
-
-/** Ensures a directory exists, creating it recursively if needed. */
-async function ensureDirectory(dirPath: string): Promise<Result<void>> {
-    try {
-        await fs.mkdir(dirPath, { recursive: true });
-        return ok(undefined);
-    } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : String(e);
-        return err(new Error(`Failed to create directory ${dirPath}: ${msg}`));
-    }
-}
-
-/** Moves a file from src to dest, falling back to copy+delete on cross-device. */
-async function moveFile(src: string, dest: string): Promise<Result<void>> {
-    try {
-        await fs.rename(src, dest);
-        return ok(undefined);
-    } catch {
-        try {
-            await fs.copyFile(src, dest);
-            await fs.unlink(src);
-            return ok(undefined);
-        } catch (e: unknown) {
-            const msg = e instanceof Error ? e.message : String(e);
-            return err(new Error(`Failed to move file ${src} → ${dest}: ${msg}`));
-        }
-    }
-}
-
-/** Returns the file size in bytes, or 0 on error. */
-async function statFileSafe(filePath: string): Promise<number> {
-    try {
-        const stat = await fs.stat(filePath);
-        return stat.size;
-    } catch {
-        /* v8 ignore next */
-        return 0;
-    }
-}
-
-/** Sums an array of numbers iteratively. */
-function sumArray(arr: readonly number[]): number {
-    let total = 0;
-    for (let i = 0; i < arr.length; i++) {
-        total += arr[i] ?? 0;
-    }
-    return total;
-}
-
-/** Removes a directory recursively, ignoring errors. */
-async function removeDirSafe(dirPath: string): Promise<void> {
-    try {
-        await fs.rm(dirPath, { recursive: true, force: true });
-    } catch {
-        /* best-effort cleanup */
-    }
-}
-
-/** Promise-based delay. */
-function delay(ms: number): Promise<void> {
-    return new Promise(resolve => {
-        setTimeout(resolve, ms);
-    });
 }
 
 export { DicomReceiver };

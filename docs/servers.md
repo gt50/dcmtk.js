@@ -167,6 +167,12 @@ if (!result.ok) {
 }
 const receiver = result.value;
 
+// REQUIRED: register an error listener before start().
+// Without this, unhandled 'error' events will crash the process.
+receiver.onEvent('error', data => {
+    console.error(`Error: ${data.error.message}`, data.filePath ?? '');
+});
+
 receiver.onFileReceived(data => {
     console.log(`File: ${data.filePath} (patient: ${data.instance.patientName})`);
 });

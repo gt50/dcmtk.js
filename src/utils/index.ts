@@ -11,3 +11,4 @@ export { batch } from './batch';
 export type { BatchOptions, BatchResult } from './batch';
 export { retry } from './retry';
 export type { RetryOptions } from './retry';
+export { ensureDirectory, moveFile, statFileSafe, removeDirSafe } from './fs';

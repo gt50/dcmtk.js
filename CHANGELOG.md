@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.10.0] - 2026-03-24
+
+### Changed
+
+- **DicomReceiver internals rewritten** — same public API, clean internals (#23):
+    - **Worker class** replaces mutable `WorkerInfo` interface — encapsulated state with proper getters and lifecycle methods
+    - **Immutable AssociationContext** — frozen context object created once per connection, passed to all handlers. Eliminates race conditions from reading stale mutable worker state in async handlers
+    - **Set-based pending file tracking** — promises auto-remove via `.finally()`, replacing the fragile array approach that caused infinite loops and stale references
+    - **Synchronous context capture** in event listeners — association context read before any async work
+    - **Error swallower removed** — consumers must register an `'error'` listener. Unhandled errors now surface immediately instead of being silently eaten
+    - **Extracted filesystem utilities** to `src/utils/fs.ts` — `ensureDirectory`, `moveFile`, `statFileSafe`, `removeDirSafe` are now shared
+    - **Replaced hand-rolled `delay()`** with `import { setTimeout as delay } from 'node:timers/promises'`
+
+### Added
+
+- **`src/utils/fs.ts`** — shared filesystem utilities: `ensureDirectory`, `moveFile`, `statFileSafe`, `removeDirSafe`
+
+### Fixed
+
+- **DicomReceiver infinite while loop** — `finalizeAssociation` used a `while (pendingFiles.length > 0)` loop that never terminated because promises were never removed from the array, starving the Node.js event loop with infinite microtasks (#23)
+- **DicomReceiver silent file loss** — error events from `handleFileReceived` were swallowed by a default `this.on('error', () => {})` handler, making file processing failures invisible to consumers (#23)
+
 ## [0.9.1] - 2026-03-24
 
 ### Changed

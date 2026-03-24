@@ -593,6 +593,58 @@ describe('DicomReceiver', () => {
             await receiver.stop();
         });
 
+        it('emits FILE_RECEIVED for all 4 files when 2 unique instances are each sent twice (regression: #23)', async () => {
+            const result = DicomReceiver.create({ port: 4242, storageDir: '/data', minPoolSize: 1, maxPoolSize: 1 });
+            if (!result.ok) return;
+
+            const receiver = result.value;
+            const fileEvents: ReceiverFileData[] = [];
+            const errorEvents: ReceiverErrorData[] = [];
+            receiver.onFileReceived(data => fileEvents.push(data));
+            receiver.onEvent('error', data => errorEvents.push(data));
+
+            await receiver.start();
+            const worker = createdFakes[0];
+            if (worker === undefined) return;
+
+            if (connectionHandler !== undefined) {
+                connectionHandler(createMockSocket());
+                await delay(50);
+            }
+
+            // Simulate dcmrecv receiving 4 C-STORE requests: 2 unique instances, each sent twice
+            // With filenameMode: 'unique', each gets a distinct filename
+            const files = [
+                '/tmp/dcmrecv-pool-50001-1234/SRt.X.1.2.276.0.7230010.3.1.4.0.20.661806',
+                '/tmp/dcmrecv-pool-50001-1234/SRt.X.1.2.276.0.7230010.3.1.4.0.20.661807',
+                '/tmp/dcmrecv-pool-50001-1234/DX.X.1.2.276.0.7230010.3.1.4.0.20.661808',
+                '/tmp/dcmrecv-pool-50001-1234/DX.X.1.2.276.0.7230010.3.1.4.0.20.661809',
+            ];
+
+            for (const filePath of files) {
+                worker.emit('FILE_RECEIVED', {
+                    filePath,
+                    associationId: 'assoc-1',
+                    callingAE: 'VNS-DICOM-QR',
+                    calledAE: '00060',
+                    source: 'localhost',
+                });
+            }
+
+            await delay(200);
+
+            expect(errorEvents).toHaveLength(0);
+            expect(fileEvents).toHaveLength(4);
+
+            const receivedPaths = fileEvents.map(e => e.filePath);
+            for (const filePath of files) {
+                const basename = filePath.split('/').pop()!;
+                expect(receivedPaths.some(p => p.includes(basename))).toBe(true);
+            }
+
+            await receiver.stop();
+        });
+
         it('emits zero totalBytes for zero-file association', async () => {
             const result = DicomReceiver.create({
                 port: 4242,
