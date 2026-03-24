@@ -945,30 +945,27 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
         data: { callingAE: string; calledAE: string; source: string },
         ctx: AssociationContext
     ): void {
-        void DicomInstance.open(filePath).then(openResult => {
-            if (!openResult.ok) {
-                this.emit('error', {
-                    error: openResult.error,
-                    filePath,
-                    associationId: ctx.associationId,
-                    associationDir: ctx.associationDir,
-                    callingAE: data.callingAE,
-                    calledAE: data.calledAE,
-                    source: data.source,
-                });
-                return;
-            }
-            this.emit('INSTANCE_RECEIVED', {
-                filePath,
-                fileSize,
-                associationId: ctx.associationId,
-                associationDir: ctx.associationDir,
-                callingAE: data.callingAE,
-                calledAE: data.calledAE,
-                source: data.source,
-                instance: openResult.value,
+        const errorCtx = {
+            filePath,
+            associationId: ctx.associationId,
+            associationDir: ctx.associationDir,
+            callingAE: data.callingAE,
+            calledAE: data.calledAE,
+            source: data.source,
+        };
+
+        void DicomInstance.open(filePath)
+            .then(openResult => {
+                if (!openResult.ok) {
+                    this.emit('error', { error: openResult.error, ...errorCtx });
+                    return;
+                }
+                this.emit('INSTANCE_RECEIVED', { ...errorCtx, fileSize, instance: openResult.value });
+            })
+            .catch((thrown: unknown) => {
+                const error = thrown instanceof Error ? thrown : new Error(String(thrown));
+                this.emit('error', { error, ...errorCtx });
             });
-        });
     }
 
     /** Returns worker to idle pool on association complete, emits summary. */
