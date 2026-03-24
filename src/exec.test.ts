@@ -53,7 +53,7 @@ describe('execCommand()', () => {
         // spawn returns a Process error for ENOENT
         expect(result.ok).toBe(false);
         if (!result.ok) {
-            expect(result.error.message).toMatch(/Process error/);
+            expect(result.error.message).toMatch(/error/i);
         }
     });
 
@@ -101,7 +101,7 @@ describe('spawnCommand()', () => {
 
         expect(result.ok).toBe(false);
         if (!result.ok) {
-            expect(result.error.message).toMatch(/Process error/);
+            expect(result.error.message).toMatch(/error/i);
         }
     });
 

@@ -61,17 +61,18 @@ async function execCommand(binary: string, args: readonly string[], options?: Ex
             windowsHide: true,
             signal: options?.signal,
         });
-        wireSpawnListeners(child, timeoutMs, resolve);
+        wireSpawnListeners(binary, child, timeoutMs, resolve);
     });
 }
 
 /**
  * Wires event listeners on a spawned child process with timeout, bounded buffering, and settle logic.
  */
-function wireSpawnListeners(child: ChildProcess, timeoutMs: number, resolve: (result: Result<DcmtkProcessResult>) => void): void {
+function wireSpawnListeners(binary: string, child: ChildProcess, timeoutMs: number, resolve: (result: Result<DcmtkProcessResult>) => void): void {
     let stdout = '';
     let stderr = '';
     let settled = false;
+    const name = binary.split('/').pop() ?? binary;
 
     const settle = (result: Result<DcmtkProcessResult>): void => {
         if (settled) return;
@@ -82,14 +83,14 @@ function wireSpawnListeners(child: ChildProcess, timeoutMs: number, resolve: (re
 
     const timer = setTimeout(() => {
         if (child.pid !== undefined && child.pid !== null) killTree(child.pid);
-        settle(err(new Error(`Process timed out after ${timeoutMs}ms`)));
+        settle(err(new Error(`${name} timed out after ${timeoutMs}ms (pid: ${String(child.pid ?? 'unknown')})`)));
     }, timeoutMs);
 
     child.stdout?.on('data', (chunk: Buffer | string) => {
         stdout += String(chunk);
         if (stdout.length + stderr.length > MAX_OUTPUT_BYTES) {
             if (child.pid !== undefined && child.pid !== null) killTree(child.pid);
-            settle(err(new Error(`Process output exceeded ${MAX_OUTPUT_BYTES} bytes`)));
+            settle(err(new Error(`${name} output exceeded ${MAX_OUTPUT_BYTES} bytes`)));
         }
     });
 
@@ -97,13 +98,13 @@ function wireSpawnListeners(child: ChildProcess, timeoutMs: number, resolve: (re
         stderr += String(chunk);
         if (stdout.length + stderr.length > MAX_OUTPUT_BYTES) {
             if (child.pid !== undefined && child.pid !== null) killTree(child.pid);
-            settle(err(new Error(`Process output exceeded ${MAX_OUTPUT_BYTES} bytes`)));
+            settle(err(new Error(`${name} output exceeded ${MAX_OUTPUT_BYTES} bytes`)));
         }
     });
 
     child.on('error', (error: Error) => {
         if (child.pid !== undefined && child.pid !== null) killTree(child.pid);
-        settle(err(new Error(`Process error: ${error.message}`)));
+        settle(err(new Error(`${name} error: ${error.message}`)));
     });
 
     child.on('close', (code: number | null) => {
@@ -139,7 +140,7 @@ async function spawnCommand(binary: string, args: readonly string[], options?: S
             windowsHide: true,
             signal: options?.signal,
         });
-        wireSpawnListeners(child, timeoutMs, resolve);
+        wireSpawnListeners(binary, child, timeoutMs, resolve);
     });
 }
 
