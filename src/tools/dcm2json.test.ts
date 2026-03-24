@@ -17,19 +17,29 @@ vi.mock('./_repairJson', () => ({
     repairJson: vi.fn(),
 }));
 
+vi.mock('node:fs/promises', () => ({
+    mkdtemp: vi.fn(),
+    rm: vi.fn(),
+}));
+
 import { execCommand } from '../exec';
 import { resolveBinary } from './_resolveBinary';
 import { xmlToJson } from './_xmlToJson';
 import { repairJson } from './_repairJson';
+import { mkdtemp, rm } from 'node:fs/promises';
 
 const mockedExecCommand = vi.mocked(execCommand);
 const mockedResolveBinary = vi.mocked(resolveBinary);
 const mockedXmlToJson = vi.mocked(xmlToJson);
 const mockedRepairJson = vi.mocked(repairJson);
+const mockedMkdtemp = vi.mocked(mkdtemp);
+const mockedRm = vi.mocked(rm);
 
 beforeEach(() => {
     vi.clearAllMocks();
     mockedResolveBinary.mockReturnValue({ ok: true, value: '/usr/local/bin/dcm2xml' });
+    mockedMkdtemp.mockResolvedValue('/tmp/dcm2json-bulk-abc123');
+    mockedRm.mockResolvedValue(undefined);
     mockedExecCommand.mockResolvedValue({
         ok: true,
         value: { stdout: '<xml/>', stderr: '', exitCode: 0 },
@@ -82,7 +92,7 @@ describe('dcm2json', () => {
             expect(args).toContain('-d');
         });
 
-        it('passes +b (bulk-enabled) on direct path to handle compressed pixel data', async () => {
+        it('passes +b +bd <tmpdir> on direct path to handle compressed pixel data', async () => {
             mockedResolveBinary.mockReturnValue({ ok: true, value: '/usr/local/bin/dcm2json' });
             mockedExecCommand.mockResolvedValue({
                 ok: true,
@@ -92,6 +102,20 @@ describe('dcm2json', () => {
             await dcm2json('/input.dcm', { directOnly: true });
             const args = mockedExecCommand.mock.calls[0]?.[1] as string[];
             expect(args).toContain('+b');
+            const bdIdx = args.indexOf('+bd');
+            expect(bdIdx).toBeGreaterThanOrEqual(0);
+            expect(args[bdIdx + 1]).toBe('/tmp/dcm2json-bulk-abc123');
+        });
+
+        it('cleans up bulk data temp directory after direct path', async () => {
+            mockedResolveBinary.mockReturnValue({ ok: true, value: '/usr/local/bin/dcm2json' });
+            mockedExecCommand.mockResolvedValue({
+                ok: true,
+                value: { stdout: '{}', stderr: '', exitCode: 0 },
+            });
+            mockedRepairJson.mockReturnValue('{}');
+            await dcm2json('/input.dcm', { directOnly: true });
+            expect(mockedRm).toHaveBeenCalledWith('/tmp/dcm2json-bulk-abc123', { recursive: true, force: true });
         });
 
         it('passes +Ca with charset value via XML path', async () => {

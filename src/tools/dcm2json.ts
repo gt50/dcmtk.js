@@ -9,6 +9,9 @@
  * @module dcm2json
  */
 
+import { mkdtemp, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { stderr } from 'stderr-lib';
 import { z } from 'zod';
 import type { Result } from '../types';
@@ -108,6 +111,9 @@ async function tryXmlPath(inputPath: string, timeoutMs: number, signal?: AbortSi
 
 /**
  * Attempts direct conversion: dcm2json binary → repairJson → JSON.parse.
+ *
+ * Uses `+b +bd <tmpdir>` to redirect bulk pixel data to a temp directory
+ * (discarded after parsing) so compressed pixel data does not cause failures.
  */
 async function tryDirectPath(inputPath: string, timeoutMs: number, signal?: AbortSignal, verbosity?: 'verbose' | 'debug'): Promise<Result<Dcm2jsonResult>> {
     const jsonBinary = resolveBinary('dcm2json');
@@ -115,20 +121,39 @@ async function tryDirectPath(inputPath: string, timeoutMs: number, signal?: Abor
         return err(jsonBinary.error);
     }
 
-    const directArgs = [...buildVerbosityArgs(verbosity), '+b', inputPath];
-    const result = await execCommand(jsonBinary.value, directArgs, { timeoutMs, signal });
+    const bulkDir = await createBulkTempDir();
+    const directArgs = [...buildVerbosityArgs(verbosity), '+b', '+bd', bulkDir, inputPath];
+
+    try {
+        return await execAndParse(jsonBinary.value, directArgs, inputPath, { timeoutMs, signal });
+    } finally {
+        rm(bulkDir, { recursive: true, force: true }).catch(() => {});
+    }
+}
+
+/** Creates a temporary directory for dcm2json bulk data output. */
+async function createBulkTempDir(): Promise<string> {
+    return mkdtemp(join(tmpdir(), 'dcm2json-bulk-'));
+}
+
+/** Runs dcm2json and parses the output. */
+async function execAndParse(
+    binary: string,
+    args: string[],
+    inputPath: string,
+    execOpts: { timeoutMs: number; signal?: AbortSignal }
+): Promise<Result<Dcm2jsonResult>> {
+    const result = await execCommand(binary, args, execOpts);
     if (!result.ok) {
         return err(result.error);
     }
 
     if (result.value.exitCode !== 0) {
-        return err(createToolError('dcm2json', directArgs, result.value.exitCode, result.value.stderr));
+        return err(createToolError('dcm2json', args, result.value.exitCode, result.value.stderr));
     }
 
     try {
         const repaired = repairJson(result.value.stdout);
-        // Cast is safe: repairJson ensures valid DICOM JSON Model structure,
-        // and JSON.parse returns `unknown` in strict TS (we narrow via caller checks).
         const data = JSON.parse(repaired) as DicomJsonModel;
         return ok({ data, source: 'direct' as const });
     } catch (parseError: unknown) {
