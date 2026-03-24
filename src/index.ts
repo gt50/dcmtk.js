@@ -420,6 +420,13 @@ export type {
 } from './pacs/types';
 
 // ---------------------------------------------------------------------------
+// Testing utilities
+// ---------------------------------------------------------------------------
+
+export { DicomHammer, HammerPhase } from './testing';
+export type { HammerPhaseValue, DicomHammerOptions, GenerateResult, HammerError, HammerSendResult, HammerResult, DicomHammerEventMap } from './testing';
+
+// ---------------------------------------------------------------------------
 // Utility functions
 // ---------------------------------------------------------------------------
 
