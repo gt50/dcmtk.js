@@ -729,18 +729,35 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
     /** Wires FILE_RECEIVED from dcmrecv worker to handleFileReceived. */
     private wireFileReceived(worker: WorkerInfo): void {
         worker.dcmrecv.onFileReceived(data => {
-            const promise = this.handleFileReceived(worker, data);
+            // Capture association context SYNCHRONOUSLY — this runs inside processLines,
+            // before any async work or resetWorker can interfere.
+            const assocId = worker.associationId;
+            const assocDir = worker.associationDir;
+
+            if (assocDir === undefined || assocId === undefined) {
+                this.emit('error', {
+                    error: new Error(`DicomReceiver: FILE_RECEIVED with no active association (worker state: ${worker.state})`),
+                    filePath: data.filePath,
+                    callingAE: data.callingAE,
+                    calledAE: data.calledAE,
+                    source: data.source,
+                });
+                return;
+            }
+
+            const promise = this.handleFileReceived(worker, data, assocId, assocDir);
             worker.pendingFiles.push(promise);
             void promise.finally(() => removePending(worker.pendingFiles, promise));
         });
     }
 
     /** Moves a received file, opens it as DicomInstance, and emits FILE_RECEIVED. */
-    private async handleFileReceived(worker: WorkerInfo, data: { filePath: string; callingAE: string; calledAE: string; source: string }): Promise<void> {
-        if (worker.associationDir === undefined || worker.associationId === undefined) return;
-        const assocId = worker.associationId;
-        const assocDir = worker.associationDir;
-
+    private async handleFileReceived(
+        worker: WorkerInfo,
+        data: { filePath: string; callingAE: string; calledAE: string; source: string },
+        assocId: string,
+        assocDir: string
+    ): Promise<void> {
         try {
             await this.moveAndEmitFile(worker, data, assocId, assocDir);
         } catch (thrown: unknown) {
@@ -806,9 +823,12 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
         });
     }
 
-    /** Awaits pending file operations, emits ASSOCIATION_COMPLETE, resets worker state. */
+    /** Awaits ALL pending file operations, emits ASSOCIATION_COMPLETE, resets worker state. */
     private async finalizeAssociation(worker: WorkerInfo, data: AssociationCompleteData): Promise<void> {
-        if (worker.pendingFiles.length > 0) {
+        // Drain loop: new FILE_RECEIVED handlers may be pushed to pendingFiles
+        // after Promise.all captures the array (stdout pipe chunking). Loop until
+        // truly empty so resetWorker never runs with in-flight file operations.
+        while (worker.pendingFiles.length > 0) {
             await Promise.all(worker.pendingFiles);
         }
 
