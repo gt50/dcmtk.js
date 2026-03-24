@@ -125,7 +125,8 @@ async function tryDirectPath(inputPath: string, timeoutMs: number, signal?: Abor
     const directArgs = [...buildVerbosityArgs(verbosity), '+b', '+bd', bulkDir, inputPath];
 
     try {
-        return await execAndParse(jsonBinary.value, directArgs, inputPath, { timeoutMs, signal });
+        const execOpts = signal !== undefined ? { timeoutMs, signal } : { timeoutMs };
+        return await execAndParse(jsonBinary.value, directArgs, inputPath, execOpts);
     } finally {
         rm(bulkDir, { recursive: true, force: true }).catch(() => {});
     }
