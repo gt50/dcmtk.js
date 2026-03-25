@@ -5,6 +5,7 @@ import type {
     ReceiverFileReceivedData,
     ReceiverFileStoredData,
     ReceiverInstanceData,
+    ReceiverInstanceErrorData,
     ReceiverAssociationData,
     ReceiverErrorData,
     PoolAssociationReceivedData,
@@ -567,7 +568,7 @@ describe('DicomReceiver', () => {
             await receiver.stop();
         });
 
-        it('emits FILE_STORED but error (not INSTANCE_RECEIVED) when DicomInstance.open fails', async () => {
+        it('emits FILE_STORED + INSTANCE_ERROR (not INSTANCE_RECEIVED) when DicomInstance.open fails', async () => {
             mockOpen.mockResolvedValueOnce({ ok: false, error: new Error('Failed to parse DICOM') });
 
             const result = DicomReceiver.create({ port: 4242, storageDir: '/data', minPoolSize: 1, maxPoolSize: 1 });
@@ -576,10 +577,10 @@ describe('DicomReceiver', () => {
             const receiver = result.value;
             const storedEvents: ReceiverFileStoredData[] = [];
             const instanceEvents: ReceiverInstanceData[] = [];
-            const errorEvents: ReceiverErrorData[] = [];
+            const instanceErrors: ReceiverInstanceErrorData[] = [];
             receiver.onFileStored(data => storedEvents.push(data));
             receiver.onInstanceReceived(data => instanceEvents.push(data));
-            receiver.onEvent('error', data => errorEvents.push(data));
+            receiver.onInstanceError(data => instanceErrors.push(data));
 
             await receiver.start();
             const worker = createdFakes[0];
@@ -603,10 +604,11 @@ describe('DicomReceiver', () => {
             expect(storedEvents).toHaveLength(1);
             // INSTANCE_RECEIVED does NOT fire (parse failed)
             expect(instanceEvents).toHaveLength(0);
-            // Error event fires with the parse failure
-            const fileError = errorEvents.find(e => e.filePath !== undefined);
-            expect(fileError).toBeDefined();
-            expect(fileError?.error.message).toBe('Failed to parse DICOM');
+            // INSTANCE_ERROR fires with the parse failure details
+            expect(instanceErrors).toHaveLength(1);
+            expect(instanceErrors[0]?.error.message).toBe('Failed to parse DICOM');
+            expect(instanceErrors[0]?.thrown).toBe(false);
+            expect(instanceErrors[0]?.filePath).toContain('bad.dcm');
 
             await receiver.stop();
         });

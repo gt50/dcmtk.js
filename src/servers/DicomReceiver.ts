@@ -124,6 +124,32 @@ interface PoolRefusingAssociationData {
     readonly reason: string;
 }
 
+/** Data emitted with INSTANCE_ERROR events when DicomInstance.open fails. */
+interface ReceiverInstanceErrorData {
+    readonly error: Error;
+    /** Whether this was a thrown exception (true) or a Result error (false). */
+    readonly thrown: boolean;
+    readonly filePath: string;
+    readonly fileSize: number;
+    readonly associationId: string;
+    readonly associationDir: string;
+    readonly callingAE: string;
+    readonly calledAE: string;
+    readonly source: string;
+}
+
+/** Data emitted with ASSOCIATION_FINALIZED — all work (including parsing) is done. */
+interface ReceiverAssociationFinalizedData {
+    readonly associationId: string;
+    readonly associationDir: string;
+    readonly callingAE: string;
+    readonly calledAE: string;
+    readonly source: string;
+    readonly files: readonly string[];
+    readonly instancesReceived: number;
+    readonly instanceErrors: number;
+}
+
 /** Data emitted with error events. */
 interface ReceiverErrorData {
     readonly error: Error;
@@ -140,7 +166,9 @@ interface DicomReceiverEventMap {
     FILE_RECEIVED: [ReceiverFileReceivedData];
     FILE_STORED: [ReceiverFileStoredData];
     INSTANCE_RECEIVED: [ReceiverInstanceData];
+    INSTANCE_ERROR: [ReceiverInstanceErrorData];
     ASSOCIATION_COMPLETE: [ReceiverAssociationData];
+    ASSOCIATION_FINALIZED: [ReceiverAssociationFinalizedData];
     ASSOCIATION_RECEIVED: [PoolAssociationReceivedData];
     C_STORE_REQUEST: [PoolCStoreRequestData];
     ECHO_REQUEST: [PoolEchoRequestData];
@@ -232,6 +260,9 @@ class Worker {
     private _state: 'idle' | 'busy' = 'idle';
     private _context: AssociationContext | undefined;
     private readonly _pending = new Set<Promise<void>>();
+    private readonly _instancePending = new Set<Promise<void>>();
+    private _instancesReceived = 0;
+    private _instanceErrors = 0;
     private readonly _files: string[] = [];
     private readonly _fileSizes: number[] = [];
     private readonly _outputLines: string[] = [];
@@ -277,6 +308,9 @@ class Worker {
         this._fileSizes.length = 0;
         this._outputLines.length = 0;
         this._pending.clear();
+        this._instancePending.clear();
+        this._instancesReceived = 0;
+        this._instanceErrors = 0;
     }
 
     /** Returns the worker to idle and clears all association state. */
@@ -287,6 +321,9 @@ class Worker {
         this._fileSizes.length = 0;
         this._outputLines.length = 0;
         this._pending.clear();
+        this._instancePending.clear();
+        this._instancesReceived = 0;
+        this._instanceErrors = 0;
         this._remoteSocket = undefined;
         this._workerSocket = undefined;
     }
@@ -297,6 +334,41 @@ class Worker {
         void promise.finally(() => {
             this._pending.delete(promise);
         });
+    }
+
+    /** Tracks an in-flight instance parsing promise; auto-removes on completion. */
+    trackInstance(promise: Promise<void>): void {
+        this._instancePending.add(promise);
+        void promise.finally(() => {
+            this._instancePending.delete(promise);
+        });
+    }
+
+    /** Records a successful instance parse. */
+    recordInstanceSuccess(): void {
+        this._instancesReceived++;
+    }
+
+    /** Records a failed instance parse. */
+    recordInstanceError(): void {
+        this._instanceErrors++;
+    }
+
+    /** Awaits all in-flight instance parsing promises. */
+    async drainInstancePending(): Promise<void> {
+        if (this._instancePending.size > 0) {
+            await Promise.all(this._instancePending);
+        }
+    }
+
+    /** Number of successfully parsed instances in this association. */
+    get instancesReceived(): number {
+        return this._instancesReceived;
+    }
+
+    /** Number of failed instance parses in this association. */
+    get instanceErrors(): number {
+        return this._instanceErrors;
     }
 
     /** Records a successfully received file path and its size. */
@@ -534,13 +606,33 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
     }
 
     /**
-     * Registers a listener for completed associations.
+     * Registers a listener for DicomInstance.open failures.
+     *
+     * @param listener - Callback receiving instance error data
+     * @returns this for chaining
+     */
+    onInstanceError(listener: (data: ReceiverInstanceErrorData) => void): this {
+        return this.on('INSTANCE_ERROR', listener);
+    }
+
+    /**
+     * Registers a listener for completed associations (file moves done).
      *
      * @param listener - Callback receiving association data
      * @returns this for chaining
      */
     onAssociationComplete(listener: (data: ReceiverAssociationData) => void): this {
         return this.on('ASSOCIATION_COMPLETE', listener);
+    }
+
+    /**
+     * Registers a listener for fully finalized associations (all parsing done).
+     *
+     * @param listener - Callback receiving finalized data with instance counts
+     * @returns this for chaining
+     */
+    onAssociationFinalized(listener: (data: ReceiverAssociationFinalizedData) => void): this {
+        return this.on('ASSOCIATION_FINALIZED', listener);
     }
 
     /**
@@ -935,37 +1027,34 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
             source: data.source,
         });
 
-        this.emitInstanceReceived(finalPath, fileSize, data, ctx);
-    }
-
-    /** Parses a DICOM file and emits INSTANCE_RECEIVED or error. */
-    private emitInstanceReceived(
-        filePath: string,
-        fileSize: number,
-        data: { callingAE: string; calledAE: string; source: string },
-        ctx: AssociationContext
-    ): void {
-        const errorCtx = {
-            filePath,
+        const instanceCtx = {
+            filePath: finalPath,
+            fileSize,
             associationId: ctx.associationId,
             associationDir: ctx.associationDir,
             callingAE: data.callingAE,
             calledAE: data.calledAE,
             source: data.source,
         };
+        worker.trackInstance(this.parseAndEmitInstance(worker, instanceCtx));
+    }
 
-        void DicomInstance.open(filePath)
-            .then(openResult => {
-                if (!openResult.ok) {
-                    this.emit('error', { error: openResult.error, ...errorCtx });
-                    return;
-                }
-                this.emit('INSTANCE_RECEIVED', { ...errorCtx, fileSize, instance: openResult.value });
-            })
-            .catch((thrown: unknown) => {
-                const error = thrown instanceof Error ? thrown : new Error(String(thrown));
-                this.emit('error', { error, ...errorCtx });
-            });
+    /** Parses a DICOM file and emits INSTANCE_RECEIVED or INSTANCE_ERROR. */
+    private async parseAndEmitInstance(worker: Worker, ctx: ReceiverFileStoredData): Promise<void> {
+        try {
+            const openResult = await DicomInstance.open(ctx.filePath);
+            if (!openResult.ok) {
+                worker.recordInstanceError();
+                this.emit('INSTANCE_ERROR', { error: openResult.error, thrown: false, ...ctx });
+                return;
+            }
+            worker.recordInstanceSuccess();
+            this.emit('INSTANCE_RECEIVED', { ...ctx, instance: openResult.value });
+        } catch (thrown: unknown) {
+            const error = thrown instanceof Error ? thrown : new Error(String(thrown));
+            worker.recordInstanceError();
+            this.emit('INSTANCE_ERROR', { error, thrown: true, ...ctx });
+        }
     }
 
     /** Returns worker to idle pool on association complete, emits summary. */
@@ -975,10 +1064,14 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
         });
     }
 
-    /** Awaits ALL pending file operations, emits ASSOCIATION_COMPLETE, resets worker state. */
+    /** Awaits file ops, emits ASSOCIATION_COMPLETE, awaits parsing, emits ASSOCIATION_FINALIZED. */
     private async finalizeAssociation(worker: Worker, data: AssociationCompleteData): Promise<void> {
         await worker.drainPendingFiles();
         this.emitAssociationComplete(worker, data);
+
+        await worker.drainInstancePending();
+        this.emitAssociationFinalized(worker, data);
+
         worker.endAssociation();
         void this.scaleDown();
     }
@@ -1011,6 +1104,21 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
             startAt,
             endAt,
             output,
+        });
+    }
+
+    /** Emits ASSOCIATION_FINALIZED after all instance parsing is done. */
+    private emitAssociationFinalized(worker: Worker, data: AssociationCompleteData): void {
+        const ctx = worker.context;
+        this.emit('ASSOCIATION_FINALIZED', {
+            associationId: ctx?.associationId ?? data.associationId,
+            associationDir: ctx?.associationDir ?? '',
+            callingAE: data.callingAE,
+            calledAE: data.calledAE,
+            source: data.source,
+            files: [...worker.files],
+            instancesReceived: worker.instancesReceived,
+            instanceErrors: worker.instanceErrors,
         });
     }
 
@@ -1091,6 +1199,8 @@ export type {
     ReceiverFileReceivedData,
     ReceiverFileStoredData,
     ReceiverInstanceData,
+    ReceiverInstanceErrorData,
+    ReceiverAssociationFinalizedData,
     ReceiverFileData,
     ReceiverAssociationData,
     ReceiverErrorData,

@@ -364,6 +364,8 @@ export type {
     ReceiverFileReceivedData,
     ReceiverFileStoredData,
     ReceiverInstanceData,
+    ReceiverInstanceErrorData,
+    ReceiverAssociationFinalizedData,
     ReceiverFileData,
     ReceiverAssociationData,
     ReceiverErrorData,
