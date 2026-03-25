@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.12.0] - 2026-03-25
+
+### Added
+
+- **`INSTANCE_ERROR` event** — specific event when `DicomInstance.open()` fails, with `thrown: boolean` to distinguish Result errors from thrown exceptions and full file/association context. Replaces the generic `'error'` event for parse failures (#23)
+- **`ASSOCIATION_FINALIZED` event** — fires after ALL work completes (file moves + instance parsing). Includes `instancesReceived` and `instanceErrors` counts. `ASSOCIATION_COMPLETE` still fires after file moves only (#23)
+- **`onInstanceError()` convenience method** — registers a listener for `INSTANCE_ERROR` events
+- **`onAssociationFinalized()` convenience method** — registers a listener for `ASSOCIATION_FINALIZED` events
+- **Instance parsing tracked via `Worker.trackInstance()`** — Set-based auto-cleanup, drained before `ASSOCIATION_FINALIZED` emits
+
+### Fixed
+
+- **Missing `.catch()` on `emitInstanceReceived`** — `DicomInstance.open().then()` had no `.catch()`, causing thrown exceptions to silently reject. Confirmed as the production failure point for missing `INSTANCE_RECEIVED` events (#23)
+
 ## [0.11.0] - 2026-03-24
 
 ### Breaking Changes

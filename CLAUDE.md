@@ -307,7 +307,7 @@ Pooled DICOM receiver managing multiple `Dcmrecv` workers behind a TCP proxy.
 
 Options include `port`, `storageDir`, `aeTitle`, pool sizing (`minPoolSize`/`maxPoolSize`), `connectionTimeoutMs`, `configFile`/`configProfile`, `acseTimeout`, `dimseTimeout`, `maxPdu`, `filenameMode` (defaults to `'unique'`), `filenameExtension`, `storageMode`, and `signal`. Set `port: 0` for external socket mode (no TCP proxy). The `filenameMode` defaults to `'unique'` to prevent data loss from duplicate SOP Instance UIDs — see `docs/servers.md` for details.
 
-Events: `FILE_RECEIVED` (raw from dcmrecv), `FILE_STORED` (moved to assoc dir), `INSTANCE_RECEIVED` (parsed DicomInstance), `ASSOCIATION_COMPLETE` (includes `output` lines), `ASSOCIATION_RECEIVED`, `C_STORE_REQUEST`, `ECHO_REQUEST`, `REFUSING_ASSOCIATION`, `error`.
+Events: `FILE_RECEIVED` (raw from dcmrecv), `FILE_STORED` (moved to assoc dir), `INSTANCE_RECEIVED` (parsed DicomInstance), `INSTANCE_ERROR` (parse failed, with `thrown: boolean`), `ASSOCIATION_COMPLETE` (file moves done, includes `output` lines), `ASSOCIATION_FINALIZED` (all parsing done, includes `instancesReceived`/`instanceErrors` counts), `ASSOCIATION_RECEIVED`, `C_STORE_REQUEST`, `ECHO_REQUEST`, `REFUSING_ASSOCIATION`, `error`. Consumers **must** register an `'error'` listener before `start()` — unhandled errors crash the process.
 
 ```typescript
 const result = DicomReceiver.create({
