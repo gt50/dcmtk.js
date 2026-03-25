@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.12.1] - 2026-03-25
+
+### Fixed
+
+- **Root cause of 30s timeout on DX files** — `fast-xml-parser`'s default entity expansion limit (1000) rejected DICOM files with >1000 XML tags. This caused the fast XML primary path to fail silently, falling through to the `dcm2json` binary which hangs indefinitely on compressed pixel data (DCMTK bug). Set `processEntities: false` since DICOM XML does not use XML entities. Files that previously timed out at 30s now parse in ~200ms (#23)
+
 ## [0.12.0] - 2026-03-25
 
 ### Added

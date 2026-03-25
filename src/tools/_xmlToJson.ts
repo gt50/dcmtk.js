@@ -290,6 +290,11 @@ const parser = new XMLParser({
     attributeNamePrefix: '@_',
     parseTagValue: false,
     isArray: (name: string): boolean => ARRAY_TAG_NAMES.has(name),
+    // DICOM XML does not use XML entities. Disable entity processing to avoid
+    // the default expansion limit (1000) which rejects files with >1000 tags.
+    // Without this, large studies fall through to dcm2json which hangs on
+    // compressed pixel data (DCMTK bug).
+    processEntities: false,
 });
 
 /**
