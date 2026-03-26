@@ -73,6 +73,7 @@ class DicomInstance {
             timeoutMs: options?.timeoutMs ?? DEFAULT_TIMEOUT_MS,
             signal: options?.signal,
             charsetAssume: options?.charsetAssume,
+            charsetFallback: options?.charsetFallback,
         });
         if (!jsonResult.ok) return err(jsonResult.error);
 

@@ -24,6 +24,7 @@ import { Dcmrecv } from './Dcmrecv';
 import type { FilenameModeValue, StorageModeValue } from './Dcmrecv';
 import type { AssociationCompleteData } from '../events/dcmrecv';
 import { DicomInstance } from '../dicom';
+import type { DicomOpenOptions } from '../dicom/_fileHelpers';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -206,6 +207,8 @@ interface DicomReceiverOptions {
     readonly filenameExtension?: string | undefined;
     /** Storage mode for received files (passed through to Dcmrecv workers). */
     readonly storageMode?: StorageModeValue | undefined;
+    /** Options passed to DicomInstance.open() for each received file. Defaults charsetFallback to `'Latin1'`. */
+    readonly instanceOpenOptions?: DicomOpenOptions | undefined;
     /** AbortSignal for external cancellation. */
     readonly signal?: AbortSignal | undefined;
 }
@@ -230,6 +233,15 @@ const DicomReceiverOptionsSchema = z
         filenameMode: z.enum(['default', 'unique', 'short-unique', 'system-time']).optional(),
         filenameExtension: z.string().min(1).optional(),
         storageMode: z.enum(['normal', 'bit-preserving', 'ignore']).optional(),
+        instanceOpenOptions: z
+            .object({
+                timeoutMs: z.number().int().positive().optional(),
+                signal: z.instanceof(AbortSignal).optional(),
+                charsetAssume: z.string().min(1).optional(),
+                charsetFallback: z.string().min(1).optional(),
+            })
+            .strict()
+            .optional(),
         signal: z.instanceof(AbortSignal).optional(),
     })
     .strict()
@@ -477,6 +489,7 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
     private readonly minPoolSize: number;
     private readonly maxPoolSize: number;
     private readonly connectionTimeoutMs: number;
+    private readonly resolvedInstanceOpenOptions: DicomOpenOptions;
     private readonly workers: Map<number, Worker> = new Map();
     private tcpServer: net.Server | undefined;
     private associationCounter = 0;
@@ -491,6 +504,7 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
         this.minPoolSize = options.minPoolSize ?? DEFAULT_MIN_POOL_SIZE;
         this.maxPoolSize = options.maxPoolSize ?? DEFAULT_MAX_POOL_SIZE;
         this.connectionTimeoutMs = options.connectionTimeoutMs ?? DEFAULT_CONNECTION_TIMEOUT_MS;
+        this.resolvedInstanceOpenOptions = { charsetFallback: 'Latin1', ...options.instanceOpenOptions };
     }
 
     // -----------------------------------------------------------------------
@@ -1042,7 +1056,7 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
     /** Parses a DICOM file and emits INSTANCE_RECEIVED or INSTANCE_ERROR. */
     private async parseAndEmitInstance(worker: Worker, ctx: ReceiverFileStoredData): Promise<void> {
         try {
-            const openResult = await DicomInstance.open(ctx.filePath);
+            const openResult = await DicomInstance.open(ctx.filePath, this.resolvedInstanceOpenOptions);
             if (!openResult.ok) {
                 worker.recordInstanceError();
                 this.emit('INSTANCE_ERROR', { error: openResult.error, thrown: false, ...ctx });

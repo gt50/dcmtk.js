@@ -97,23 +97,24 @@ Remote SCU ──TCP──► DicomReceiver (:4242)
 
 ### Options
 
-| Option                | Type                | Default        | Description                                                                    |
-| --------------------- | ------------------- | -------------- | ------------------------------------------------------------------------------ |
-| `port`                | `number`            | —              | **Required.** External listening port (0 = no TCP proxy, use `handleSocket()`) |
-| `storageDir`          | `string`            | —              | **Required.** Root dir for association dirs                                    |
-| `aeTitle`             | `string`            | `'DCMRECV'`    | AE Title for workers                                                           |
-| `minPoolSize`         | `number`            | `2`            | Minimum idle workers to maintain                                               |
-| `maxPoolSize`         | `number`            | `10`           | Maximum total workers                                                          |
-| `connectionTimeoutMs` | `number`            | `10000`        | Timeout waiting for idle worker                                                |
-| `configFile`          | `string`            | —              | Config file passed to dcmrecv workers                                          |
-| `configProfile`       | `string`            | —              | Config profile name                                                            |
-| `acseTimeout`         | `number`            | —              | ACSE timeout in seconds (passed to workers)                                    |
-| `dimseTimeout`        | `number`            | —              | DIMSE timeout in seconds (passed to workers)                                   |
-| `maxPdu`              | `number`            | —              | Maximum PDU receive size (4096–131072)                                         |
-| `filenameMode`        | `FilenameModeValue` | **`'unique'`** | Filename generation mode (see note below)                                      |
-| `filenameExtension`   | `string`            | —              | Extension appended to received filenames (e.g., `'.dcm'`)                      |
-| `storageMode`         | `StorageModeValue`  | `'normal'`     | Storage mode for received files                                                |
-| `signal`              | `AbortSignal`       | —              | External cancellation                                                          |
+| Option                | Type                | Default                         | Description                                                                    |
+| --------------------- | ------------------- | ------------------------------- | ------------------------------------------------------------------------------ |
+| `port`                | `number`            | —                               | **Required.** External listening port (0 = no TCP proxy, use `handleSocket()`) |
+| `storageDir`          | `string`            | —                               | **Required.** Root dir for association dirs                                    |
+| `aeTitle`             | `string`            | `'DCMRECV'`                     | AE Title for workers                                                           |
+| `minPoolSize`         | `number`            | `2`                             | Minimum idle workers to maintain                                               |
+| `maxPoolSize`         | `number`            | `10`                            | Maximum total workers                                                          |
+| `connectionTimeoutMs` | `number`            | `10000`                         | Timeout waiting for idle worker                                                |
+| `configFile`          | `string`            | —                               | Config file passed to dcmrecv workers                                          |
+| `configProfile`       | `string`            | —                               | Config profile name                                                            |
+| `acseTimeout`         | `number`            | —                               | ACSE timeout in seconds (passed to workers)                                    |
+| `dimseTimeout`        | `number`            | —                               | DIMSE timeout in seconds (passed to workers)                                   |
+| `maxPdu`              | `number`            | —                               | Maximum PDU receive size (4096–131072)                                         |
+| `filenameMode`        | `FilenameModeValue` | **`'unique'`**                  | Filename generation mode (see note below)                                      |
+| `filenameExtension`   | `string`            | —                               | Extension appended to received filenames (e.g., `'.dcm'`)                      |
+| `storageMode`         | `StorageModeValue`  | `'normal'`                      | Storage mode for received files                                                |
+| `instanceOpenOptions` | `DicomOpenOptions`  | `{ charsetFallback: 'Latin1' }` | Options passed to `DicomInstance.open()` for each received file                |
+| `signal`              | `AbortSignal`       | —                               | External cancellation                                                          |
 
 > **Why `filenameMode` defaults to `'unique'`**: dcmrecv's default mode names files by SOP Instance UID. When a remote SCU sends duplicate SOP Instance UIDs within an association (retransmits, protocol quirks), the second store overwrites the first file on disk while concurrent `handleFileReceived` handlers race on the same path. This causes silent data loss — files that dcmrecv successfully received are never delivered to the application. The `'unique'` mode generates a fresh UID-based filename for every C-STORE, eliminating the overwrite race entirely without modifying any DICOM data inside the files. **It is strongly recommended to keep this default.** Override to `'default'` only if your workflow specifically requires SOP UID-based filenames and your sender never retransmits.
 

@@ -27,6 +27,8 @@ interface FileIOOptions {
 interface DicomOpenOptions extends FileIOOptions {
     /** Assume the specified character set when SpecificCharacterSet (0008,0005) is absent. Maps to dcm2xml `+Ca`. */
     readonly charsetAssume?: string | undefined;
+    /** Fallback charset to retry with when UTF-8 conversion fails due to illegal byte sequences. Maps to dcm2xml `+Ca`. When set, a charset conversion failure triggers an automatic retry with this charset assumed. `'Latin1'` is recommended — it maps every byte 0x00-0xFF to a valid character, so conversion never fails. */
+    readonly charsetFallback?: string | undefined;
 }
 
 /** Bridges a ChangeSet to a dcmodify call on the given file. */

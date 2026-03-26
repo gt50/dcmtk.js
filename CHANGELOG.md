@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.13.0] - 2026-03-26
+
+### Added
+
+- **`charsetFallback` option** on `DicomOpenOptions`, `Dcm2jsonOptions` — when UTF-8 conversion fails due to illegal byte sequences (broken `SpecificCharacterSet`), automatically retries dcm2xml with `+Ca <fallback>`. `'Latin1'` is recommended — it maps every byte 0x00-0xFF to a valid character, so conversion never fails (#24)
+- **`instanceOpenOptions` on `DicomReceiverOptions`** — pass-through configuration for `DicomInstance.open()` calls made internally by DicomReceiver. Covers `charsetAssume`, `charsetFallback`, `timeoutMs`, and `signal` (#24)
+- **DicomReceiver defaults `charsetFallback: 'Latin1'`** — files with broken charset encoding are no longer dropped. Characters that can't be converted to UTF-8 are transliterated via Latin-1 fallback instead of causing a fatal error
+
 ## [0.12.1] - 2026-03-25
 
 ### Fixed

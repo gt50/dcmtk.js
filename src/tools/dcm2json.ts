@@ -34,6 +34,8 @@ interface Dcm2jsonOptions extends ToolBaseOptions {
     readonly directOnly?: boolean | undefined;
     /** Assume the specified character set when SpecificCharacterSet (0008,0005) is absent. Passed to dcm2xml as `+Ca`. Only effective on the XML path (dcm2json binary does not support this flag). */
     readonly charsetAssume?: string | undefined;
+    /** Fallback charset to retry with when UTF-8 conversion fails. On charset error, the XML path retries with `+Ca <fallback>`. `'Latin1'` recommended — maps every byte to a valid character. */
+    readonly charsetFallback?: string | undefined;
     /** Verbosity level for diagnostic output. `'verbose'` maps to `-v`, `'debug'` maps to `-d`. */
     readonly verbosity?: 'verbose' | 'debug' | undefined;
 }
@@ -52,13 +54,14 @@ const Dcm2jsonOptionsSchema = z
         signal: z.instanceof(AbortSignal).optional(),
         directOnly: z.boolean().optional(),
         charsetAssume: z.string().min(1).optional(),
+        charsetFallback: z.string().min(1).optional(),
         verbosity: z.enum(['verbose', 'debug']).optional(),
     })
     .strict()
     .optional();
 
 /** Options forwarded to the XML conversion path. */
-type XmlPathOpts = { readonly verbosity?: 'verbose' | 'debug'; readonly charsetAssume?: string };
+type XmlPathOpts = { readonly verbosity?: 'verbose' | 'debug'; readonly charsetAssume?: string; readonly charsetFallback?: string };
 
 /** Maps verbosity level to command-line flag. */
 const VERBOSITY_FLAGS: Record<'verbose' | 'debug', string> = { verbose: '-v', debug: '-d' };
@@ -78,35 +81,48 @@ function buildXmlOpts(options?: Dcm2jsonOptions): XmlPathOpts {
     const result: Record<string, string> = {};
     if (options?.verbosity !== undefined) result['verbosity'] = options.verbosity;
     if (options?.charsetAssume !== undefined) result['charsetAssume'] = options.charsetAssume;
+    if (options?.charsetFallback !== undefined) result['charsetFallback'] = options.charsetFallback;
     return result;
+}
+
+/** Returns true if dcm2xml failed due to a charset conversion error. */
+function isCharsetError(stderrOutput: string): boolean {
+    return stderrOutput.includes('convert character encoding') || stderrOutput.includes('Illegal byte sequence');
+}
+
+/** Runs dcm2xml with given args, parses output to DICOM JSON. */
+async function runXmlAndParse(binary: string, args: string[], execOpts: { timeoutMs: number; signal?: AbortSignal }): Promise<Result<Dcm2jsonResult>> {
+    const xmlResult = await execCommand(binary, args, execOpts);
+    if (!xmlResult.ok) return err(xmlResult.error);
+    if (xmlResult.value.exitCode !== 0) {
+        return err(createToolError('dcm2xml', args, xmlResult.value.exitCode, xmlResult.value.stderr));
+    }
+    const jsonResult = xmlToJson(xmlResult.value.stdout);
+    if (!jsonResult.ok) return err(jsonResult.error);
+    return ok({ data: jsonResult.value, source: 'xml' as const });
 }
 
 /**
  * Attempts XML-primary conversion: dcm2xml → xmlToJson.
+ * If charset conversion fails and a fallback charset is configured, retries with `+Ca <fallback>`.
  */
 async function tryXmlPath(inputPath: string, timeoutMs: number, signal?: AbortSignal, opts?: XmlPathOpts): Promise<Result<Dcm2jsonResult>> {
     const xmlBinary = resolveBinary('dcm2xml');
-    if (!xmlBinary.ok) {
-        return err(xmlBinary.error);
-    }
+    if (!xmlBinary.ok) return err(xmlBinary.error);
 
     const charsetArgs = opts?.charsetAssume !== undefined ? ['+Ca', opts.charsetAssume] : [];
     const xmlArgs = [...buildVerbosityArgs(opts?.verbosity), ...charsetArgs, '-nat', inputPath];
-    const xmlResult = await execCommand(xmlBinary.value, xmlArgs, { timeoutMs, signal });
-    if (!xmlResult.ok) {
-        return err(xmlResult.error);
+    const execOpts = signal !== undefined ? { timeoutMs, signal } : { timeoutMs };
+
+    const result = await runXmlAndParse(xmlBinary.value, xmlArgs, execOpts);
+
+    // On charset conversion failure, retry with the fallback charset
+    if (!result.ok && opts?.charsetFallback !== undefined && isCharsetError(result.error.message)) {
+        const fallbackArgs = [...buildVerbosityArgs(opts.verbosity), '+Ca', opts.charsetFallback, '-nat', inputPath];
+        return runXmlAndParse(xmlBinary.value, fallbackArgs, execOpts);
     }
 
-    if (xmlResult.value.exitCode !== 0) {
-        return err(createToolError('dcm2xml', xmlArgs, xmlResult.value.exitCode, xmlResult.value.stderr));
-    }
-
-    const jsonResult = xmlToJson(xmlResult.value.stdout);
-    if (!jsonResult.ok) {
-        return err(jsonResult.error);
-    }
-
-    return ok({ data: jsonResult.value, source: 'xml' as const });
+    return result;
 }
 
 /**
