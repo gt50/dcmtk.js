@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.13.1] - 2026-03-26
+
+### Added
+
+- **`parseInstances` option on `DicomReceiverOptions`** — when `false`, skips `DicomInstance.open()` for received files. No `INSTANCE_RECEIVED` or `INSTANCE_ERROR` events are emitted. `ASSOCIATION_FINALIZED` still fires as the terminal event with `instancesReceived: 0, instanceErrors: 0`. Defaults to `true`. Useful for consumers that only need file paths (forwarding, archiving) without the overhead of DICOM parsing
+
 ## [0.13.0] - 2026-03-26
 
 ### Added

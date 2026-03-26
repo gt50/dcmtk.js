@@ -209,6 +209,8 @@ interface DicomReceiverOptions {
     readonly storageMode?: StorageModeValue | undefined;
     /** Options passed to DicomInstance.open() for each received file. Defaults charsetFallback to `'Latin1'`. */
     readonly instanceOpenOptions?: DicomOpenOptions | undefined;
+    /** Whether to parse received files into DicomInstance. When false, INSTANCE_RECEIVED and INSTANCE_ERROR events are not emitted. Defaults to true. */
+    readonly parseInstances?: boolean | undefined;
     /** AbortSignal for external cancellation. */
     readonly signal?: AbortSignal | undefined;
 }
@@ -242,6 +244,7 @@ const DicomReceiverOptionsSchema = z
             })
             .strict()
             .optional(),
+        parseInstances: z.boolean().optional(),
         signal: z.instanceof(AbortSignal).optional(),
     })
     .strict()
@@ -490,6 +493,7 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
     private readonly maxPoolSize: number;
     private readonly connectionTimeoutMs: number;
     private readonly resolvedInstanceOpenOptions: DicomOpenOptions;
+    private readonly parseInstances: boolean;
     private readonly workers: Map<number, Worker> = new Map();
     private tcpServer: net.Server | undefined;
     private associationCounter = 0;
@@ -505,6 +509,7 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
         this.maxPoolSize = options.maxPoolSize ?? DEFAULT_MAX_POOL_SIZE;
         this.connectionTimeoutMs = options.connectionTimeoutMs ?? DEFAULT_CONNECTION_TIMEOUT_MS;
         this.resolvedInstanceOpenOptions = { charsetFallback: 'Latin1', ...options.instanceOpenOptions };
+        this.parseInstances = options.parseInstances ?? true;
     }
 
     // -----------------------------------------------------------------------
@@ -1041,16 +1046,18 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
             source: data.source,
         });
 
-        const instanceCtx = {
-            filePath: finalPath,
-            fileSize,
-            associationId: ctx.associationId,
-            associationDir: ctx.associationDir,
-            callingAE: data.callingAE,
-            calledAE: data.calledAE,
-            source: data.source,
-        };
-        worker.trackInstance(this.parseAndEmitInstance(worker, instanceCtx));
+        if (this.parseInstances) {
+            const instanceCtx = {
+                filePath: finalPath,
+                fileSize,
+                associationId: ctx.associationId,
+                associationDir: ctx.associationDir,
+                callingAE: data.callingAE,
+                calledAE: data.calledAE,
+                source: data.source,
+            };
+            worker.trackInstance(this.parseAndEmitInstance(worker, instanceCtx));
+        }
     }
 
     /** Parses a DICOM file and emits INSTANCE_RECEIVED or INSTANCE_ERROR. */
