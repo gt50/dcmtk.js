@@ -206,22 +206,24 @@ async function dcm2json(inputPath: string, options?: Dcm2jsonOptions): Promise<R
 
     const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     const signal = options?.signal;
+    const startTime = Date.now();
+    const remaining = (): number => Math.max(1000, timeoutMs - (Date.now() - startTime));
 
     const verbosity = options?.verbosity;
 
     // Direct-only mode: skip XML path
     if (options?.directOnly === true) {
-        return tryDirectPath(inputPath, timeoutMs, signal, verbosity);
+        return tryDirectPath(inputPath, remaining(), signal, verbosity);
     }
 
     // Try XML path first
-    const xmlResult = await tryXmlPath(inputPath, timeoutMs, signal, buildXmlOpts(options));
+    const xmlResult = await tryXmlPath(inputPath, remaining(), signal, buildXmlOpts(options));
     if (xmlResult.ok) {
         return xmlResult;
     }
 
-    // Fall back to direct path
-    return tryDirectPath(inputPath, timeoutMs, signal, verbosity);
+    // Fall back to direct path with remaining time budget
+    return tryDirectPath(inputPath, remaining(), signal, verbosity);
 }
 
 export { dcm2json };

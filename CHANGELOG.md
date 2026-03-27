@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.14.0] - 2026-03-27
+
+### Fixed
+
+- **DicomReceiver: context overwrite race** — added `'finalizing'` worker state that blocks `findIdleWorker` from routing new connections to a worker that's still draining. Prevents late `FILE_RECEIVED` events from being attributed to the wrong association when a new connection arrives before the previous association finishes (#25)
+- **DicomReceiver: stop() drains in-flight work** — `stop()` now awaits `drainPendingFiles()` and `drainInstancePending()` on all busy/finalizing workers (with 5s safety timeout) before killing dcmrecv processes. Prevents orphaned temp files and dropped events during graceful shutdown
+- **dcm2json timeout cascading** — `tryXmlPath` and `tryDirectPath` now share a time budget tracked from the start of the call. Total wall time is capped at the requested `timeoutMs` instead of potentially doubling (30s XML + 30s direct = 60s)
+- **replenishPool silent failure** — added `.catch()` to the fire-and-forget `replenishPool()` call so pool scaling errors surface via the `'error'` event instead of being silently dropped
+
 ## [0.13.2] - 2026-03-27
 
 ### Fixed

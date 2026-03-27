@@ -272,7 +272,7 @@ class Worker {
     readonly dcmrecv: Dcmrecv;
     readonly port: number;
     readonly tempDir: string;
-    private _state: 'idle' | 'busy' = 'idle';
+    private _state: 'idle' | 'busy' | 'finalizing' = 'idle';
     private _context: AssociationContext | undefined;
     private readonly _pending = new Set<Promise<void>>();
     private readonly _instancePending = new Set<Promise<void>>();
@@ -290,8 +290,8 @@ class Worker {
         this.tempDir = tempDir;
     }
 
-    /** Current worker state. */
-    get state(): 'idle' | 'busy' {
+    /** Current worker state: idle (ready), busy (handling association), finalizing (draining). */
+    get state(): 'idle' | 'busy' | 'finalizing' {
         return this._state;
     }
 
@@ -326,6 +326,11 @@ class Worker {
         this._instancePending.clear();
         this._instancesReceived = 0;
         this._instanceErrors = 0;
+    }
+
+    /** Marks the worker as finalizing — still has valid context but cannot accept new connections. */
+    markFinalizing(): void {
+        this._state = 'finalizing';
     }
 
     /**
@@ -577,6 +582,9 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
 
         await this.closeTcpProxy();
 
+        // Drain in-flight work on busy/finalizing workers before killing processes
+        await this.drainAllWorkers();
+
         const stopPromises: Promise<void>[] = [];
         for (const worker of this.workers.values()) {
             stopPromises.push(this.stopWorker(worker));
@@ -763,6 +771,19 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
         });
     }
 
+    /** Drains in-flight file and instance work on all non-idle workers, with a 5s safety timeout. */
+    private async drainAllWorkers(): Promise<void> {
+        const drainPromises: Promise<void>[] = [];
+        for (const worker of this.workers.values()) {
+            if (worker.state !== 'idle') {
+                drainPromises.push(worker.drainPendingFiles());
+                drainPromises.push(worker.drainInstancePending());
+            }
+        }
+        if (drainPromises.length === 0) return;
+        await Promise.race([Promise.all(drainPromises), delay(5000)]);
+    }
+
     // -----------------------------------------------------------------------
     // Connection routing
     // -----------------------------------------------------------------------
@@ -797,7 +818,9 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
 
         worker.beginAssociation(ctx);
         this.pipeConnection(worker, remoteSocket);
-        void this.replenishPool();
+        void this.replenishPool().catch((e: unknown) => {
+            this.emit('error', { error: e instanceof Error ? e : new Error(String(e)) });
+        });
     }
 
     /** Finds an idle worker, retrying up to connectionTimeoutMs. */
@@ -1086,12 +1109,13 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
     /** Returns worker to idle pool on association complete, emits summary. */
     private wireAssociationComplete(worker: Worker): void {
         worker.dcmrecv.onAssociationComplete((data: AssociationCompleteData) => {
-            // Defer finalization to the check phase (after I/O callbacks) so that
+            // Mark worker as finalizing SYNCHRONOUSLY — prevents findIdleWorker
+            // from routing new connections to this worker during drain. (#25)
+            worker.markFinalizing();
+
+            // Defer the actual drain to the check phase (after I/O callbacks) so
             // any remaining FILE_RECEIVED events in pending pipe chunks are processed
-            // before the worker resets. Without this, the last STORED_FILE and
-            // ASSOCIATION_RELEASE can arrive in separate pipe chunks — microtasks from
-            // finalizeAssociation run between them, resetting the worker before the
-            // last file is handled. (#25)
+            // before ASSOCIATION_FINALIZED fires. (#25)
             setImmediate(() => {
                 void this.finalizeAssociation(worker, data);
             });
