@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.13.2] - 2026-03-27
+
+### Fixed
+
+- **DicomReceiver: late FILE_RECEIVED after ASSOCIATION_FINALIZED** — dcmrecv can deliver the last "Stored..." line and "Association Release" in separate pipe chunks. Microtasks from `finalizeAssociation` ran between the two macrotask I/O callbacks, resetting the worker to idle before the last file was processed. Two fixes: (1) defer finalization with `setImmediate` so pending I/O callbacks run first; (2) keep association context alive in `endAssociation` — cleared only on next `beginAssociation` — so late FILE_RECEIVED events still have valid context. 742 occurrences in 12 hours in production (#25)
+
 ## [0.13.1] - 2026-03-26
 
 ### Added

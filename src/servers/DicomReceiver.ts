@@ -328,10 +328,15 @@ class Worker {
         this._instanceErrors = 0;
     }
 
-    /** Returns the worker to idle and clears all association state. */
+    /**
+     * Returns the worker to idle. Context is intentionally preserved so that
+     * late FILE_RECEIVED events (arriving in a subsequent pipe chunk after
+     * ASSOCIATION_RELEASE) still have valid association info. Context is
+     * cleared on the next {@link beginAssociation} call.
+     */
     endAssociation(): void {
         this._state = 'idle';
-        this._context = undefined;
+        // NOTE: _context is NOT cleared here — see JSDoc above
         this._files.length = 0;
         this._fileSizes.length = 0;
         this._outputLines.length = 0;
@@ -1081,7 +1086,15 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
     /** Returns worker to idle pool on association complete, emits summary. */
     private wireAssociationComplete(worker: Worker): void {
         worker.dcmrecv.onAssociationComplete((data: AssociationCompleteData) => {
-            void this.finalizeAssociation(worker, data);
+            // Defer finalization to the check phase (after I/O callbacks) so that
+            // any remaining FILE_RECEIVED events in pending pipe chunks are processed
+            // before the worker resets. Without this, the last STORED_FILE and
+            // ASSOCIATION_RELEASE can arrive in separate pipe chunks — microtasks from
+            // finalizeAssociation run between them, resetting the worker before the
+            // last file is handled. (#25)
+            setImmediate(() => {
+                void this.finalizeAssociation(worker, data);
+            });
         });
     }
 
