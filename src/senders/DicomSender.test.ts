@@ -8,7 +8,7 @@ import type { SenderSendCompleteData, SenderSendFailedData, SenderHealthChangedD
 
 type StorescuResult = { ok: true; value: { success: boolean; stdout: string; stderr: string } } | { ok: false; error: Error };
 
-const mockStorescu = vi.fn<() => Promise<StorescuResult>>(() => Promise.resolve({ ok: true, value: { success: true, stdout: '', stderr: '' } }));
+const mockStorescu = vi.fn<(opts?: unknown) => Promise<StorescuResult>>(() => Promise.resolve({ ok: true, value: { success: true, stdout: '', stderr: '' } }));
 
 vi.mock('../tools/storescu', () => ({
     storescu: (...args: unknown[]) => mockStorescu(...(args as [])),
@@ -1013,6 +1013,72 @@ describe('DicomSender', () => {
 
             vi.useFakeTimers({ shouldAdvanceTime: true });
         });
+
+        it('stop() short-circuits a long retry delay (does not wait it out)', async () => {
+            // First attempt fails; the retry delay is 5s. stop() must resolve
+            // far faster than that — proving the delay is interruptible.
+            vi.useRealTimers();
+
+            mockStorescu.mockResolvedValueOnce({ ok: false, error: new Error('fail') });
+
+            const result = DicomSender.create({ ...validOpts, maxRetries: 3, retryDelayMs: 5000 });
+            if (!result.ok) throw new Error('create failed');
+            const sender = result.value;
+
+            const p = sender.send(['/f1.dcm']);
+            // Let the first attempt resolve and enter the 5s retry delay
+            await delay(50);
+
+            const t0 = Date.now();
+            await sender.stop();
+            const elapsed = Date.now() - t0;
+
+            // If delay were uninterruptible we'd block ~5000ms. Allow generous slack.
+            expect(elapsed).toBeLessThan(500);
+
+            const r = await p;
+            expect(r.ok).toBe(false);
+            if (!r.ok) expect(r.error.message).toMatch(/stopped/);
+
+            vi.useFakeTimers({ shouldAdvanceTime: true });
+        });
+
+        it('stop() aborts an in-flight executor (does not wait for binary timeout)', async () => {
+            // Stub storescu with a promise that only resolves when its signal aborts.
+            // If stop() did not abort the executor, this would hang and the test would time out.
+            vi.useRealTimers();
+
+            mockStorescu.mockImplementationOnce(args => {
+                const opts = args as { signal?: AbortSignal };
+                return new Promise(resolve => {
+                    opts.signal?.addEventListener(
+                        'abort',
+                        () => {
+                            resolve({ ok: false, error: new Error('aborted') });
+                        },
+                        { once: true }
+                    );
+                });
+            });
+
+            const result = DicomSender.create({ ...validOpts, maxRetries: 0 });
+            if (!result.ok) throw new Error('create failed');
+            const sender = result.value;
+
+            const p = sender.send(['/f1.dcm']);
+            await delay(50);
+
+            const t0 = Date.now();
+            await sender.stop();
+            const elapsed = Date.now() - t0;
+            expect(elapsed).toBeLessThan(500);
+
+            const r = await p;
+            expect(r.ok).toBe(false);
+            if (!r.ok) expect(r.error.message).toMatch(/stopped/);
+
+            vi.useFakeTimers({ shouldAdvanceTime: true });
+        });
     });
 
     // -----------------------------------------------------------------------
@@ -1032,7 +1098,7 @@ describe('DicomSender', () => {
             expect(sender.status.stopped).toBe(true);
         });
 
-        it('passes signal to storescu', async () => {
+        it('passes a signal to storescu that aborts when the user signal aborts', async () => {
             const controller = new AbortController();
             const result = DicomSender.create({ ...validOpts, signal: controller.signal });
             if (!result.ok) return;
@@ -1040,9 +1106,26 @@ describe('DicomSender', () => {
 
             await sender.send(['/f1.dcm']);
 
-            expect(mockStorescu).toHaveBeenCalledWith(expect.objectContaining({ signal: controller.signal }));
+            expect(mockStorescu).toHaveBeenCalledWith(expect.objectContaining({ signal: expect.any(AbortSignal) as AbortSignal }));
+            const passed = mockStorescu.mock.calls[0]![0] as { signal: AbortSignal };
+            expect(passed.signal.aborted).toBe(false);
+            controller.abort();
+            expect(passed.signal.aborted).toBe(true);
 
             await sender.stop();
+        });
+
+        it('passes a signal to storescu that aborts when stop() is called', async () => {
+            const result = DicomSender.create({ ...validOpts });
+            if (!result.ok) return;
+            const sender = result.value;
+
+            await sender.send(['/f1.dcm']);
+
+            const passed = mockStorescu.mock.calls[0]![0] as { signal: AbortSignal };
+            expect(passed.signal.aborted).toBe(false);
+            await sender.stop();
+            expect(passed.signal.aborted).toBe(true);
         });
     });
 

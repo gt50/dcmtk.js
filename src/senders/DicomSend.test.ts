@@ -671,6 +671,65 @@ describe('DicomSend', () => {
             await sender.stop();
             await sender.stop(); // should not throw
         });
+
+        it('short-circuits a long retry delay', async () => {
+            vi.useRealTimers();
+
+            mockDcmsend.mockResolvedValueOnce({ ok: false, error: new Error('fail') });
+
+            const r = DicomSend.create({ ...validOpts, maxRetries: 3, retryDelayMs: 5000 });
+            if (!r.ok) throw new Error('create failed');
+            const sender = r.value;
+
+            const p = sender.send(['/f1.dcm']);
+            await delay(50); // let first attempt fail and enter retry delay
+
+            const t0 = Date.now();
+            await sender.stop();
+            const elapsed = Date.now() - t0;
+            expect(elapsed).toBeLessThan(500);
+
+            const result = await p;
+            expect(result.ok).toBe(false);
+            if (!result.ok) expect(result.error.message).toMatch(/stopped/);
+
+            vi.useFakeTimers({ shouldAdvanceTime: true });
+        });
+
+        it('aborts an in-flight executor (does not wait for binary timeout)', async () => {
+            vi.useRealTimers();
+
+            mockDcmsend.mockImplementationOnce((args: unknown) => {
+                const opts = args as { signal?: AbortSignal };
+                return new Promise(resolve => {
+                    opts.signal?.addEventListener(
+                        'abort',
+                        () => {
+                            resolve({ ok: false, error: new Error('aborted') });
+                        },
+                        { once: true }
+                    );
+                });
+            });
+
+            const r = DicomSend.create({ ...validOpts, maxRetries: 0 });
+            if (!r.ok) throw new Error('create failed');
+            const sender = r.value;
+
+            const p = sender.send(['/f1.dcm']);
+            await delay(50);
+
+            const t0 = Date.now();
+            await sender.stop();
+            const elapsed = Date.now() - t0;
+            expect(elapsed).toBeLessThan(500);
+
+            const result = await p;
+            expect(result.ok).toBe(false);
+            if (!result.ok) expect(result.error.message).toMatch(/stopped/);
+
+            vi.useFakeTimers({ shouldAdvanceTime: true });
+        });
     });
 
     // -----------------------------------------------------------------------

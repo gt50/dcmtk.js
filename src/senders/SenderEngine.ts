@@ -125,9 +125,16 @@ class SenderEngine<TParams> {
     private currentBucket: BucketEntry<TParams>[] = [];
     private bucketTimer: ReturnType<typeof setTimeout> | undefined;
 
+    // Abort wiring: stopController fires on stop(); combinedSignal also fires
+    // when the externally provided config.signal aborts. Passed into the
+    // executor and into delayInterruptible so stop() unblocks promptly.
+    private readonly stopController = new AbortController();
+    private readonly combinedSignal: AbortSignal;
+
     constructor(config: EngineConfig<TParams>) {
         this.config = config;
         this.effectiveMaxAssociations = config.configuredMaxAssociations;
+        this.combinedSignal = combineSignals(this.stopController.signal, config.signal);
     }
 
     // -----------------------------------------------------------------------
@@ -158,6 +165,11 @@ class SenderEngine<TParams> {
     async stop(): Promise<void> {
         if (this.isStopped) return;
         this.isStopped = true;
+
+        // Abort first so any in-flight executor and any pending retry-delay
+        // unblock immediately. Without this, stop() blocks on the executor's
+        // own timeout and on retryDelayMs * (attempt+1).
+        this.stopController.abort();
 
         this.clearBucketTimer();
         this.rejectBucket(`${this.config.senderName}: sender stopped`);
@@ -360,25 +372,36 @@ class SenderEngine<TParams> {
 
         for (let attempt = 0; attempt < maxAttempts; attempt++) {
             if (this.isStopped) {
-                this.activeAssociations--;
-                entry.resolve(err(new Error(`${this.config.senderName}: sender stopped`)));
-                return undefined;
+                return this.resolveStopped(entry);
             }
 
-            const result = await this.config.executor(entry.files, entry.timeoutMs, entry.binaryParams, this.config.signal);
+            const result = await this.config.executor(entry.files, entry.timeoutMs, entry.binaryParams, this.combinedSignal);
 
             if (result.ok) {
                 this.handleSendSuccess(entry, startMs, result.value);
                 return undefined;
             }
 
+            // Executor may have aborted because stop() was called mid-flight;
+            // surface that as "stopped" rather than as a generic failure.
+            if (this.isStopped) {
+                return this.resolveStopped(entry);
+            }
+
             lastError = result.error;
             if (attempt < maxAttempts - 1) {
-                await delay(this.config.retryDelayMs * (attempt + 1));
+                await delayInterruptible(this.config.retryDelayMs * (attempt + 1), this.combinedSignal);
             }
         }
 
         return { error: lastError ?? new Error(`${this.config.senderName}: send failed`), output: lastOutput };
+    }
+
+    /** Resolves the entry as stopped and decrements activeAssociations. Used from attemptSend. */
+    private resolveStopped(entry: QueueEntry<TParams>): undefined {
+        this.activeAssociations--;
+        entry.resolve(err(new Error(`${this.config.senderName}: sender stopped`)));
+        return undefined;
     }
 
     /** Handles a successful send: updates state, emits event, resolves promise. */
@@ -508,11 +531,48 @@ class SenderEngine<TParams> {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Promise-based delay. */
-function delay(ms: number): Promise<void> {
+/** Promise-based delay that resolves on either timeout OR signal abort. */
+function delayInterruptible(ms: number, signal: AbortSignal): Promise<void> {
+    if (signal.aborted) return Promise.resolve();
     return new Promise(resolve => {
-        setTimeout(resolve, ms);
+        const onAbort = (): void => {
+            clearTimeout(timer);
+            resolve();
+        };
+        const timer = setTimeout(() => {
+            signal.removeEventListener('abort', onAbort);
+            resolve();
+        }, ms);
+        signal.addEventListener('abort', onAbort, { once: true });
     });
+}
+
+/**
+ * Combines a primary AbortSignal with an optional external AbortSignal.
+ * The returned signal aborts when either input aborts. Implemented manually
+ * (rather than AbortSignal.any) to keep `engines.node >= 20` compatibility:
+ * AbortSignal.any requires Node 20.3+.
+ */
+function combineSignals(primary: AbortSignal, external: AbortSignal | undefined): AbortSignal {
+    if (external === undefined) return primary;
+    if (primary.aborted) return primary;
+    if (external.aborted) {
+        const c = new AbortController();
+        c.abort(external.reason);
+        return c.signal;
+    }
+    const merged = new AbortController();
+    const onPrimary = (): void => {
+        merged.abort(primary.reason);
+        external.removeEventListener('abort', onExternal);
+    };
+    const onExternal = (): void => {
+        merged.abort(external.reason);
+        primary.removeEventListener('abort', onPrimary);
+    };
+    primary.addEventListener('abort', onPrimary, { once: true });
+    external.addEventListener('abort', onExternal, { once: true });
+    return merged.signal;
 }
 
 export { SenderEngine };
