@@ -245,7 +245,7 @@ async function dcmsend(options: DcmsendOptions): Promise<Result<DcmsendResult>> 
     }
 
     if (result.value.exitCode !== 0) {
-        return err(createToolError('dcmsend', args, result.value.exitCode, result.value.stderr));
+        return err(createToolError('dcmsend', args, result.value.exitCode, result.value.stderr, result.value.stdout));
     }
 
     return ok({ success: true, stdout: result.value.stdout, stderr: result.value.stderr });

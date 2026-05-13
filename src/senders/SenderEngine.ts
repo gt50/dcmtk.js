@@ -21,6 +21,18 @@ import type {
     SenderBucketFlushedData,
 } from './types';
 
+/** Output captured from one binary attempt. Always present, even on failure. */
+interface BinaryOutput {
+    readonly stdout: string;
+    readonly stderr: string;
+}
+
+/** What an executor returns: stdout/stderr always, plus an optional error on failure. */
+interface ExecutorOutcome extends BinaryOutput {
+    /** Present iff the attempt failed. */
+    readonly error?: Error;
+}
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -36,13 +48,12 @@ const RECOVERY_THRESHOLD = 3;
 // Types
 // ---------------------------------------------------------------------------
 
-/** Function that executes the underlying binary (storescu or dcmsend). */
-type SendExecutor<TParams> = (
-    files: readonly string[],
-    timeoutMs: number,
-    binaryParams: TParams,
-    signal: AbortSignal | undefined
-) => Promise<Result<{ stdout: string; stderr: string }>>;
+/**
+ * Function that executes the underlying binary (storescu or dcmsend).
+ * Returns an ExecutorOutcome that always carries stdout/stderr — including
+ * on the failure path — so consumers can surface diagnostic output.
+ */
+type SendExecutor<TParams> = (files: readonly string[], timeoutMs: number, binaryParams: TParams, signal: AbortSignal | undefined) => Promise<ExecutorOutcome>;
 
 /** Event emit callbacks passed from the wrapper class. */
 interface EngineEmitters {
@@ -84,12 +95,6 @@ interface BucketEntry<TParams> {
     readonly timeoutMs: number;
     readonly maxRetries: number;
     readonly binaryParams: TParams;
-}
-
-/** Output captured from the last binary call in an attempt loop. */
-interface BinaryOutput {
-    readonly stdout: string;
-    readonly stderr: string;
 }
 
 /** Result of attemptSend: undefined on success (already handled), or error + output on failure. */
@@ -368,17 +373,18 @@ class SenderEngine<TParams> {
     /** Attempts the binary call up to maxAttempts times. Returns undefined on success. */
     private async attemptSend(entry: QueueEntry<TParams>, maxAttempts: number, startMs: number): Promise<AttemptFailure | undefined> {
         let lastError: Error | undefined;
-        const lastOutput: BinaryOutput = { stdout: '', stderr: '' };
+        let lastOutput: BinaryOutput = { stdout: '', stderr: '' };
 
         for (let attempt = 0; attempt < maxAttempts; attempt++) {
             if (this.isStopped) {
                 return this.resolveStopped(entry);
             }
 
-            const result = await this.config.executor(entry.files, entry.timeoutMs, entry.binaryParams, this.combinedSignal);
+            const outcome = await this.config.executor(entry.files, entry.timeoutMs, entry.binaryParams, this.combinedSignal);
+            lastOutput = { stdout: outcome.stdout, stderr: outcome.stderr };
 
-            if (result.ok) {
-                this.handleSendSuccess(entry, startMs, result.value);
+            if (outcome.error === undefined) {
+                this.handleSendSuccess(entry, startMs, lastOutput);
                 return undefined;
             }
 
@@ -388,7 +394,7 @@ class SenderEngine<TParams> {
                 return this.resolveStopped(entry);
             }
 
-            lastError = result.error;
+            lastError = outcome.error;
             if (attempt < maxAttempts - 1) {
                 await delayInterruptible(this.config.retryDelayMs * (attempt + 1), this.combinedSignal);
             }
@@ -576,4 +582,4 @@ function combineSignals(primary: AbortSignal, external: AbortSignal | undefined)
 }
 
 export { SenderEngine };
-export type { SendExecutor, EngineConfig, EngineEmitters };
+export type { SendExecutor, EngineConfig, EngineEmitters, ExecutorOutcome };

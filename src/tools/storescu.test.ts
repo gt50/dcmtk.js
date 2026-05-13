@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { storescu, ProposedTransferSyntax } from './storescu';
+import { ToolExecutionError } from './_toolError';
 
 vi.mock('../exec', () => ({
     execCommand: vi.fn(),
@@ -386,6 +387,36 @@ describe('storescu', () => {
             });
             const result = await storescu({ host: 'localhost', port: 104, files: ['/test.dcm'] });
             expect(result.ok).toBe(false);
+        });
+
+        it('attaches stdout and stderr to ToolExecutionError on non-zero exit', async () => {
+            mockedExecCommand.mockResolvedValue({
+                ok: true,
+                value: { stdout: 'I: starting association', stderr: 'F: connection refused', exitCode: 3 },
+            });
+            const result = await storescu({ host: 'localhost', port: 104, files: ['/test.dcm'] });
+            expect(result.ok).toBe(false);
+            if (result.ok) return;
+            expect(result.error).toBeInstanceOf(ToolExecutionError);
+            const err = result.error as ToolExecutionError;
+            expect(err.stdout).toBe('I: starting association');
+            expect(err.stderr).toBe('F: connection refused');
+            expect(err.exitCode).toBe(3);
+        });
+
+        it('attaches stdout and stderr to ToolExecutionError on DIMSE failure with exit code 0', async () => {
+            mockedExecCommand.mockResolvedValue({
+                ok: true,
+                value: { stdout: 'I: progress', stderr: 'E: DIMSE Failed status: 0xa700', exitCode: 0 },
+            });
+            const result = await storescu({ host: 'localhost', port: 104, files: ['/test.dcm'] });
+            expect(result.ok).toBe(false);
+            if (result.ok) return;
+            expect(result.error).toBeInstanceOf(ToolExecutionError);
+            const err = result.error as ToolExecutionError;
+            expect(err.stdout).toBe('I: progress');
+            expect(err.stderr).toBe('E: DIMSE Failed status: 0xa700');
+            expect(err.exitCode).toBe(0);
         });
 
         it('returns error when stderr contains DIMSE failure despite exit code 0', async () => {

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { dcmsend } from './dcmsend';
+import { ToolExecutionError } from './_toolError';
 
 vi.mock('../exec', () => ({
     execCommand: vi.fn(),
@@ -292,6 +293,21 @@ describe('dcmsend', () => {
             });
             const result = await dcmsend({ host: 'localhost', port: 104, files: ['/test.dcm'] });
             expect(result.ok).toBe(false);
+        });
+
+        it('attaches stdout and stderr to ToolExecutionError on non-zero exit', async () => {
+            mockedExecCommand.mockResolvedValue({
+                ok: true,
+                value: { stdout: 'I: contacting host', stderr: 'F: connection refused', exitCode: 2 },
+            });
+            const result = await dcmsend({ host: 'localhost', port: 104, files: ['/test.dcm'] });
+            expect(result.ok).toBe(false);
+            if (result.ok) return;
+            expect(result.error).toBeInstanceOf(ToolExecutionError);
+            const err = result.error as ToolExecutionError;
+            expect(err.stdout).toBe('I: contacting host');
+            expect(err.stderr).toBe('F: connection refused');
+            expect(err.exitCode).toBe(2);
         });
 
         it('returns error when binary not found', async () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createToolError, MAX_ARGS_LENGTH, MAX_STDERR_LENGTH } from './_toolError';
+import { ToolExecutionError, createToolError, MAX_ARGS_LENGTH, MAX_STDERR_LENGTH } from './_toolError';
 
 describe('createToolError()', () => {
     it('creates error with tool name and exit code', () => {
@@ -45,5 +45,24 @@ describe('createToolError()', () => {
         const error = createToolError('echoscu', ['--help'], 0, '  some warning  \n');
 
         expect(error.message).toMatch(/stderr: some warning/);
+    });
+
+    it('returns a ToolExecutionError carrying stdout/stderr/exitCode', () => {
+        const error = createToolError('storescu', ['+r'], 7, 'F: nope', 'I: progress');
+
+        expect(error).toBeInstanceOf(ToolExecutionError);
+        expect(error.stdout).toBe('I: progress');
+        expect(error.stderr).toBe('F: nope');
+        expect(error.exitCode).toBe(7);
+        expect(error.name).toBe('ToolExecutionError');
+    });
+
+    it('defaults stdout to empty string when not provided', () => {
+        const error = createToolError('dcm2xml', [], 1, 'fail');
+
+        expect(error).toBeInstanceOf(ToolExecutionError);
+        expect(error.stdout).toBe('');
+        expect(error.stderr).toBe('fail');
+        expect(error.exitCode).toBe(1);
     });
 });

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { DicomSend } from './DicomSend';
+import { ToolExecutionError } from '../tools/_toolError';
 import type { SenderSendCompleteData, SenderSendFailedData, SenderHealthChangedData, SenderBucketFlushedData } from './types';
 
 // ---------------------------------------------------------------------------
@@ -291,6 +292,30 @@ describe('DicomSend', () => {
             await sender.send(['/test.dcm']);
             expect(events).toHaveLength(1);
             expect(events[0]!.attempts).toBe(1);
+            await sender.stop();
+        });
+
+        it('SEND_FAILED carries stdout/stderr when error is a ToolExecutionError', async () => {
+            const toolErr = new ToolExecutionError('dcmsend failed (exit code 1)', {
+                stdout: 'I: contacting host',
+                stderr: 'F: connection refused',
+                exitCode: 1,
+            });
+            mockDcmsend.mockImplementation(() => Promise.resolve({ ok: false, error: toolErr }));
+
+            const r = DicomSend.create({ ...validOpts, maxRetries: 0 });
+            if (!r.ok) throw new Error('create failed');
+            const sender = r.value;
+
+            let captured: SenderSendFailedData | undefined;
+            sender.onSendFailed(data => {
+                captured = data;
+            });
+
+            await sender.send(['/test.dcm']);
+            expect(captured).toBeDefined();
+            expect(captured!.stdout).toBe('I: contacting host');
+            expect(captured!.stderr).toBe('F: connection refused');
             await sender.stop();
         });
 

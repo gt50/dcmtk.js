@@ -29,7 +29,27 @@ function truncate(value: string, maxLength: number): string {
 }
 
 /**
- * Creates a standardized Error for a tool wrapper failure.
+ * Error thrown by tool wrappers when the underlying binary exits non-zero
+ * (or otherwise reports failure). Carries the full captured stdout/stderr
+ * and exit code so callers can surface diagnostic output without parsing
+ * the message string.
+ */
+class ToolExecutionError extends Error {
+    readonly stdout: string;
+    readonly stderr: string;
+    readonly exitCode: number;
+
+    constructor(message: string, details: { readonly stdout: string; readonly stderr: string; readonly exitCode: number }) {
+        super(message);
+        this.name = 'ToolExecutionError';
+        this.stdout = details.stdout;
+        this.stderr = details.stderr;
+        this.exitCode = details.exitCode;
+    }
+}
+
+/**
+ * Creates a standardized error for a tool wrapper failure.
  *
  * **Privacy note:** Arguments are included in the error message for debugging.
  * These may contain file paths. Callers exposing errors to end users or external
@@ -39,9 +59,11 @@ function truncate(value: string, maxLength: number): string {
  * @param args - The command-line arguments passed to the tool
  * @param exitCode - The process exit code
  * @param stderr - The captured stderr output
- * @returns An Error with a descriptive message
+ * @param stdout - The captured stdout output (default '')
+ * @returns A ToolExecutionError carrying the full output for diagnostic use
  */
-function createToolError(toolName: string, args: readonly string[], exitCode: number, stderr: string): Error {
+// eslint-disable-next-line max-params -- 5 cohesive params describing one process result; refactoring to an options bag would churn 50+ call sites
+function createToolError(toolName: string, args: readonly string[], exitCode: number, stderr: string, stdout: string = ''): ToolExecutionError {
     const argsStr = truncate(args.join(' '), MAX_ARGS_LENGTH);
     const stderrStr = truncate(stderr.trim(), MAX_STDERR_LENGTH);
     const parts = [`${toolName} failed (exit code ${String(exitCode)})`];
@@ -51,7 +73,7 @@ function createToolError(toolName: string, args: readonly string[], exitCode: nu
     if (stderrStr.length > 0) {
         parts.push(`stderr: ${stderrStr}`);
     }
-    return new Error(parts.join(' | '));
+    return new ToolExecutionError(parts.join(' | '), { stdout, stderr, exitCode });
 }
 
 /**
@@ -80,4 +102,4 @@ function createValidationError(
     return new Error(`${toolName}: invalid options — ${detail}`);
 }
 
-export { createToolError, createValidationError, truncate, MAX_ARGS_LENGTH, MAX_STDERR_LENGTH };
+export { ToolExecutionError, createToolError, createValidationError, truncate, MAX_ARGS_LENGTH, MAX_STDERR_LENGTH };

@@ -275,11 +275,11 @@ async function storescu(options: StorescuOptions): Promise<Result<StorescuResult
     }
 
     if (result.value.exitCode !== 0) {
-        return err(createToolError('storescu', args, result.value.exitCode, result.value.stderr));
+        return err(createToolError('storescu', args, result.value.exitCode, result.value.stderr, result.value.stdout));
     }
 
     if (DIMSE_ERROR_PATTERN.test(result.value.stderr)) {
-        return err(createToolError('storescu', args, 0, result.value.stderr));
+        return err(createToolError('storescu', args, 0, result.value.stderr, result.value.stdout));
     }
 
     return ok({ success: true, stdout: result.value.stdout, stderr: result.value.stderr });

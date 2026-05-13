@@ -14,7 +14,7 @@ import type { Result } from '../types';
 import { ok, err } from '../types';
 import { DEFAULT_TIMEOUT_MS } from '../constants';
 import { isValidAETitle } from '../patterns';
-import { createValidationError } from '../tools/_toolError';
+import { ToolExecutionError, createValidationError } from '../tools/_toolError';
 import { dcmsend } from '../tools/dcmsend';
 import { SenderEngine } from './SenderEngine';
 import type { SendExecutor } from './SenderEngine';
@@ -183,8 +183,13 @@ function createDcmsendExecutor(options: DicomSendOptions): SendExecutor<DcmsendP
             timeoutMs,
             signal,
         });
-        if (!result.ok) return err(result.error);
-        return ok({ stdout: result.value.stdout, stderr: result.value.stderr });
+        if (!result.ok) {
+            const e = result.error;
+            const stdout = e instanceof ToolExecutionError ? e.stdout : '';
+            const stderr = e instanceof ToolExecutionError ? e.stderr : '';
+            return { stdout, stderr, error: e };
+        }
+        return { stdout: result.value.stdout, stderr: result.value.stderr };
     };
 }
 

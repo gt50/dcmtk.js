@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { DicomSender } from './DicomSender';
+import { ToolExecutionError } from '../tools/_toolError';
 import type { SenderSendCompleteData, SenderSendFailedData, SenderHealthChangedData, SenderBucketFlushedData } from './types';
 
 // ---------------------------------------------------------------------------
@@ -1277,8 +1278,35 @@ describe('DicomSender', () => {
             await sender.stop();
         });
 
-        it('includes stdout and stderr in SEND_FAILED event', async () => {
-            mockStorescu.mockResolvedValue({ ok: false, error: new Error('connection refused') });
+        it('includes stdout and stderr from ToolExecutionError in SEND_FAILED event', async () => {
+            const toolErr = new ToolExecutionError('storescu failed (exit code 1) | stderr: connection refused', {
+                stdout: 'I: starting',
+                stderr: 'F: connection refused',
+                exitCode: 1,
+            });
+            mockStorescu.mockResolvedValue({ ok: false, error: toolErr });
+
+            const result = DicomSender.create({ ...validOpts, mode: 'single', maxRetries: 0 });
+            if (!result.ok) return;
+            const sender = result.value;
+
+            let captured: SenderSendFailedData | undefined;
+            sender.on('SEND_FAILED', data => {
+                captured = data;
+            });
+
+            await sender.send(['/file.dcm']);
+            await delay(50);
+
+            expect(captured).toBeDefined();
+            expect(captured!.stdout).toBe('I: starting');
+            expect(captured!.stderr).toBe('F: connection refused');
+
+            await sender.stop();
+        });
+
+        it('falls back to empty stdout/stderr when error is not a ToolExecutionError', async () => {
+            mockStorescu.mockResolvedValue({ ok: false, error: new Error('plain error') });
 
             const result = DicomSender.create({ ...validOpts, mode: 'single', maxRetries: 0 });
             if (!result.ok) return;

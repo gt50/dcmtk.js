@@ -55,6 +55,9 @@ export type { EventPattern, MultiLineConfig } from './parsers/EventPattern';
 export type { ToolBaseOptions } from './tools/_toolTypes';
 export type { DicomJsonElement } from './tools/_xmlToJson';
 
+// Tool errors — surfaced via Result.error from any tool wrapper or DicomSender/DicomSend
+export { ToolExecutionError } from './tools/_toolError';
+
 // ---------------------------------------------------------------------------
 // DICOM data layer
 // ---------------------------------------------------------------------------
