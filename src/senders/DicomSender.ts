@@ -89,6 +89,20 @@ interface StorescuParams {
 }
 
 // ---------------------------------------------------------------------------
+// Bucket grouping key
+// ---------------------------------------------------------------------------
+
+/**
+ * Stable key for grouping bucket entries by params. JSON.stringify gives an
+ * unambiguous, separator-free encoding that handles strings, booleans, arrays,
+ * and undefined without escaping concerns. Bucket entries with the same key
+ * merge into one storescu call; differing keys split into separate calls.
+ */
+function storescuBucketKey(p: StorescuParams): string {
+    return JSON.stringify(p);
+}
+
+// ---------------------------------------------------------------------------
 // Executor factory
 // ---------------------------------------------------------------------------
 
@@ -230,6 +244,7 @@ class DicomSender extends EventEmitter<DicomSenderEventMap> {
             executor: createStorescuExecutor(options),
             signal: options.signal,
             senderName: 'DicomSender',
+            bucketParamsKey: storescuBucketKey,
             emitters: {
                 emitSendComplete: (data): void => {
                     senderRef.current!.emit('SEND_COMPLETE', data);

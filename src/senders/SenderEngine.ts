@@ -77,6 +77,14 @@ interface EngineConfig<TParams> {
     readonly signal: AbortSignal | undefined;
     readonly emitters: EngineEmitters;
     readonly senderName: string;
+    /**
+     * Bucket-mode only: derives a stable string key from binaryParams. Bucket
+     * entries with the same key merge into one underlying binary call;
+     * entries with different keys split into separate calls. Required only
+     * when per-send overrides can vary (e.g. AE titles in a router).
+     * Omit (or return a constant) to merge everything as before.
+     */
+    readonly bucketParamsKey?: (params: TParams) => string;
 }
 
 /** Resolve callback for a queued send. */
@@ -310,21 +318,53 @@ class SenderEngine<TParams> {
         };
     }
 
-    /** Flushes the current bucket: combines all files, dispatches as one send. */
+    /**
+     * Flushes the current bucket. Entries with the same bucketParamsKey merge
+     * into one underlying call; differing keys split into separate calls,
+     * preserving first-occurrence order. Each group emits its own
+     * BUCKET_FLUSHED. If the number of groups exceeds available capacity,
+     * the surplus is queued and drains as capacity frees.
+     */
     private flushBucketInternal(reason: 'timer' | 'maxSize'): void {
         if (this.currentBucket.length === 0) return;
 
         const entries = [...this.currentBucket];
         this.currentBucket = [];
 
-        const bucketEntry = this.mergeBucketEntries(entries);
-        this.config.emitters.emitBucketFlushed({ fileCount: bucketEntry.files.length, reason });
+        const groups = this.groupBucketByParams(entries);
+        for (const group of groups) {
+            const bucketEntry = this.mergeBucketEntries(group);
+            this.config.emitters.emitBucketFlushed({ fileCount: bucketEntry.files.length, reason });
 
-        if (this.activeAssociations < this.effectiveMaxAssociations) {
-            void this.executeEntry(bucketEntry);
-        } else {
-            this.queue.push(bucketEntry);
+            if (this.activeAssociations < this.effectiveMaxAssociations) {
+                void this.executeEntry(bucketEntry);
+            } else {
+                this.queue.push(bucketEntry);
+            }
         }
+    }
+
+    /**
+     * Groups bucket entries by bucketParamsKey while preserving first-occurrence
+     * order. Without a key function, returns a single group containing every
+     * entry (current behavior for callers that don't vary binaryParams).
+     */
+    private groupBucketByParams(entries: readonly BucketEntry<TParams>[]): BucketEntry<TParams>[][] {
+        const keyFn = this.config.bucketParamsKey;
+        if (keyFn === undefined) return [entries.slice()];
+
+        const groups = new Map<string, BucketEntry<TParams>[]>();
+        for (let i = 0; i < entries.length; i++) {
+            const entry = entries[i]!;
+            const key = keyFn(entry.binaryParams);
+            let group = groups.get(key);
+            if (group === undefined) {
+                group = [];
+                groups.set(key, group);
+            }
+            group.push(entry);
+        }
+        return Array.from(groups.values());
     }
 
     /** Resets the bucket flush timer. */

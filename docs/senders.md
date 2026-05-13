@@ -94,6 +94,19 @@ void sender.send(['/path/file3.dcm']);
 sender.flush();
 ```
 
+#### Per-send AE-title overrides (router pattern)
+
+A single `DicomSender` / `DicomSend` instance is intended for one destination — a (host, port, calledAETitle) endpoint. Queue, backpressure, and retry are shared across every caller hitting that destination.
+
+In a DICOM router, many sources send to the same destination but each source uses its own calling AE title (e.g. `Calling: HOSP_A → PACS`, `Calling: HOSP_B → PACS`). Creating one instance per (calling, called) pair would explode into thousands of instances. Instead, share one instance and pass the per-send AE-title overrides:
+
+```typescript
+void sender.send(filesFromHospitalA, { callingAETitle: 'HOSP_A' });
+void sender.send(filesFromHospitalB, { callingAETitle: 'HOSP_B' });
+```
+
+In bucket mode, the engine **automatically groups** queued entries by their AE-title pair before flushing — entries sharing AE titles merge into one `storescu`/`dcmsend` call; entries with different AE titles split into separate calls. Each group emits its own `BUCKET_FLUSHED`. Group dispatch order is first-occurrence; if the number of groups exceeds available capacity, the surplus is queued and drains as capacity frees.
+
 ## Configuration Reference
 
 | Option                            | Type                                                           | Default      | Description                                                                |

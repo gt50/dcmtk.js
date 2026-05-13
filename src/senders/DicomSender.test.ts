@@ -574,6 +574,150 @@ describe('DicomSender', () => {
             await sender.stop();
         });
 
+        it('groups bucket entries by callingAETitle (router pattern)', async () => {
+            const result = DicomSender.create({
+                ...validOpts,
+                mode: 'bucket',
+                bucketFlushMs: 50,
+                maxBucketSize: 100,
+            });
+            if (!result.ok) return;
+            const sender = result.value;
+
+            const bucketEvents: SenderBucketFlushedData[] = [];
+            sender.onBucketFlushed(d => bucketEvents.push(d));
+
+            const pA1 = sender.send(['/a1.dcm'], { callingAETitle: 'HOSP_A' });
+            const pB1 = sender.send(['/b1.dcm'], { callingAETitle: 'HOSP_B' });
+            const pA2 = sender.send(['/a2.dcm'], { callingAETitle: 'HOSP_A' });
+
+            await vi.advanceTimersByTimeAsync(100);
+            await Promise.all([pA1, pB1, pA2]);
+
+            expect(mockStorescu).toHaveBeenCalledTimes(2);
+
+            const calls = mockStorescu.mock.calls.map(c => c[0]) as Array<{ callingAETitle: string; files: string[] }>;
+            const callA = calls.find(c => c.callingAETitle === 'HOSP_A');
+            const callB = calls.find(c => c.callingAETitle === 'HOSP_B');
+
+            expect(callA).toBeDefined();
+            expect(callB).toBeDefined();
+            expect(callA!.files).toEqual(['/a1.dcm', '/a2.dcm']);
+            expect(callB!.files).toEqual(['/b1.dcm']);
+
+            expect(bucketEvents).toHaveLength(2);
+            expect(bucketEvents.reduce((sum, e) => sum + e.fileCount, 0)).toBe(3);
+
+            await sender.stop();
+        });
+
+        it('groups bucket entries by calledAETitle override', async () => {
+            const result = DicomSender.create({
+                ...validOpts,
+                mode: 'bucket',
+                bucketFlushMs: 50,
+                maxBucketSize: 100,
+                calledAETitle: 'DEFAULT',
+            });
+            if (!result.ok) return;
+            const sender = result.value;
+
+            const p1 = sender.send(['/f1.dcm']); // uses default
+            const p2 = sender.send(['/f2.dcm'], { calledAETitle: 'OTHER' });
+            const p3 = sender.send(['/f3.dcm']); // uses default
+
+            await vi.advanceTimersByTimeAsync(100);
+            await Promise.all([p1, p2, p3]);
+
+            // Two groups: { calledAETitle: undefined } from p1+p3 (override absent),
+            // and { calledAETitle: 'OTHER' } from p2. The executor resolves the
+            // instance-level default at call time, so the first group sees 'DEFAULT'.
+            expect(mockStorescu).toHaveBeenCalledTimes(2);
+            const calls = mockStorescu.mock.calls.map(c => c[0]) as Array<{ calledAETitle: string; files: string[] }>;
+            const def = calls.find(c => c.calledAETitle === 'DEFAULT');
+            const other = calls.find(c => c.calledAETitle === 'OTHER');
+            expect(def!.files).toEqual(['/f1.dcm', '/f3.dcm']);
+            expect(other!.files).toEqual(['/f2.dcm']);
+
+            await sender.stop();
+        });
+
+        it('preserves first-occurrence order across groups', async () => {
+            const d1 = deferred();
+            const d2 = deferred();
+            // Force serial dispatch so we can observe order
+            mockStorescu.mockReturnValueOnce(d1.promise).mockReturnValueOnce(d2.promise);
+
+            const result = DicomSender.create({
+                ...validOpts,
+                mode: 'bucket',
+                maxAssociations: 1,
+                bucketFlushMs: 50,
+                maxBucketSize: 100,
+            });
+            if (!result.ok) return;
+            const sender = result.value;
+
+            void sender.send(['/b1.dcm'], { callingAETitle: 'B' });
+            void sender.send(['/a1.dcm'], { callingAETitle: 'A' });
+            void sender.send(['/b2.dcm'], { callingAETitle: 'B' });
+
+            await vi.advanceTimersByTimeAsync(100);
+
+            // First call should be group B (first occurrence), second is A
+            const firstCallParams = mockStorescu.mock.calls[0]![0] as { callingAETitle: string };
+            expect(firstCallParams.callingAETitle).toBe('B');
+
+            d1.resolve({ ok: true, value: { success: true, stdout: '', stderr: '' } });
+            await delay(10);
+
+            const secondCallParams = mockStorescu.mock.calls[1]![0] as { callingAETitle: string };
+            expect(secondCallParams.callingAETitle).toBe('A');
+
+            d2.resolve({ ok: true, value: { success: true, stdout: '', stderr: '' } });
+            await delay(10);
+
+            await sender.stop();
+        });
+
+        it('queues surplus groups when groups exceed available capacity', async () => {
+            // maxAssociations=1, three different groups → 1 dispatched, 2 queued
+            const deferreds = [deferred(), deferred(), deferred()];
+            mockStorescu.mockReturnValueOnce(deferreds[0]!.promise).mockReturnValueOnce(deferreds[1]!.promise).mockReturnValueOnce(deferreds[2]!.promise);
+
+            const result = DicomSender.create({
+                ...validOpts,
+                mode: 'bucket',
+                maxAssociations: 1,
+                bucketFlushMs: 50,
+                maxBucketSize: 100,
+            });
+            if (!result.ok) return;
+            const sender = result.value;
+
+            void sender.send(['/a.dcm'], { callingAETitle: 'A' });
+            void sender.send(['/b.dcm'], { callingAETitle: 'B' });
+            void sender.send(['/c.dcm'], { callingAETitle: 'C' });
+
+            await vi.advanceTimersByTimeAsync(100);
+
+            expect(sender.status.activeAssociations).toBe(1);
+            expect(sender.status.queueLength).toBe(2);
+
+            deferreds[0]!.resolve({ ok: true, value: { success: true, stdout: '', stderr: '' } });
+            await delay(10);
+            expect(sender.status.activeAssociations).toBe(1);
+            expect(sender.status.queueLength).toBe(1);
+
+            deferreds[1]!.resolve({ ok: true, value: { success: true, stdout: '', stderr: '' } });
+            deferreds[2]!.resolve({ ok: true, value: { success: true, stdout: '', stderr: '' } });
+            await delay(20);
+
+            expect(mockStorescu).toHaveBeenCalledTimes(3);
+
+            await sender.stop();
+        });
+
         it('rejects when queue is full in bucket mode', async () => {
             const d1 = deferred();
             mockStorescu.mockReturnValue(d1.promise);

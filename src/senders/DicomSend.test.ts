@@ -484,6 +484,37 @@ describe('DicomSend', () => {
             // Should not throw
             sender.flush();
         });
+
+        it('groups bucket entries by callingAETitle (router pattern)', async () => {
+            const r = DicomSend.create({ ...validOpts, mode: 'bucket', maxBucketSize: 100, bucketFlushMs: 50 });
+            if (!r.ok) throw new Error('create failed');
+            const sender = r.value;
+
+            const events: SenderBucketFlushedData[] = [];
+            sender.onBucketFlushed(d => events.push(d));
+
+            const pA1 = sender.send(['/a1.dcm'], { callingAETitle: 'HOSP_A' });
+            const pB1 = sender.send(['/b1.dcm'], { callingAETitle: 'HOSP_B' });
+            const pA2 = sender.send(['/a2.dcm'], { callingAETitle: 'HOSP_A' });
+
+            await vi.advanceTimersByTimeAsync(100);
+            await Promise.all([pA1, pB1, pA2]);
+
+            expect(mockDcmsend).toHaveBeenCalledTimes(2);
+
+            const calls = mockDcmsend.mock.calls.map(c => c[0] as unknown) as Array<{ callingAETitle: string; files: string[] }>;
+            const callA = calls.find(c => c.callingAETitle === 'HOSP_A');
+            const callB = calls.find(c => c.callingAETitle === 'HOSP_B');
+
+            expect(callA).toBeDefined();
+            expect(callB).toBeDefined();
+            expect(callA!.files).toEqual(['/a1.dcm', '/a2.dcm']);
+            expect(callB!.files).toEqual(['/b1.dcm']);
+            expect(events).toHaveLength(2);
+            expect(events.reduce((sum, e) => sum + e.fileCount, 0)).toBe(3);
+
+            await sender.stop();
+        });
     });
 
     // -----------------------------------------------------------------------

@@ -156,6 +156,21 @@ interface DcmsendParams {
 }
 
 // ---------------------------------------------------------------------------
+// Bucket grouping key
+// ---------------------------------------------------------------------------
+
+/**
+ * Stable key for grouping bucket entries by params. JSON.stringify gives an
+ * unambiguous, separator-free encoding that handles strings, undefined, and
+ * future field additions without escaping concerns. Bucket entries with the
+ * same key merge into one dcmsend call; differing keys split into separate
+ * calls.
+ */
+function dcmsendBucketKey(p: DcmsendParams): string {
+    return JSON.stringify(p);
+}
+
+// ---------------------------------------------------------------------------
 // Executor factory
 // ---------------------------------------------------------------------------
 
@@ -304,6 +319,7 @@ class DicomSend extends EventEmitter<DicomSendEventMap> {
             executor: createDcmsendExecutor(options),
             signal: options.signal,
             senderName: 'DicomSend',
+            bucketParamsKey: dcmsendBucketKey,
             emitters: {
                 emitSendComplete: (data): void => {
                     senderRef.current!.emit('SEND_COMPLETE', data);
