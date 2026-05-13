@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.15.0] - 2026-05-13
+
+### Added
+
+- **`ToolExecutionError` class** — exported from the package root and `./tools` subpath. Subclass of `Error` with readonly `stdout`, `stderr`, and `exitCode` fields. Returned as `Result.error` whenever a DCMTK binary exits non-zero (or, for storescu, signals a DIMSE failure with exit code 0). Consumers can `instanceof`-check to access the full diagnostic output without parsing the message string.
+
+### Fixed
+
+- **DicomSender / DicomSend: `stop()` interrupts in-flight executor and retry delay** — `stop()` previously set `isStopped` but couldn't unblock work that was mid-`await`. An in-flight binary call had to run to its own timeout, and a retry delay of up to `retryDelayMs * (attempt+1)` had to elapse before the next loop iteration noticed. With defaults that meant `stop()` could hang for tens of seconds. The engine now owns an internal `AbortController` whose signal is combined with the external `config.signal`; `stop()` aborts it before rejecting queued work, so the executor's signal fires (killing the child process) and the retry delay short-circuits via a new interruptible delay helper.
+- **DicomSender / DicomSend: `SEND_FAILED` event now carries `stdout` / `stderr`** — the event documented these fields but always emitted empty strings. Two layers were dropping the output: `dcmsend` / `storescu` only forwarded stderr into `createToolError` (stdout was discarded), and `SendExecutor`'s return type had no place to carry stdout/stderr on the error branch. The tool wrappers now forward stdout into the new `ToolExecutionError`, the executor return shape always carries `stdout`/`stderr`, and `attemptSend` writes the last attempt's output into the event.
+- **DicomSender / DicomSend: bucket mode preserves per-send `binaryParams`** — previously `mergeBucketEntries` collapsed every queued bucket entry into one underlying call using `entries[0]`'s params, silently dropping per-send overrides (`calledAETitle`, `callingAETitle`, `required`, `proposedTransferSyntax`, `combineProposedTransferSyntaxes`) on entries 1..N. Files from later sends in the same bucket were transmitted with the first send's AE titles. Bucket entries are now grouped by their full `binaryParams` set before flushing — same params merge into one call, different params split into separate calls. Each group emits its own `BUCKET_FLUSHED`. Fixes the router pattern (one `DicomSender` instance per destination PACS, per-send `callingAETitle` for each source).
+
 ## [0.14.0] - 2026-03-27
 
 ### Fixed
