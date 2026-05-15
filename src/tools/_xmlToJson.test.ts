@@ -429,6 +429,62 @@ describe('xmlToJson()', () => {
         }
     });
 
+    it('decodes the five predefined XML entities in element values (issue #26)', () => {
+        // dcm2xml emits XML-escaped entities for values containing & < > " '
+        // so the output is well-formed XML. They must be decoded back to literals.
+        const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<NativeDicomModel>
+  <DicomAttribute tag="00081090" vr="LO" keyword="ManufacturerModelName">
+    <Value number="1">Model &quot;Foo&quot; &amp; &lt;Bar&gt; &apos;Baz&apos;</Value>
+  </DicomAttribute>
+</NativeDicomModel>`;
+
+        const result = xmlToJson(xml);
+
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+            expect(result.value['00081090']!.Value).toEqual([`Model "Foo" & <Bar> 'Baz'`]);
+        }
+    });
+
+    it('decodes XML entities in PersonName components (issue #26)', () => {
+        const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<NativeDicomModel>
+  <DicomAttribute tag="00080090" vr="PN" keyword="ReferringPhysicianName">
+    <PersonName number="1">
+      <Alphabetic>
+        <FamilyName>Smith &amp; Jones</FamilyName>
+      </Alphabetic>
+    </PersonName>
+  </DicomAttribute>
+</NativeDicomModel>`;
+
+        const result = xmlToJson(xml);
+
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+            expect(result.value['00080090']!.Value).toEqual([{ Alphabetic: 'Smith & Jones' }]);
+        }
+    });
+
+    it('does not double-decode escaped entity sequences (issue #26)', () => {
+        // A literal "&lt;" in the value is emitted by dcm2xml as "&amp;lt;".
+        // Decoding &amp; last must yield the literal "&lt;", not "<".
+        const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<NativeDicomModel>
+  <DicomAttribute tag="00081090" vr="LO" keyword="ManufacturerModelName">
+    <Value number="1">a &amp;lt; b</Value>
+  </DicomAttribute>
+</NativeDicomModel>`;
+
+        const result = xmlToJson(xml);
+
+        expect(result.ok).toBe(true);
+        if (result.ok) {
+            expect(result.value['00081090']!.Value).toEqual(['a &lt; b']);
+        }
+    });
+
     it('prefers #text over @_number when both present', () => {
         const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <NativeDicomModel>

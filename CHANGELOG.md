@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.15.1] - 2026-05-15
+
+### Fixed
+
+- **XML entity decoding on read (#26)** — `dcm2xml` XML-escapes element values containing `&`, `<`, `>`, `"`, `'` so its output stays well-formed, but the parser ran with `processEntities: false` and never decoded them. Any DICOM value containing those characters (Institution Name, Study/Series Description, Physician Name, etc.) was silently corrupted on read — e.g. `Smith & Jones` came back as `Smith &amp; Jones`. `processEntities: false` is retained (it avoids fast-xml-parser's 1000-entity expansion limit rejecting large studies, and the billion-laughs DoS from custom DOCTYPE entities); a `decodeXmlEntities()` helper now decodes only the five predefined entities — with `&amp;` decoded last so already-escaped sequences round-trip correctly — applied to regular values, PersonName components, and BulkDataURI.
+
 ## [0.15.0] - 2026-05-13
 
 ### Added

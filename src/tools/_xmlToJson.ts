@@ -121,10 +121,36 @@ const KNOWN_VR_CODES = new Set([
 ]);
 
 /**
+ * Decodes the five predefined XML entities back to their literal characters.
+ *
+ * The parser runs with `processEntities: false` (to avoid fast-xml-parser's
+ * 1000-entity expansion limit rejecting large studies), so dcm2xml's escaped
+ * output (`&amp; &lt; &gt; &quot; &apos;`) reaches us verbatim and must be
+ * decoded here. `&amp;` is decoded last so that an already-escaped sequence
+ * such as `&amp;lt;` round-trips to the literal `&lt;` rather than `<`.
+ *
+ * Only the five predefined entities are decoded — custom DOCTYPE entities
+ * (the billion-laughs DoS vector) are deliberately not expanded.
+ */
+function decodeXmlEntities(value: string): string {
+    return value
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&apos;/g, "'")
+        .replace(/&amp;/g, '&');
+}
+
+/** Decodes XML entities only when the value is a string; passes other types through. */
+function decodeIfString(value: unknown): unknown {
+    return typeof value === 'string' ? decodeXmlEntities(value) : value;
+}
+
+/**
  * Builds a PN string from name components.
  */
 function buildPnString(comp: XmlPersonNameComponent): string {
-    const parts = [comp.FamilyName ?? '', comp.GivenName ?? '', comp.MiddleName ?? '', comp.NamePrefix ?? '', comp.NameSuffix ?? ''];
+    const parts = [comp.FamilyName ?? '', comp.GivenName ?? '', comp.MiddleName ?? '', comp.NamePrefix ?? '', comp.NameSuffix ?? ''].map(decodeXmlEntities);
     let last = parts.length - 1;
     for (; last >= 0; last--) {
         if (parts[last] !== '') break;
@@ -178,9 +204,9 @@ function convertBulkDataURI(attr: XmlDicomAttribute, element: ElementBuilder): v
     const bulkArray = toArray(attr.BulkDataURI);
     const firstBulk = bulkArray[0];
     if (typeof firstBulk === 'object' && firstBulk !== null && '@_uri' in firstBulk) {
-        element.BulkDataURI = safeString((firstBulk as Record<string, unknown>)['@_uri']);
+        element.BulkDataURI = decodeXmlEntities(safeString((firstBulk as Record<string, unknown>)['@_uri']));
     } else {
-        element.BulkDataURI = safeString(firstBulk);
+        element.BulkDataURI = decodeXmlEntities(safeString(firstBulk));
     }
 }
 
@@ -237,7 +263,7 @@ function convertRegularValue(attr: XmlDicomAttribute, element: ElementBuilder, v
     const values: unknown[] = [];
     const isNumeric = NUMERIC_JSON_VRS.has(vr);
     for (const v of valArray) {
-        const unwrapped = unwrapValue(v);
+        const unwrapped = decodeIfString(unwrapValue(v));
         values.push(isNumeric ? coerceNumeric(unwrapped) : unwrapped);
     }
     if (values.length > 0) element.Value = values;
