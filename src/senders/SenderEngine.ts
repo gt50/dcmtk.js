@@ -393,9 +393,22 @@ class SenderEngine<TParams> {
         this.activeAssociations++;
         const startMs = Date.now();
         const maxAttempts = entry.maxRetries + 1;
-        const failure = await this.attemptSend(entry, maxAttempts, startMs);
 
-        if (failure === undefined) return; // success already handled
+        let failure: AttemptFailure | undefined;
+        try {
+            failure = await this.attemptSend(entry, maxAttempts, startMs);
+        } catch (e) {
+            // The executor contract is to resolve with an ExecutorOutcome, never
+            // to reject. If it rejects anyway, this association slot would leak
+            // (activeAssociations stays incremented) and the caller's promise
+            // would hang forever — and once every slot is lost this way,
+            // drainQueue stalls permanently and the queue grows without bound.
+            // Convert the rejection into a normal failure so the slot is
+            // released, the entry resolves, and draining continues.
+            failure = { error: e instanceof Error ? e : new Error(String(e)), output: { stdout: '', stderr: '' } };
+        }
+
+        if (failure === undefined) return; // success or stop already handled
 
         this.activeAssociations--;
         this.recordFailure();

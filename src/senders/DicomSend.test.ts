@@ -665,6 +665,54 @@ describe('DicomSend', () => {
     });
 
     // -----------------------------------------------------------------------
+    // Executor rejection (association-slot accounting)
+    // -----------------------------------------------------------------------
+
+    describe('executor rejection', () => {
+        it('releases the association slot and resolves when the executor rejects', async () => {
+            // The executor is contractually supposed to resolve with an outcome,
+            // never reject. A rejection must not leak the activeAssociations slot
+            // or hang the caller's promise.
+            mockDcmsend.mockImplementation(() => Promise.reject(new Error('executor blew up')));
+
+            const r = DicomSend.create({ ...validOpts, mode: 'single', maxAssociations: 1, maxRetries: 0, maxQueueLength: 100 });
+            if (!r.ok) throw new Error('create failed');
+            const sender = r.value;
+
+            const result = await sender.send(['/file-0.dcm']);
+
+            expect(result.ok).toBe(false); // resolved, not hung
+            expect(sender.status.activeAssociations).toBe(0); // slot released
+            expect(sender.status.queueLength).toBe(0);
+
+            await sender.stop();
+        });
+
+        it('keeps draining the queue and recovers after an executor rejection', async () => {
+            mockDcmsend.mockImplementation(() => Promise.reject(new Error('executor blew up')));
+
+            const r = DicomSend.create({ ...validOpts, mode: 'single', maxAssociations: 1, maxRetries: 0, maxQueueLength: 100 });
+            if (!r.ok) throw new Error('create failed');
+            const sender = r.value;
+
+            // First send rejects in-flight; the other two queue behind the only slot.
+            const results = await Promise.all([sender.send(['/0.dcm']), sender.send(['/1.dcm']), sender.send(['/2.dcm'])]);
+
+            expect(results.every(res => res.ok === false)).toBe(true); // none hang
+            expect(sender.status.activeAssociations).toBe(0); // slot not leaked
+            expect(sender.status.queueLength).toBe(0); // queue fully drained, no stall
+
+            // The freed slot must accept and complete subsequent healthy work.
+            mockDcmsend.mockImplementation(() => Promise.resolve({ ok: true, value: { success: true, stdout: '', stderr: '' } }));
+            const good = await sender.send(['/good.dcm']);
+            expect(good.ok).toBe(true);
+            expect(sender.status.activeAssociations).toBe(0);
+
+            await sender.stop();
+        });
+    });
+
+    // -----------------------------------------------------------------------
     // Status
     // -----------------------------------------------------------------------
 
