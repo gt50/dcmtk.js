@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { resolve } from 'node:path';
 import { readdir } from 'node:fs/promises';
-import type { ReceiverAssociationData, ReceiverInstanceData } from '../../../src';
+import * as net from 'node:net';
+import type { ReceiverAssociationData, ReceiverAssociationFinalizedData, ReceiverInstanceData } from '../../../src';
 import { DicomReceiver, storescu } from '../../../src';
 import { createTempDir, dcmtkAvailable, getAvailablePort, removeTempDir, SAMPLES, waitForEvent } from '../helpers';
 
@@ -264,5 +265,59 @@ describe.skipIf(!dcmtkAvailable)('DicomReceiver integration', () => {
 
         // Wait for the receiver to actually stop
         await new Promise(resolve => setTimeout(resolve, 3000));
+    });
+
+    it('reaps an aborted connection that never completes: finalizes, frees the worker, removes the dir', async () => {
+        storageDir = await createTempDir('recv-pool-reap-');
+        const port = await getAvailablePort();
+
+        const createResult = DicomReceiver.create({
+            port,
+            storageDir,
+            minPoolSize: 1,
+            maxPoolSize: 1,
+            configFile: CONFIG_FILE,
+            configProfile: CONFIG_PROFILE,
+        });
+        expect(createResult.ok).toBe(true);
+        if (!createResult.ok) return;
+
+        receiver = createResult.value;
+        const finalizedPromise = waitForEvent<ReceiverAssociationFinalizedData>(receiver, 'ASSOCIATION_FINALIZED', EVENT_TIMEOUT_MS);
+
+        await receiver.start();
+        await new Promise(r => setTimeout(r, WORKER_WARMUP_MS));
+
+        // Open a raw TCP connection and send no DICOM data, so dcmrecv can
+        // never negotiate or report completion. handleConnection still creates
+        // the association directory and marks the worker busy.
+        const socket = net.connect(port, '127.0.0.1');
+        await new Promise<void>((res, rej) => {
+            socket.once('connect', () => res());
+            socket.once('error', rej);
+        });
+        // Give handleConnection time to create the association directory.
+        await new Promise(r => setTimeout(r, 1000));
+
+        const dirsWhileBusy = (await readdir(storageDir)).filter(name => name.startsWith('assoc-'));
+        expect(dirsWhileBusy.length).toBe(1);
+        expect(receiver.poolStatus.busy).toBe(1);
+
+        // Abort: drop the connection with no DICOM release.
+        socket.destroy();
+
+        // The grace-period reaper (ABORT_REAP_GRACE_MS) should now synthesize a
+        // terminal abort: emit ASSOCIATION_FINALIZED, free the worker, remove dir.
+        const finalized = await finalizedPromise;
+        expect(finalized.associationId).toMatch(/^assoc-/);
+
+        // Allow the post-finalize cleanup (endAssociation + removeDirSafe) to settle.
+        await new Promise(r => setTimeout(r, 1000));
+
+        expect(receiver.poolStatus.busy).toBe(0);
+        expect(receiver.poolStatus.idle).toBeGreaterThanOrEqual(1);
+
+        const dirsAfterReap = (await readdir(storageDir)).filter(name => name.startsWith('assoc-'));
+        expect(dirsAfterReap.length).toBe(0);
     });
 });
