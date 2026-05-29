@@ -320,4 +320,54 @@ describe.skipIf(!dcmtkAvailable)('DicomReceiver integration', () => {
         const dirsAfterReap = (await readdir(storageDir)).filter(name => name.startsWith('assoc-'));
         expect(dirsAfterReap.length).toBe(0);
     });
+
+    it('routes concurrent connections without double-assigning a worker: each association finalizes once with a unique id', async () => {
+        storageDir = await createTempDir('recv-pool-concurrent-');
+        const port = await getAvailablePort();
+
+        // Small pool + many concurrent connections maximizes contention on the
+        // findIdleWorker -> ensureDirectory -> beginAssociation window. Before
+        // the reservation fix, two connections could claim the same idle worker
+        // there, overwriting the first's context so it never finalized.
+        const createResult = DicomReceiver.create({
+            port,
+            storageDir,
+            minPoolSize: 2,
+            maxPoolSize: 2,
+            configFile: CONFIG_FILE,
+            configProfile: CONFIG_PROFILE,
+        });
+        expect(createResult.ok).toBe(true);
+        if (!createResult.ok) return;
+
+        receiver = createResult.value;
+        const finalizedIds: string[] = [];
+        receiver.onAssociationFinalized(d => finalizedIds.push(d.associationId));
+
+        await receiver.start();
+        await new Promise(r => setTimeout(r, WORKER_WARMUP_MS));
+
+        const N = 6;
+        const sends = Array.from({ length: N }, () =>
+            storescu({
+                host: '127.0.0.1',
+                port,
+                calledAETitle: WORKER_AE_TITLE,
+                files: [SAMPLES.OTHER_0002D],
+                timeoutMs: 30_000,
+            })
+        );
+        const results = await Promise.all(sends);
+        expect(results.every(r => r.ok)).toBe(true);
+
+        // Allow all finalize events to arrive.
+        await new Promise(r => setTimeout(r, 3000));
+
+        // Every accepted association must finalize exactly once with a unique
+        // id. A double-assigned worker would orphan an association (fewer
+        // finalize events) or surface a reused/dropped id.
+        expect(finalizedIds.length).toBe(N);
+        expect(new Set(finalizedIds).size).toBe(N);
+        expect(receiver.poolStatus.busy).toBe(0);
+    });
 });

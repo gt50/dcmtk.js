@@ -369,6 +369,26 @@ class Worker {
         return this._associationReceivedEmitted;
     }
 
+    /**
+     * Atomically reserves a just-selected idle worker so concurrent connection
+     * routing cannot hand the same worker to two associations. Must be called
+     * synchronously the instant an idle worker is picked — before any `await` —
+     * because `handleConnection` yields (e.g. on `ensureDirectory`) between
+     * selecting a worker and calling {@link beginAssociation}. Without this,
+     * two concurrent connections both see the worker as idle, both proceed, and
+     * the second `beginAssociation` overwrites the first's context — orphaning
+     * the first association (no terminal event ever fires for it). Released via
+     * {@link release} if association setup fails before `beginAssociation`.
+     */
+    reserve(): void {
+        this._state = 'busy';
+    }
+
+    /** Returns a reserved-but-not-yet-begun worker to the idle pool (setup failed). */
+    release(): void {
+        this._state = 'idle';
+    }
+
     /** Marks the worker as finalizing — still has valid context but cannot accept new connections. */
     markFinalizing(): void {
         this._state = 'finalizing';
@@ -846,6 +866,7 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
 
         const mkdirResult = await ensureDirectory(associationDir);
         if (!mkdirResult.ok) {
+            worker.release();
             remoteSocket.destroy();
             this.emit('error', { error: mkdirResult.error });
             return;
@@ -866,15 +887,24 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
 
     /** Finds an idle worker, retrying up to connectionTimeoutMs. */
     private async findIdleWorker(): Promise<Worker | undefined> {
+        // reserve() is called synchronously on the picked worker, with no await
+        // between getIdleWorker() and reserve(), so two concurrent callers can
+        // never select the same idle worker (single-threaded event loop).
         const idle = this.getIdleWorker();
-        if (idle !== undefined) return idle;
+        if (idle !== undefined) {
+            idle.reserve();
+            return idle;
+        }
 
         const maxRetries = Math.min(Math.ceil(this.connectionTimeoutMs / CONNECTION_RETRY_INTERVAL_MS), MAX_CONNECTION_RETRIES);
 
         for (let i = 0; i < maxRetries; i++) {
             await delay(CONNECTION_RETRY_INTERVAL_MS);
             const found = this.getIdleWorker();
-            if (found !== undefined) return found;
+            if (found !== undefined) {
+                found.reserve();
+                return found;
+            }
             if (this.stopping) return undefined;
         }
         return undefined;
