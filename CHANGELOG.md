@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- **DicomReceiver: aborted associations never finalized — stranded consumer state + orphaned directories.** `handleConnection` creates the association directory and (once dcmrecv negotiates) bubbles `ASSOCIATION_RECEIVED`, but the terminal `ASSOCIATION_FINALIZED` event was only emitted via dcmrecv's `ASSOCIATION_COMPLETE`. When a peer aborts, `pipeConnection`'s socket `cleanup` tore down the sockets without any completion report, so for those connections `ASSOCIATION_FINALIZED` never fired: consumers that track per-association state (e.g. d-dart's `associations` map) leaked it indefinitely, and the directory the pool created was never removed (empty `assoc-N/` dirs accumulated on disk). Now, after a connection's sockets close, the pool waits `ABORT_REAP_GRACE_MS` (5s) — long enough for dcmrecv to report a normal A-RELEASE, whose socket also closes — and if no completion arrived and the worker still owns that association, it synthesizes a terminal abort: emits `ASSOCIATION_COMPLETE`/`ASSOCIATION_FINALIZED` (`endReason: 'abort'`) so consumers release state, removes the association directory (the consumer never received a normal handoff to own cleanup), and returns the worker to idle. Finalize now runs at most once per association (`Worker.beginFinalizeOnce`), and `wireAssociationComplete` early-returns if the reaper already finalized, so a late dcmrecv report can't re-finalize a recycled worker. The normal release path is unchanged: completion is reported, the consumer still owns directory cleanup, and the grace timer is `unref`'d so it never keeps the process alive.
+
 ## [0.15.1] - 2026-05-15
 
 ### Fixed
