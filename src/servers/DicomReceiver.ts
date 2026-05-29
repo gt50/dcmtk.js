@@ -289,6 +289,7 @@ class Worker {
     private _instancesReceived = 0;
     private _instanceErrors = 0;
     private _finalized = false;
+    private _associationReceivedEmitted = false;
     private readonly _files: string[] = [];
     private readonly _fileSizes: number[] = [];
     private readonly _outputLines: string[] = [];
@@ -338,6 +339,7 @@ class Worker {
         this._instancesReceived = 0;
         this._instanceErrors = 0;
         this._finalized = false;
+        this._associationReceivedEmitted = false;
     }
 
     /** True once per association: the first caller wins the finalize, others get false. */
@@ -350,6 +352,21 @@ class Worker {
     /** Whether finalize handling has already been claimed for the current association. */
     get finalized(): boolean {
         return this._finalized;
+    }
+
+    /** Records that ASSOCIATION_RECEIVED was emitted to consumers for this association. */
+    markAssociationReceived(): void {
+        this._associationReceivedEmitted = true;
+    }
+
+    /**
+     * Whether ASSOCIATION_RECEIVED was emitted for the current association —
+     * i.e. the association was handed off to consumers. When false (a connection
+     * that aborted during/before DICOM negotiation), no consumer ever engaged
+     * with the association directory, so the pool owns its cleanup.
+     */
+    get associationReceived(): boolean {
+        return this._associationReceivedEmitted;
     }
 
     /** Marks the worker as finalizing — still has valid context but cannot accept new connections. */
@@ -904,6 +921,15 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
         workerSocket.on('error', cleanup);
         remoteSocket.on('close', cleanup);
         workerSocket.on('close', cleanup);
+
+        // The remote may have aborted while handleConnection awaited an idle
+        // worker / created the directory — before these handlers were attached.
+        // A 'close' that already fired won't fire again, so detect it now and
+        // run cleanup explicitly; otherwise the worker would stay busy forever
+        // and its directory would leak.
+        if (remoteSocket.destroyed) {
+            cleanup();
+        }
     }
 
     /**
@@ -928,6 +954,9 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
             if (worker.context !== ctx || worker.state !== 'busy' || worker.finalized) return;
 
             worker.markFinalizing();
+            // Remove the directory only if no consumer engaged (no
+            // ASSOCIATION_RECEIVED); an engaged consumer owns its own cleanup.
+            const removeDir = !worker.associationReceived;
             void this.finalizeAssociation(
                 worker,
                 {
@@ -939,7 +968,7 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
                     durationMs: Date.now() - ctx.startAt,
                     endReason: 'abort',
                 },
-                true
+                removeDir
             );
         }, ABORT_REAP_GRACE_MS);
 
@@ -1192,8 +1221,14 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
             // Defer the actual drain to the check phase (after I/O callbacks) so
             // any remaining FILE_RECEIVED events in pending pipe chunks are processed
             // before ASSOCIATION_FINALIZED fires. (#25)
+            //
+            // removeDir only when no consumer ever engaged (no ASSOCIATION_RECEIVED) —
+            // e.g. a connection that aborted during negotiation. Those directories
+            // have no consumer to clean them; an engaged association's directory
+            // is owned by the consumer (which may still be processing files).
+            const removeDir = !worker.associationReceived;
             setImmediate(() => {
-                void this.finalizeAssociation(worker, data);
+                void this.finalizeAssociation(worker, data, removeDir);
             });
         });
     }
@@ -1204,10 +1239,12 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
      * association via {@link Worker.beginFinalizeOnce}.
      *
      * @param removeDir - When true, removes the association directory after
-     *   finalizing. Used by the abort reaper: on the abort path no consumer
-     *   received a normal handoff, so the pool reclaims the directory it
-     *   created. On the normal path this stays false — the consumer owns
-     *   directory cleanup once it has processed the received files.
+     *   finalizing. Set when no consumer ever engaged with the association
+     *   (no ASSOCIATION_RECEIVED was emitted) — e.g. a connection that aborted
+     *   during negotiation — so the pool reclaims the directory it created.
+     *   When a consumer did engage this stays false: the consumer owns
+     *   directory cleanup once it has processed the received files (removing it
+     *   here could race in-flight consumer reads of those files).
      */
     private async finalizeAssociation(worker: Worker, data: AssociationCompleteData, removeDir = false): Promise<void> {
         if (!worker.beginFinalizeOnce()) return;
@@ -1275,6 +1312,9 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
     /** Bubbles ASSOCIATION_RECEIVED from dcmrecv worker. */
     private wireAssociationReceived(worker: Worker): void {
         worker.dcmrecv.onEvent('ASSOCIATION_RECEIVED', (data: { callingAE: string; calledAE: string; source: string }) => {
+            // Record the hand-off so cleanup knows a consumer engaged with this
+            // association (and therefore owns its directory cleanup).
+            worker.markAssociationReceived();
             this.emit('ASSOCIATION_RECEIVED', {
                 associationId: worker.context?.associationId ?? '',
                 callingAE: data.callingAE,
