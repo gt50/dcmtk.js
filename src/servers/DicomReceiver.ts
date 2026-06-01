@@ -36,6 +36,16 @@ const DEFAULT_CONNECTION_TIMEOUT_MS = 10_000;
 const CONNECTION_RETRY_INTERVAL_MS = 500;
 const MAX_CONNECTION_RETRIES = 200;
 const MAX_OUTPUT_LINES_PER_ASSOCIATION = 500;
+/**
+ * Grace period after a connection's sockets tear down before the association
+ * is reaped as an unreported abort. dcmrecv reports a normal A-RELEASE (or a
+ * detected abort) via ASSOCIATION_COMPLETE within milliseconds of the socket
+ * closing; this delay gives that report time to arrive so a clean release is
+ * never misclassified as an abort. Only if no completion arrives within the
+ * window does the pool synthesize a terminal abort (see {@link
+ * DicomReceiver.scheduleAbortReap}).
+ */
+const ABORT_REAP_GRACE_MS = 5_000;
 
 // ---------------------------------------------------------------------------
 // Public interfaces
@@ -149,6 +159,14 @@ interface ReceiverAssociationFinalizedData {
     readonly files: readonly string[];
     readonly instancesReceived: number;
     readonly instanceErrors: number;
+    /**
+     * How the association ended: `'release'` for a normal A-RELEASE, `'abort'`
+     * for a peer abort (including associations synthesized by the grace-period
+     * reaper when dcmrecv never reported completion). Lets consumers that drive
+     * terminal state off this event distinguish a reaped abort from a clean
+     * finish without also listening to ASSOCIATION_COMPLETE.
+     */
+    readonly endReason: 'release' | 'abort';
 }
 
 /** Data emitted with error events. */
@@ -278,6 +296,9 @@ class Worker {
     private readonly _instancePending = new Set<Promise<void>>();
     private _instancesReceived = 0;
     private _instanceErrors = 0;
+    private _finalized = false;
+    private _associationReceivedEmitted = false;
+    private _reapScheduled = false;
     private readonly _files: string[] = [];
     private readonly _fileSizes: number[] = [];
     private readonly _outputLines: string[] = [];
@@ -326,6 +347,69 @@ class Worker {
         this._instancePending.clear();
         this._instancesReceived = 0;
         this._instanceErrors = 0;
+        this._finalized = false;
+        this._associationReceivedEmitted = false;
+        this._reapScheduled = false;
+    }
+
+    /**
+     * Claims the single abort-reap timer slot for this association. The socket
+     * `cleanup` handler runs on up to four socket events (remote/worker ×
+     * error/close, plus an explicit setup-race call), so without this guard each
+     * teardown would arm its own redundant grace-period timer. Returns true only
+     * for the first caller; subsequent calls return false and arm nothing.
+     */
+    claimReapSchedule(): boolean {
+        if (this._reapScheduled) return false;
+        this._reapScheduled = true;
+        return true;
+    }
+
+    /** True once per association: the first caller wins the finalize, others get false. */
+    beginFinalizeOnce(): boolean {
+        if (this._finalized) return false;
+        this._finalized = true;
+        return true;
+    }
+
+    /** Whether finalize handling has already been claimed for the current association. */
+    get finalized(): boolean {
+        return this._finalized;
+    }
+
+    /** Records that ASSOCIATION_RECEIVED was emitted to consumers for this association. */
+    markAssociationReceived(): void {
+        this._associationReceivedEmitted = true;
+    }
+
+    /**
+     * Whether ASSOCIATION_RECEIVED was emitted for the current association —
+     * i.e. the association was handed off to consumers. When false (a connection
+     * that aborted during/before DICOM negotiation), no consumer ever engaged
+     * with the association directory, so the pool owns its cleanup.
+     */
+    get associationReceived(): boolean {
+        return this._associationReceivedEmitted;
+    }
+
+    /**
+     * Atomically reserves a just-selected idle worker so concurrent connection
+     * routing cannot hand the same worker to two associations. Must be called
+     * synchronously the instant an idle worker is picked — before any `await` —
+     * because `handleConnection` yields (e.g. on `ensureDirectory`) between
+     * selecting a worker and calling {@link beginAssociation}. Without this,
+     * two concurrent connections both see the worker as idle, both proceed, and
+     * the second `beginAssociation` overwrites the first's context — orphaning
+     * the first association (no terminal event ever fires for it). Released via
+     * {@link release} if association setup fails before `beginAssociation`.
+     */
+    reserve(): void {
+        this._state = 'busy';
+    }
+
+    /** Returns a reserved-but-not-yet-begun worker to the idle pool (setup failed). */
+    release(): void {
+        this._state = 'idle';
     }
 
     /** Marks the worker as finalizing — still has valid context but cannot accept new connections. */
@@ -805,6 +889,7 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
 
         const mkdirResult = await ensureDirectory(associationDir);
         if (!mkdirResult.ok) {
+            worker.release();
             remoteSocket.destroy();
             this.emit('error', { error: mkdirResult.error });
             return;
@@ -825,15 +910,24 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
 
     /** Finds an idle worker, retrying up to connectionTimeoutMs. */
     private async findIdleWorker(): Promise<Worker | undefined> {
+        // reserve() is called synchronously on the picked worker, with no await
+        // between getIdleWorker() and reserve(), so two concurrent callers can
+        // never select the same idle worker (single-threaded event loop).
         const idle = this.getIdleWorker();
-        if (idle !== undefined) return idle;
+        if (idle !== undefined) {
+            idle.reserve();
+            return idle;
+        }
 
         const maxRetries = Math.min(Math.ceil(this.connectionTimeoutMs / CONNECTION_RETRY_INTERVAL_MS), MAX_CONNECTION_RETRIES);
 
         for (let i = 0; i < maxRetries; i++) {
             await delay(CONNECTION_RETRY_INTERVAL_MS);
             const found = this.getIdleWorker();
-            if (found !== undefined) return found;
+            if (found !== undefined) {
+                found.reserve();
+                return found;
+            }
             if (this.stopping) return undefined;
         }
         return undefined;
@@ -853,11 +947,17 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
 
         worker.setSockets(remoteSocket, workerSocket);
 
+        // Captured per-association so a late cleanup (after the worker is
+        // recycled to a new association) can be identified by context identity
+        // and ignored.
+        const ctx = worker.context;
+
         const cleanup = (): void => {
             remoteSocket.unpipe(workerSocket);
             workerSocket.unpipe(remoteSocket);
             if (!remoteSocket.destroyed) remoteSocket.destroy();
             if (!workerSocket.destroyed) workerSocket.destroy();
+            this.scheduleAbortReap(worker, ctx);
         };
 
         // Wait for the worker connection to be established before piping.
@@ -874,6 +974,62 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
         workerSocket.on('error', cleanup);
         remoteSocket.on('close', cleanup);
         workerSocket.on('close', cleanup);
+
+        // The remote may have aborted while handleConnection awaited an idle
+        // worker / created the directory — before these handlers were attached.
+        // A 'close' that already fired won't fire again, so detect it now and
+        // run cleanup explicitly; otherwise the worker would stay busy forever
+        // and its directory would leak.
+        if (remoteSocket.destroyed) {
+            cleanup();
+        }
+    }
+
+    /**
+     * After a connection's sockets tear down, reaps the association as an
+     * aborted one *only if* dcmrecv never reported completion within
+     * {@link ABORT_REAP_GRACE_MS}. Without this, a peer abort destroys the
+     * sockets but dcmrecv may never emit ASSOCIATION_COMPLETE, so the worker
+     * stays busy forever, ASSOCIATION_FINALIZED never fires (consumers can't
+     * release per-association state), and the association directory is never
+     * removed. The grace delay ensures a normal A-RELEASE — whose socket also
+     * closes — is finalized by its own completion report and never reaped here.
+     */
+    private scheduleAbortReap(worker: Worker, ctx: AssociationContext | undefined): void {
+        // Skip if this association is already finalizing/idle, was reassigned,
+        // or had no context (worker never began an association).
+        if (ctx === undefined || worker.context !== ctx || worker.state !== 'busy') return;
+
+        // cleanup() can fire several times per teardown; arm exactly one timer.
+        if (!worker.claimReapSchedule()) return;
+
+        const timer = setTimeout(() => {
+            // Re-check at fire time: dcmrecv may have reported completion (state
+            // no longer 'busy'), or the worker may have been recycled to a new
+            // association (different context identity).
+            if (worker.context !== ctx || worker.state !== 'busy' || worker.finalized) return;
+
+            worker.markFinalizing();
+            // Remove the directory only if no consumer engaged (no
+            // ASSOCIATION_RECEIVED); an engaged consumer owns its own cleanup.
+            const removeDir = !worker.associationReceived;
+            void this.finalizeAssociation(
+                worker,
+                {
+                    associationId: ctx.associationId,
+                    callingAE: '',
+                    calledAE: '',
+                    source: '',
+                    files: [],
+                    durationMs: Date.now() - ctx.startAt,
+                    endReason: 'abort',
+                },
+                removeDir
+            );
+        }, ABORT_REAP_GRACE_MS);
+
+        // Don't keep the event loop alive solely for this fallback timer.
+        timer.unref();
     }
 
     // -----------------------------------------------------------------------
@@ -1109,6 +1265,11 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
     /** Returns worker to idle pool on association complete, emits summary. */
     private wireAssociationComplete(worker: Worker): void {
         worker.dcmrecv.onAssociationComplete((data: AssociationCompleteData) => {
+            // If the abort reaper already finalized this association (socket
+            // torn down with no completion report), don't re-finalize — that
+            // would mark an idle/reassigned worker as finalizing and leak it.
+            if (worker.finalized) return;
+
             // Mark worker as finalizing SYNCHRONOUSLY — prevents findIdleWorker
             // from routing new connections to this worker during drain. (#25)
             worker.markFinalizing();
@@ -1116,21 +1277,45 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
             // Defer the actual drain to the check phase (after I/O callbacks) so
             // any remaining FILE_RECEIVED events in pending pipe chunks are processed
             // before ASSOCIATION_FINALIZED fires. (#25)
+            //
+            // removeDir only when no consumer ever engaged (no ASSOCIATION_RECEIVED) —
+            // e.g. a connection that aborted during negotiation. Those directories
+            // have no consumer to clean them; an engaged association's directory
+            // is owned by the consumer (which may still be processing files).
+            const removeDir = !worker.associationReceived;
             setImmediate(() => {
-                void this.finalizeAssociation(worker, data);
+                void this.finalizeAssociation(worker, data, removeDir);
             });
         });
     }
 
-    /** Awaits file ops, emits ASSOCIATION_COMPLETE, awaits parsing, emits ASSOCIATION_FINALIZED. */
-    private async finalizeAssociation(worker: Worker, data: AssociationCompleteData): Promise<void> {
+    /**
+     * Awaits file ops, emits ASSOCIATION_COMPLETE, awaits parsing, emits
+     * ASSOCIATION_FINALIZED, returns the worker to idle. Runs at most once per
+     * association via {@link Worker.beginFinalizeOnce}.
+     *
+     * @param removeDir - When true, removes the association directory after
+     *   finalizing. Set when no consumer ever engaged with the association
+     *   (no ASSOCIATION_RECEIVED was emitted) — e.g. a connection that aborted
+     *   during negotiation — so the pool reclaims the directory it created.
+     *   When a consumer did engage this stays false: the consumer owns
+     *   directory cleanup once it has processed the received files (removing it
+     *   here could race in-flight consumer reads of those files).
+     */
+    private async finalizeAssociation(worker: Worker, data: AssociationCompleteData, removeDir = false): Promise<void> {
+        if (!worker.beginFinalizeOnce()) return;
+
         await worker.drainPendingFiles();
         this.emitAssociationComplete(worker, data);
 
         await worker.drainInstancePending();
         this.emitAssociationFinalized(worker, data);
 
+        const associationDir = worker.context?.associationDir;
         worker.endAssociation();
+        if (removeDir && associationDir !== undefined) {
+            await removeDirSafe(associationDir);
+        }
         void this.scaleDown();
     }
 
@@ -1177,12 +1362,16 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
             files: [...worker.files],
             instancesReceived: worker.instancesReceived,
             instanceErrors: worker.instanceErrors,
+            endReason: data.endReason,
         });
     }
 
     /** Bubbles ASSOCIATION_RECEIVED from dcmrecv worker. */
     private wireAssociationReceived(worker: Worker): void {
         worker.dcmrecv.onEvent('ASSOCIATION_RECEIVED', (data: { callingAE: string; calledAE: string; source: string }) => {
+            // Record the hand-off so cleanup knows a consumer engaged with this
+            // association (and therefore owns its directory cleanup).
+            worker.markAssociationReceived();
             this.emit('ASSOCIATION_RECEIVED', {
                 associationId: worker.context?.associationId ?? '',
                 callingAE: data.callingAE,

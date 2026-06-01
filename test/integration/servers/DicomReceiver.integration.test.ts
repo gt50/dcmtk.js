@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { resolve } from 'node:path';
 import { readdir } from 'node:fs/promises';
-import type { ReceiverAssociationData, ReceiverInstanceData } from '../../../src';
+import * as net from 'node:net';
+import type { ReceiverAssociationData, ReceiverAssociationFinalizedData, ReceiverInstanceData } from '../../../src';
 import { DicomReceiver, storescu } from '../../../src';
 import { createTempDir, dcmtkAvailable, getAvailablePort, removeTempDir, SAMPLES, waitForEvent } from '../helpers';
 
@@ -119,6 +120,7 @@ describe.skipIf(!dcmtkAvailable)('DicomReceiver integration', () => {
 
         receiver = createResult.value;
         const assocPromise = waitForEvent<ReceiverAssociationData>(receiver, 'ASSOCIATION_COMPLETE', EVENT_TIMEOUT_MS);
+        const finalizedPromise = waitForEvent<ReceiverAssociationFinalizedData>(receiver, 'ASSOCIATION_FINALIZED', EVENT_TIMEOUT_MS);
 
         await receiver.start();
         await new Promise(r => setTimeout(r, WORKER_WARMUP_MS));
@@ -136,6 +138,11 @@ describe.skipIf(!dcmtkAvailable)('DicomReceiver integration', () => {
         expect(assocEvent.associationId).toMatch(/^assoc-/);
         expect(assocEvent.files.length).toBeGreaterThanOrEqual(1);
         expect(assocEvent.endReason).toBe('release');
+
+        // A clean A-RELEASE must surface endReason 'release' on the terminal
+        // event too, not just ASSOCIATION_COMPLETE.
+        const finalizedEvent = await finalizedPromise;
+        expect(finalizedEvent.endReason).toBe('release');
         expect(assocEvent.durationMs).toBeGreaterThanOrEqual(0);
 
         // Verify transfer stats
@@ -264,5 +271,120 @@ describe.skipIf(!dcmtkAvailable)('DicomReceiver integration', () => {
 
         // Wait for the receiver to actually stop
         await new Promise(resolve => setTimeout(resolve, 3000));
+    });
+
+    it('reaps an aborted connection that never completes: finalizes, frees the worker, removes the dir', async () => {
+        storageDir = await createTempDir('recv-pool-reap-');
+        const port = await getAvailablePort();
+
+        const createResult = DicomReceiver.create({
+            port,
+            storageDir,
+            minPoolSize: 1,
+            maxPoolSize: 1,
+            configFile: CONFIG_FILE,
+            configProfile: CONFIG_PROFILE,
+        });
+        expect(createResult.ok).toBe(true);
+        if (!createResult.ok) return;
+
+        receiver = createResult.value;
+        const finalizedPromise = waitForEvent<ReceiverAssociationFinalizedData>(receiver, 'ASSOCIATION_FINALIZED', EVENT_TIMEOUT_MS);
+
+        await receiver.start();
+        await new Promise(r => setTimeout(r, WORKER_WARMUP_MS));
+
+        // Open a raw TCP connection and send no DICOM data, so dcmrecv can
+        // never negotiate or report completion. handleConnection still creates
+        // the association directory and marks the worker busy.
+        const socket = net.connect(port, '127.0.0.1');
+        await new Promise<void>((res, rej) => {
+            socket.once('connect', () => res());
+            socket.once('error', rej);
+        });
+        // Give handleConnection time to create the association directory.
+        await new Promise(r => setTimeout(r, 1000));
+
+        const dirsWhileBusy = (await readdir(storageDir)).filter(name => name.startsWith('assoc-'));
+        expect(dirsWhileBusy.length).toBe(1);
+        expect(receiver.poolStatus.busy).toBe(1);
+
+        // Abort: drop the connection with no DICOM release.
+        socket.destroy();
+
+        // The grace-period reaper (ABORT_REAP_GRACE_MS) should now synthesize a
+        // terminal abort: emit ASSOCIATION_FINALIZED, free the worker, remove dir.
+        const finalized = await finalizedPromise;
+        expect(finalized.associationId).toMatch(/^assoc-/);
+        // A reaped abort must be distinguishable from a clean finish on the
+        // terminal event alone.
+        expect(finalized.endReason).toBe('abort');
+
+        // Allow the post-finalize cleanup (endAssociation + removeDirSafe) to settle.
+        await new Promise(r => setTimeout(r, 1000));
+
+        expect(receiver.poolStatus.busy).toBe(0);
+        expect(receiver.poolStatus.idle).toBeGreaterThanOrEqual(1);
+
+        const dirsAfterReap = (await readdir(storageDir)).filter(name => name.startsWith('assoc-'));
+        expect(dirsAfterReap.length).toBe(0);
+    });
+
+    it('routes concurrent connections without double-assigning a worker: each association finalizes once with a unique id', async () => {
+        storageDir = await createTempDir('recv-pool-concurrent-');
+        const port = await getAvailablePort();
+
+        // Small pool + many concurrent connections maximizes contention on the
+        // findIdleWorker -> ensureDirectory -> beginAssociation window. Before
+        // the reservation fix, two connections could claim the same idle worker
+        // there, overwriting the first's context so it never finalized.
+        //
+        // NOTE: this is a *probabilistic* regression guard, not a deterministic
+        // one — it exercises a timing window the reservation fix closes, so on
+        // broken code it fails often but not necessarily on every run. The
+        // generous connectionTimeoutMs keeps the 4 queued connections from
+        // timing out while waiting for a worker on a loaded CI box (each waiter
+        // polls findIdleWorker every CONNECTION_RETRY_INTERVAL_MS = 500ms).
+        const createResult = DicomReceiver.create({
+            port,
+            storageDir,
+            minPoolSize: 2,
+            maxPoolSize: 2,
+            connectionTimeoutMs: 30_000,
+            configFile: CONFIG_FILE,
+            configProfile: CONFIG_PROFILE,
+        });
+        expect(createResult.ok).toBe(true);
+        if (!createResult.ok) return;
+
+        receiver = createResult.value;
+        const finalizedIds: string[] = [];
+        receiver.onAssociationFinalized(d => finalizedIds.push(d.associationId));
+
+        await receiver.start();
+        await new Promise(r => setTimeout(r, WORKER_WARMUP_MS));
+
+        const N = 6;
+        const sends = Array.from({ length: N }, () =>
+            storescu({
+                host: '127.0.0.1',
+                port,
+                calledAETitle: WORKER_AE_TITLE,
+                files: [SAMPLES.OTHER_0002D],
+                timeoutMs: 30_000,
+            })
+        );
+        const results = await Promise.all(sends);
+        expect(results.every(r => r.ok)).toBe(true);
+
+        // Allow all finalize events to arrive.
+        await new Promise(r => setTimeout(r, 3000));
+
+        // Every accepted association must finalize exactly once with a unique
+        // id. A double-assigned worker would orphan an association (fewer
+        // finalize events) or surface a reused/dropped id.
+        expect(finalizedIds.length).toBe(N);
+        expect(new Set(finalizedIds).size).toBe(N);
+        expect(receiver.poolStatus.busy).toBe(0);
     });
 });
