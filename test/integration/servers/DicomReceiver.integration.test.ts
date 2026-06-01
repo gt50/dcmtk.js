@@ -120,6 +120,7 @@ describe.skipIf(!dcmtkAvailable)('DicomReceiver integration', () => {
 
         receiver = createResult.value;
         const assocPromise = waitForEvent<ReceiverAssociationData>(receiver, 'ASSOCIATION_COMPLETE', EVENT_TIMEOUT_MS);
+        const finalizedPromise = waitForEvent<ReceiverAssociationFinalizedData>(receiver, 'ASSOCIATION_FINALIZED', EVENT_TIMEOUT_MS);
 
         await receiver.start();
         await new Promise(r => setTimeout(r, WORKER_WARMUP_MS));
@@ -137,6 +138,11 @@ describe.skipIf(!dcmtkAvailable)('DicomReceiver integration', () => {
         expect(assocEvent.associationId).toMatch(/^assoc-/);
         expect(assocEvent.files.length).toBeGreaterThanOrEqual(1);
         expect(assocEvent.endReason).toBe('release');
+
+        // A clean A-RELEASE must surface endReason 'release' on the terminal
+        // event too, not just ASSOCIATION_COMPLETE.
+        const finalizedEvent = await finalizedPromise;
+        expect(finalizedEvent.endReason).toBe('release');
         expect(assocEvent.durationMs).toBeGreaterThanOrEqual(0);
 
         // Verify transfer stats
@@ -310,6 +316,9 @@ describe.skipIf(!dcmtkAvailable)('DicomReceiver integration', () => {
         // terminal abort: emit ASSOCIATION_FINALIZED, free the worker, remove dir.
         const finalized = await finalizedPromise;
         expect(finalized.associationId).toMatch(/^assoc-/);
+        // A reaped abort must be distinguishable from a clean finish on the
+        // terminal event alone.
+        expect(finalized.endReason).toBe('abort');
 
         // Allow the post-finalize cleanup (endAssociation + removeDirSafe) to settle.
         await new Promise(r => setTimeout(r, 1000));
@@ -329,11 +338,19 @@ describe.skipIf(!dcmtkAvailable)('DicomReceiver integration', () => {
         // findIdleWorker -> ensureDirectory -> beginAssociation window. Before
         // the reservation fix, two connections could claim the same idle worker
         // there, overwriting the first's context so it never finalized.
+        //
+        // NOTE: this is a *probabilistic* regression guard, not a deterministic
+        // one — it exercises a timing window the reservation fix closes, so on
+        // broken code it fails often but not necessarily on every run. The
+        // generous connectionTimeoutMs keeps the 4 queued connections from
+        // timing out while waiting for a worker on a loaded CI box (each waiter
+        // polls findIdleWorker every CONNECTION_RETRY_INTERVAL_MS = 500ms).
         const createResult = DicomReceiver.create({
             port,
             storageDir,
             minPoolSize: 2,
             maxPoolSize: 2,
+            connectionTimeoutMs: 30_000,
             configFile: CONFIG_FILE,
             configProfile: CONFIG_PROFILE,
         });

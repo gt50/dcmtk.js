@@ -159,6 +159,14 @@ interface ReceiverAssociationFinalizedData {
     readonly files: readonly string[];
     readonly instancesReceived: number;
     readonly instanceErrors: number;
+    /**
+     * How the association ended: `'release'` for a normal A-RELEASE, `'abort'`
+     * for a peer abort (including associations synthesized by the grace-period
+     * reaper when dcmrecv never reported completion). Lets consumers that drive
+     * terminal state off this event distinguish a reaped abort from a clean
+     * finish without also listening to ASSOCIATION_COMPLETE.
+     */
+    readonly endReason: 'release' | 'abort';
 }
 
 /** Data emitted with error events. */
@@ -290,6 +298,7 @@ class Worker {
     private _instanceErrors = 0;
     private _finalized = false;
     private _associationReceivedEmitted = false;
+    private _reapScheduled = false;
     private readonly _files: string[] = [];
     private readonly _fileSizes: number[] = [];
     private readonly _outputLines: string[] = [];
@@ -340,6 +349,20 @@ class Worker {
         this._instanceErrors = 0;
         this._finalized = false;
         this._associationReceivedEmitted = false;
+        this._reapScheduled = false;
+    }
+
+    /**
+     * Claims the single abort-reap timer slot for this association. The socket
+     * `cleanup` handler runs on up to four socket events (remote/worker ×
+     * error/close, plus an explicit setup-race call), so without this guard each
+     * teardown would arm its own redundant grace-period timer. Returns true only
+     * for the first caller; subsequent calls return false and arm nothing.
+     */
+    claimReapSchedule(): boolean {
+        if (this._reapScheduled) return false;
+        this._reapScheduled = true;
+        return true;
     }
 
     /** True once per association: the first caller wins the finalize, others get false. */
@@ -977,6 +1000,9 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
         // or had no context (worker never began an association).
         if (ctx === undefined || worker.context !== ctx || worker.state !== 'busy') return;
 
+        // cleanup() can fire several times per teardown; arm exactly one timer.
+        if (!worker.claimReapSchedule()) return;
+
         const timer = setTimeout(() => {
             // Re-check at fire time: dcmrecv may have reported completion (state
             // no longer 'busy'), or the worker may have been recycled to a new
@@ -1003,7 +1029,7 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
         }, ABORT_REAP_GRACE_MS);
 
         // Don't keep the event loop alive solely for this fallback timer.
-        timer.unref?.();
+        timer.unref();
     }
 
     // -----------------------------------------------------------------------
@@ -1336,6 +1362,7 @@ class DicomReceiver extends EventEmitter<DicomReceiverEventMap> {
             files: [...worker.files],
             instancesReceived: worker.instancesReceived,
             instanceErrors: worker.instanceErrors,
+            endReason: data.endReason,
         });
     }
 

@@ -398,13 +398,15 @@ class SenderEngine<TParams> {
         try {
             failure = await this.attemptSend(entry, maxAttempts, startMs);
         } catch (e) {
-            // The executor contract is to resolve with an ExecutorOutcome, never
-            // to reject. If it rejects anyway, this association slot would leak
-            // (activeAssociations stays incremented) and the caller's promise
-            // would hang forever — and once every slot is lost this way,
-            // drainQueue stalls permanently and the queue grows without bound.
-            // Convert the rejection into a normal failure so the slot is
-            // released, the entry resolves, and draining continues.
+            // Defense-in-depth: the built-in executors (storescu/dcmsend
+            // wrappers) always resolve with an ExecutorOutcome and never reject,
+            // so this catch is unreachable in normal operation. It guards a
+            // custom or future executor that throws/rejects: without it this
+            // association slot would leak (activeAssociations stays incremented)
+            // and the caller's promise would hang forever — and once every slot
+            // is lost this way, drainQueue stalls permanently and the queue
+            // grows without bound. Convert the rejection into a normal failure
+            // so the slot is released, the entry resolves, and draining continues.
             failure = { error: e instanceof Error ? e : new Error(String(e)), output: { stdout: '', stderr: '' } };
         }
 

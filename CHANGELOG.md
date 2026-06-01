@@ -17,6 +17,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
     The normal A-RELEASE path is unchanged: completion is reported and the consumer owns directory cleanup.
 
+- **SenderEngine: association-slot leak on executor rejection.** `executeEntry` incremented `activeAssociations` but did not guard `attemptSend` against the executor rejecting (its contract is to resolve with an outcome, never reject). A rejection leaked the slot — and once every slot was lost this way, `drainQueue` stalled permanently and the queue grew without bound while the caller's `send()` promise hung forever. The rejection is now caught and converted to a normal failure: the slot is released, the entry resolves with an error, and draining continues.
+
+### Added
+
+- **DicomReceiver: `ASSOCIATION_FINALIZED` now carries `endReason` (`'release'` | `'abort'`).** Consumers that drive terminal per-association state off the finalize event can now distinguish a clean A-RELEASE from a peer abort (including grace-period-reaped aborts) without also subscribing to `ASSOCIATION_COMPLETE`.
+
 ## [0.15.1] - 2026-05-15
 
 ### Fixed
